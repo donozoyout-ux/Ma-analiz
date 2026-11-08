@@ -1,0 +1,138 @@
+projects:
+  - name: mac-analiz
+    environments:
+      - name: production
+        databases:
+          - name: mac-analiz-db
+            databaseName: sports_analytics
+            plan: 0.1c-256mb
+            diskSizeGB: 1
+            region: frankfurt
+        services:
+          - type: web
+            name: mac-analiz-api
+            runtime: python
+            rootDir: backend
+            plan: 0.5c-512mb
+            region: frankfurt
+            buildCommand: pip install -r requirements.txt
+            startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+            healthCheckPath: /api/v1/health
+            envVars:
+              - key: APP_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: mac-analiz-db
+                  property: connectionString
+              - key: R2_ENDPOINT
+                sync: false
+              - key: R2_ACCESS_KEY_ID
+                sync: false
+              - key: R2_SECRET_ACCESS_KEY
+                sync: false
+              - key: R2_BUCKET
+                value: sports-analytics
+              - key: TELEGRAM_BOT_TOKEN
+                sync: false
+              - key: TELEGRAM_CHAT_ID
+                sync: false
+              - key: AI_PROVIDER
+                sync: false
+              - key: AI_API_KEY
+                sync: false
+          - type: worker
+            name: mac-analiz-worker
+            runtime: python
+            rootDir: backend
+            plan: 0.5c-512mb
+            region: frankfurt
+            buildCommand: pip install -r requirements.txt
+            startCommand: python -m app.worker
+            envVars:
+              - key: APP_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: mac-analiz-db
+                  property: connectionString
+              - key: R2_ENDPOINT
+                sync: false
+              - key: R2_ACCESS_KEY_ID
+                sync: false
+              - key: R2_SECRET_ACCESS_KEY
+                sync: false
+              - key: R2_BUCKET
+                value: sports-analytics
+          - type: cron
+            name: mac-analiz-daily-archive
+            runtime: python
+            rootDir: backend
+            plan: 0.5c-512mb
+            region: frankfurt
+            schedule: "0 2 * * *"
+            buildCommand: pip install -r requirements.txt
+            startCommand: python -m app.jobs.daily_archive
+            envVars:
+              - key: APP_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: mac-analiz-db
+                  property: connectionString
+              - key: R2_ENDPOINT
+                sync: false
+              - key: R2_ACCESS_KEY_ID
+                sync: false
+              - key: R2_SECRET_ACCESS_KEY
+                sync: false
+              - key: R2_BUCKET
+                value: sports-analytics
+          - type: cron
+            name: mac-analiz-daily-cleanup
+            runtime: python
+            rootDir: backend
+            plan: 0.5c-512mb
+            region: frankfurt
+            schedule: "0 3 * * *"
+            buildCommand: pip install -r requirements.txt
+            startCommand: python -m app.jobs.daily_cleanup
+            envVars:
+              - key: APP_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: mac-analiz-db
+                  property: connectionString
+          - type: cron
+            name: mac-analiz-daily-metrics
+            runtime: python
+            rootDir: backend
+            plan: 0.5c-512mb
+            region: frankfurt
+            schedule: "0 4 * * *"
+            buildCommand: pip install -r requirements.txt
+            startCommand: python -m app.jobs.daily_metrics
+            envVars:
+              - key: APP_ENV
+                value: production
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: mac-analiz-db
+                  property: connectionString
+          - type: web
+            name: mac-analiz-web
+            runtime: node
+            rootDir: frontend
+            plan: 0.5c-512mb
+            region: frankfurt
+            buildCommand: npm ci && npm run build
+            startCommand: npm start
+            envVars:
+              - key: NODE_VERSION
+                value: 22
+              - key: API_INTERNAL_URL
+                fromService:
+                  type: web
+                  name: mac-analiz-api
+                  property: hostport

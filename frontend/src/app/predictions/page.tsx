@@ -1,0 +1,2 @@
+import {RecordsPanel} from "@/components/records-panel";
+export default function Predictions(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Models</div><h1 className="title">Predictions</h1></div></header><RecordsPanel endpoint="predictions" columns={["created_at","market","selection","probability","confidence","evidence_status"]} empty="No predictions meet the current evidence requirements."/></>}

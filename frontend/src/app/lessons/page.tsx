@@ -1,0 +1,2 @@
+import {RecordsPanel} from "@/components/records-panel";
+export default function Lessons(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Review</div><h1 className="title">Lessons & proposals</h1></div></header><RecordsPanel endpoint="lessons" columns={["date","category","title","summary","recommendation","confidence","status"]} empty="No lessons yet. Strategy changes require backtesting and approval."/></>}

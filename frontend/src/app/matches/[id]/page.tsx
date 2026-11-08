@@ -1,0 +1,2 @@
+import {RecordsPanel} from "@/components/records-panel";
+export default async function MatchDetail({params}:{params:Promise<{id:string}>}){const {id}=await params;return <><header className="topbar"><div><div className="eyebrow">Match detail</div><h1 className="title">Match {id}</h1></div></header><RecordsPanel endpoint={`matches/${id}`} columns={["start_time","league_name","home_team","away_team","status","odds"]} empty="Match data is not available."/></>}

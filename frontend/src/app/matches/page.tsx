@@ -1,0 +1,2 @@
+import {RecordsPanel} from "@/components/records-panel";
+export default function Matches(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Data</div><h1 className="title">Matches</h1></div><div className="clock">Upcoming and active</div></header><RecordsPanel endpoint="matches" columns={["start_time","league_name","home_team","away_team","status"]} empty="No active matches are available from the configured provider."/></>}
