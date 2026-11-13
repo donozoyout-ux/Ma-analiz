@@ -108,8 +108,12 @@ def _verify_object(store: ObjectStore, key: str, *, expected_size: int, expected
     actual_checksum = hashlib.sha256(payload).hexdigest()
     if actual_checksum != expected_checksum:
         raise IOError("Archive checksum verification failed")
-    if info.metadata and info.metadata.get("sha256") not in (None, expected_checksum):
+    if not info.metadata or info.metadata.get("sha256") != expected_checksum:
         raise IOError("Archive metadata checksum verification failed")
+    if info.metadata.get("row-count") != str(expected_rows):
+        raise IOError("Archive metadata row-count verification failed")
+    if info.metadata.get("archive-key") != key:
+        raise IOError("Archive metadata key verification failed")
 
 
 def archive_partition(
@@ -151,7 +155,7 @@ def archive_partition(
             if tracker:
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.UPLOADING, rows=len(rows))
             store.put_object(key, payload, content_type="application/vnd.apache.parquet",
-                             metadata={"sha256": checksum, "row-count": str(len(rows))})
+                             metadata={"sha256": checksum, "row-count": str(len(rows)), "archive-key": key})
             if tracker:
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.UPLOADED,
                                    rows=len(rows), size=len(payload), checksum=checksum)

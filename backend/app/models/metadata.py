@@ -44,6 +44,7 @@ class DailyMetric(Base):
     total_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     analyzed_matches: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     predictions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    predictions_pending: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     wins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     losses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     hit_rate: Mapped[float | None] = mapped_column(Numeric(6, 5))
@@ -51,8 +52,9 @@ class DailyMetric(Base):
     coupon_wins: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     coupon_losses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     paper_pl: Mapped[float | None] = mapped_column(Numeric(12, 4))
-    r2_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    postgres_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    paper_stake: Mapped[float | None] = mapped_column(Numeric(12, 4))
+    r2_bytes: Mapped[int | None] = mapped_column(BigInteger)
+    postgres_bytes: Mapped[int | None] = mapped_column(BigInteger)
 
 
 class Lesson(Base):
@@ -77,19 +79,39 @@ class NotificationDelivery(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-
-
 class JobRun(Base):
     __tablename__ = "job_runs"
-    __table_args__ = (UniqueConstraint("idempotency_key"),)
-
+    __table_args__ = (
+        UniqueConstraint("idempotency_key"),
+        CheckConstraint("status IN ('RUNNING', 'SUCCESS', 'PARTIAL', 'SKIPPED', 'FAILED')", name="valid_job_status"),
+    )
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    idempotency_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(240), nullable=False)
     job_type: Mapped[str] = mapped_column(String(48), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="RUNNING", index=True)
     duration_ms: Mapped[int | None] = mapped_column(BigInteger)
-    error: Mapped[str | None] = mapped_column(String(240))
+    records_seen: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    records_written: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    records_skipped: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    records_failed: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     records_processed: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    error_message: Mapped[str | None] = mapped_column(String(240))
+    error: Mapped[str | None] = mapped_column(String(240))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+class HistoricalIngestDay(Base):
+    __tablename__ = "historical_ingest_days"
+    __table_args__ = (UniqueConstraint("provider", "season", "league_id", "ingest_date"),)
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    season: Mapped[str] = mapped_column(String(32), nullable=False)
+    league_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    ingest_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="RUNNING", index=True)
+    records_seen: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    records_archived: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(80))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

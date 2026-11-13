@@ -144,13 +144,13 @@ def test_r2_adapter_refuses_missing_credentials(monkeypatch):
 
 
 def test_storage_thresholds_and_unconfigured_sizes_are_honest():
-    settings = SimpleNamespace(postgres_normal_mb=300, postgres_warning_mb=500, postgres_high_mb=750, postgres_critical_mb=1000)
+    settings = SimpleNamespace(postgres_normal_mb=300, postgres_warning_mb=500, postgres_high_mb=750, postgres_critical_mb=750)
     mib = 1024 * 1024
     assert postgres_status(299 * mib, settings) == "healthy"
     assert postgres_status(400 * mib, settings) == "warning"
     assert postgres_status(600 * mib, settings) == "high"
-    assert postgres_status(800 * mib, settings) == "high"
-    assert postgres_status(1000 * mib, settings) == "critical"
+    assert postgres_status(749 * mib, settings) == "high"
+    assert postgres_status(750 * mib, settings) == "critical"
     snapshot = StorageMonitor(None, settings=SimpleNamespace(
         postgres_normal_mb=300, postgres_warning_mb=500, postgres_high_mb=750, postgres_critical_mb=750,
         r2_endpoint=None, r2_access_key_id=None, r2_secret_access_key=None, r2_bucket="",
@@ -230,7 +230,7 @@ def test_api_status_aliases_and_unconfigured_storage_are_real():
     status = client.get("/api/system/status").json()
     storage = client.get("/api/system/storage").json()
     assert health["provider"] == "PROVIDER_NOT_CONFIGURED"
-    assert status["provider_mode"] == "NOT_CONFIGURED"
+    assert status["provider_mode"] == "PROVIDER_NOT_CONFIGURED"
     assert storage["postgres"]["bytes"] is None
     assert storage["r2"]["bytes"] is None and storage["r2"]["object_count"] is None
 
@@ -282,5 +282,224 @@ def test_job_history_retention_removes_only_completed_old_runs():
 
 def test_unavailable_inputs_are_explicitly_skipped_without_fake_metrics_or_cleanup():
     assert collect_matches()["status"] == "SKIPPED"
-    assert calculate_daily_metrics()["reason"] == "NO_RESULT_SOURCE"
-    assert cleanup_database()["reason"] == "NO_VERIFIED_ARCHIVE_CANDIDATES"
+    assert calculate_daily_metrics()["reason"] == "DATABASE_NOT_CONFIGURED"
+    assert cleanup_database()["reason"] == "DATABASE_NOT_CONFIGURED"
+
+
+from decimal import Decimal
+from types import SimpleNamespace
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+
+def test_provider_registry_does_not_invent_live_adapter():
+    from app.core.config import Settings
+    from app.providers.base import ProviderNotConfigured, ProviderUnavailable
+    from app.providers.registry import create_provider, provider_status
+    assert provider_status(Settings()) == "PROVIDER_NOT_CONFIGURED"
+    configured = Settings(provider_name="unknown", provider_base_url="https://provider.example",
+                          provider_api_key="not-a-real-secret", enabled_leagues="league-1")
+    assert provider_status(configured) == "PROVIDER_UNAVAILABLE"
+    with pytest.raises(ProviderUnavailable):
+        create_provider(configured)
+    with pytest.raises(ProviderNotConfigured):
+        create_provider(Settings(match_provider="mock", provider_base_url="x", provider_api_key="x", enabled_leagues="l"))
+
+
+def test_provider_caller_retries_rate_limits_with_bounded_backoff():
+    from app.providers.base import ProviderRateLimited
+    from app.providers.registry import ProviderCaller
+    class Adapter:
+        name = "test"
+        calls = 0
+        def get_leagues(self):
+            self.calls += 1
+            if self.calls == 1:
+                raise ProviderRateLimited(retry_after=0)
+            return [{"id": "league-1"}]
+    adapter = Adapter()
+    caller = ProviderCaller(adapter, requests_per_minute=6000, max_retries=2, sleep=lambda _: None, monotonic=lambda: 1)
+    assert caller.call("get_leagues") == [{"id": "league-1"}]
+    assert adapter.calls == 2
+
+
+def test_normalize_result_accepts_only_final_scores():
+    from app.providers.normalize import normalize_result
+    assert normalize_result({"id": 5, "status": "IN_PLAY"}, provider="p")["status"] == "IN_PROGRESS"
+    result = normalize_result({"id": 5, "status": "FT", "home_score": 2, "away_score": 1,
+                               "finished_at": "2026-11-13T20:00:00Z"}, provider="p")
+    assert result["status"] == "FINAL" and result["home_score"] == 2
+    with pytest.raises(ValueError, match="integer"):
+        normalize_result({"id": 5, "status": "FT", "home_score": None, "away_score": 0}, provider="p")
+
+
+def test_upsert_match_and_odds_snapshots_are_idempotent():
+    from app.jobs.ingestion import upsert_matches, upsert_odds
+    from app.models import ActiveMatch, ActiveOdds
+    engine = create_engine("sqlite://")
+    ActiveMatch.__table__.create(engine)
+    ActiveOdds.__table__.create(engine)
+    now = datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
+    match_data = normalize_match({"id": "m-1", "league_id": "league-1", "season": "2026-27",
+                                  "home_team": "Home", "away_team": "Away",
+                                  "start_time": "2026-11-13T20:00:00Z"}, provider="p")
+    with Session(engine) as db:
+        assert upsert_matches(db, [match_data], now=now) == (1, 0)
+        assert upsert_matches(db, [match_data], now=now) == (1, 0)
+        match = db.query(ActiveMatch).one()
+        payload = {"provider_odds_id": "o-1", "bookmaker": "book", "market": "1X2",
+                   "selection": "HOME", "odds": "2.1", "captured_at": "2026-11-13T11:00:00Z"}
+        assert upsert_odds(db, "p", match, [payload], now=now) == (1, 0)
+        assert upsert_odds(db, "p", match, [payload], now=now) == (0, 1)
+        assert db.query(ActiveOdds).count() == 1
+    engine.dispose()
+
+
+def test_prediction_settlement_and_daily_metrics_ignore_pending_records():
+    from app.jobs.results import aggregate_daily_metrics, prediction_outcome, settle_verified_results
+    from app.models import ActiveMatch, Coupon, CouponItem, DailyMetric, MatchResult, Prediction
+    assert prediction_outcome("1X2", "HOME", 2, 1) is True
+    assert prediction_outcome("BTTS", "NO", 2, 0) is True
+    assert prediction_outcome("OVER_UNDER", "OVER_2.5", 2, 1) is True
+    engine = create_engine("sqlite://")
+    for model in (ActiveMatch, MatchResult, Prediction, Coupon, CouponItem, DailyMetric):
+        model.__table__.create(engine)
+    day = date(2026, 11, 13)
+    start = datetime(2026, 11, 13, 18, tzinfo=timezone.utc)
+    with Session(engine) as db:
+        match = ActiveMatch(provider="p", provider_match_id="1", league_id="l", season="s",
+                            home_team="H", away_team="A", start_time=start, status="FINISHED",
+                            expires_at=start + timedelta(days=14))
+        db.add(match); db.flush()
+        db.add(MatchResult(match_id=match.id, provider="p", home_score=2, away_score=1,
+                           status="FINAL", finished_at=start, result_source="p", verified_at=start))
+        won = Prediction(match_id=match.id, market="1X2", selection="HOME", probability=Decimal(".6"),
+                         confidence=Decimal(".7"), value_score=Decimal(".1"), evidence_status="STRONG",
+                         model_version="v1", decimal_odds=Decimal("2"), paper_stake=Decimal("5"),
+                         status="PENDING", expires_at=start + timedelta(days=1))
+        pending = Prediction(match_id=match.id, market="UNSUPPORTED_TEST_MARKET", selection="YES", probability=Decimal(".6"),
+                              confidence=Decimal(".7"), value_score=Decimal(".1"), evidence_status="STRONG",
+                              model_version="v1", paper_stake=Decimal("5"), status="PENDING",
+                              expires_at=start + timedelta(days=1))
+        db.add_all([won, pending]); db.flush()
+        coupon = Coupon(type="SAFE", total_odds=Decimal("2"), confidence=Decimal(".7"),
+                        paper_stake=Decimal("3"), status="PAPER_PENDING",
+                        expires_at=start + timedelta(days=1))
+        db.add(coupon); db.flush()
+        db.add(CouponItem(coupon_id=coupon.id, match_id=match.id, market="1X2", selection="HOME",
+                          odds=Decimal("2"), prediction_id=won.id))
+        db.commit()
+        first = settle_verified_results(db, day=day)
+        assert first["predictions_settled"] == 1
+        second = settle_verified_results(db, day=day)
+        assert second["predictions_settled"] == 0
+        settled_coupon = db.query(Coupon).one()
+        assert settled_coupon.status == "PAPER_WON"
+        assert settled_coupon.paper_profit == Decimal("3")
+        assert db.query(CouponItem).one().status == "WON"
+        metric = aggregate_daily_metrics(db, day=day)
+        assert metric.wins == 1 and metric.losses == 0 and metric.predictions_pending == 1
+        assert metric.hit_rate == Decimal("1")
+        assert metric.paper_pl == Decimal("5")
+        assert metric.paper_stake == Decimal("5")
+    engine.dispose()
+
+
+def test_historical_query_excludes_future_odds_snapshot():
+    store = InMemoryObjectStore()
+    key = "odds/season=2026/league=l/date=2026-11-13.parquet"
+    store.put_parquet(key, [
+        {"captured_at": datetime(2026, 11, 13, 14, tzinfo=timezone.utc), "odds": 2.0},
+        {"captured_at": datetime(2026, 11, 13, 17, tzinfo=timezone.utc), "odds": 3.0},
+    ])
+    rows = HistoricalRepository(store).get_historical_odds(
+        [key], before=datetime(2026, 11, 13, 15, tzinfo=timezone.utc))
+    assert [row["odds"] for row in rows] == [2.0]
+
+
+def test_run_ledger_failure_is_retryable_and_has_bounded_error_detail():
+    ledger = MemoryLedger()
+    result = run_idempotent_job(ledger, "retry-me", "collect_matches",
+                                lambda: (_ for _ in ()).throw(RuntimeError("token=secret")))
+    assert result["status"] == "FAILED"
+    assert ledger.runs["retry-me"].error_code == "RUNTIMEERROR"
+    run, claimed = ledger.claim("retry-me", "collect_matches")
+    assert claimed and run.status == "RUNNING"
+    assert ledger.prune(0) == 0
+
+
+def test_provider_timeout_is_retried_and_then_classified_unavailable():
+    import httpx
+    from app.providers.base import ProviderUnavailable
+    from app.providers.registry import ProviderCaller
+    class Adapter:
+        name = "timeout-test"
+        calls = 0
+        def get_leagues(self):
+            self.calls += 1
+            raise httpx.ReadTimeout("slow")
+    adapter = Adapter()
+    caller = ProviderCaller(adapter, requests_per_minute=6000, max_retries=2,
+                            sleep=lambda _: None, monotonic=lambda: 1)
+    with pytest.raises(ProviderUnavailable, match="timed out"):
+        caller.call("get_leagues")
+    assert adapter.calls == 2
+
+
+def test_cleanup_reverifies_r2_checksum_before_deleting_expired_odds():
+    from app.jobs.ingestion import archive_rows, cleanup_verified_archives
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob
+    store = InMemoryObjectStore()
+    engine = create_engine("sqlite://")
+    for model in (ActiveMatch, ActiveOdds, ArchiveJob):
+        model.__table__.create(engine)
+    day = date(2026, 11, 10)
+    captured = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)
+    with Session(engine) as db:
+        match = ActiveMatch(provider="p", provider_match_id="old", league_id="league-1", season="2026-27",
+                            home_team="H", away_team="A", start_time=captured, status="FINISHED",
+                            expires_at=captured + timedelta(days=1))
+        db.add(match); db.flush()
+        db.add(ActiveOdds(match_id=match.id, provider="p", bookmaker="b", market="1X2",
+                          selection="HOME", odds=Decimal("2"), captured_at=captured,
+                          expires_at=captured + timedelta(days=1)))
+        db.commit()
+        rows = [{"captured_at": captured, "match_id": str(match.id), "odds": 2.0}]
+        archive_rows(store, __import__("app.storage.archive", fromlist=["SQLArchiveTracker"]).SQLArchiveTracker(db),
+                     dataset="odds", season="2026-27", league="league-1", day=day, rows=rows)
+        store.put_object("odds/season=2026-27/league=league-1/date=2026-11-10.parquet",
+                         b"tampered", content_type="application/vnd.apache.parquet",
+                         metadata={"sha256": "bad", "row-count": "1", "archive-key": "bad"})
+        assert cleanup_verified_archives(db, store, today=date(2026, 11, 13)) == 0
+        assert db.query(ActiveOdds).count() == 1
+        job = db.query(ArchiveJob).one()
+        assert job.status == "VERIFIED"
+    engine.dispose()
+
+
+def test_cleanup_deletes_only_after_live_object_reverification():
+    from app.jobs.ingestion import archive_rows, cleanup_verified_archives
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob
+    from app.storage.archive import SQLArchiveTracker
+    store = InMemoryObjectStore()
+    engine = create_engine("sqlite://")
+    for model in (ActiveMatch, ActiveOdds, ArchiveJob):
+        model.__table__.create(engine)
+    day = date(2026, 11, 10)
+    captured = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)
+    with Session(engine) as db:
+        match = ActiveMatch(provider="p", provider_match_id="old", league_id="league-1", season="2026-27",
+                            home_team="H", away_team="A", start_time=captured, status="FINISHED",
+                            expires_at=captured + timedelta(days=1))
+        db.add(match); db.flush()
+        db.add(ActiveOdds(match_id=match.id, provider="p", bookmaker="b", market="1X2",
+                          selection="HOME", odds=Decimal("2"), captured_at=captured,
+                          expires_at=captured + timedelta(days=1)))
+        db.commit()
+        archive_rows(store, SQLArchiveTracker(db), dataset="odds", season="2026-27", league="league-1",
+                     day=day, rows=[{"captured_at": captured, "match_id": str(match.id), "odds": 2.0}])
+        assert cleanup_verified_archives(db, store, today=date(2026, 11, 13)) == 1
+        assert db.query(ActiveOdds).count() == 0
+        assert db.query(ArchiveJob).one().status == "DELETED"
+    engine.dispose()
