@@ -377,11 +377,11 @@ def test_prediction_settlement_and_daily_metrics_ignore_pending_records():
         won = Prediction(match_id=match.id, market="1X2", selection="HOME", probability=Decimal(".6"),
                          confidence=Decimal(".7"), value_score=Decimal(".1"), evidence_status="STRONG",
                          model_version="v1", decimal_odds=Decimal("2"), paper_stake=Decimal("5"),
-                         status="PENDING", expires_at=start + timedelta(days=1))
+                         status="PENDING", created_at=start, expires_at=start + timedelta(days=1))
         pending = Prediction(match_id=match.id, market="UNSUPPORTED_TEST_MARKET", selection="YES", probability=Decimal(".6"),
                               confidence=Decimal(".7"), value_score=Decimal(".1"), evidence_status="STRONG",
                               model_version="v1", paper_stake=Decimal("5"), status="PENDING",
-                              expires_at=start + timedelta(days=1))
+                              created_at=start, expires_at=start + timedelta(days=1))
         db.add_all([won, pending]); db.flush()
         coupon = Coupon(type="SAFE", total_odds=Decimal("2"), confidence=Decimal(".7"),
                         paper_stake=Decimal("3"), status="PAPER_PENDING",

@@ -2,9 +2,11 @@
 
 R2-first football analytics and paper simulation. It does not place bets or move real money.
 
-## Phase 3 provider boundary
+## Provider integration status
 
-No provider vendor, API contract, authentication scheme, endpoint layout, or credentials are present in this repository. The application therefore does not invent a live adapter. create_provider() returns PROVIDER_NOT_CONFIGURED until name, base URL, API key, enabled leagues, and a registered provider adapter are supplied; a configured name without an adapter returns PROVIDER_UNAVAILABLE. PROVIDER_OK is reported only when the adapter implements and passes health_check().
+No provider account or credentials are configured, and no vendor adapter is connected. The app therefore does not invent a live adapter. `create_provider()` returns `PROVIDER_NOT_CONFIGURED` until credentials, scope, and a registered provider adapter are supplied; a configured name without an adapter returns `PROVIDER_UNAVAILABLE`. `PROVIDER_OK` is reported only when the adapter implements and passes `health_check()`.
+
+Phase 4A discovery recommends Sportmonks API 3 as the first single-provider candidate to evaluate, not as a selected or connected source. Its official documentation describes football seasons/fixtures and standard plus Premium pre-match odds. Premium stores opening and subsequent odds changes, but the history is only available until seven days after kickoff; Sportmonks also says historical football data is still being integrated. No official source reviewed verified that its bookmaker list includes İddaa. See [Phase 4A provider discovery](docs/phase4a-provider-discovery.md) for the comparison, historical capability status, request estimate, and live-test blockers.
 
 To implement the live adapter, provide the vendor's official API documentation or a sample contract for:
 - league discovery and stable league IDs;
