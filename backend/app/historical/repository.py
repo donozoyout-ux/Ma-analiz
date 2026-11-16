@@ -36,7 +36,10 @@ class HistoricalRepository:
             parquet_file = pq.ParquetFile(self._buffer(self.store.get_object(key)))
             for batch in parquet_file.iter_batches(batch_size=self.batch_size):
                 for row in batch.to_pylist():
-                    event_time = (row.get("captured_at") or row.get("created_at")
+                    # A finalized result is not available to analysis until it has
+                    # been verified; prefer that availability timestamp to match time.
+                    event_time = (row.get("captured_at") or row.get("settled_at")
+                                  or row.get("verified_at") or row.get("created_at")
                                   or row.get("finished_at") or row.get("start_time")
                                   or row.get("match_start"))
                     if event_time is None:

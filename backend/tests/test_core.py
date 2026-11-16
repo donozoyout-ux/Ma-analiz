@@ -344,10 +344,12 @@ def test_upsert_match_and_odds_snapshots_are_idempotent():
     match_data = normalize_match({"id": "m-1", "league_id": "league-1", "season": "2026-27",
                                   "home_team": "Home", "away_team": "Away",
                                   "start_time": "2026-11-13T20:00:00Z"}, provider="p")
+    match_data["provider_season_id"] = "provider-only-season-id"
     with Session(engine) as db:
         assert upsert_matches(db, [match_data], now=now) == (1, 0)
         assert upsert_matches(db, [match_data], now=now) == (1, 0)
         match = db.query(ActiveMatch).one()
+        assert match.season == "2026-27"
         payload = {"provider_odds_id": "o-1", "bookmaker": "book", "market": "1X2",
                    "selection": "HOME", "odds": "2.1", "captured_at": "2026-11-13T11:00:00Z"}
         assert upsert_odds(db, "p", match, [payload], now=now) == (1, 0)
@@ -416,6 +418,21 @@ def test_historical_query_excludes_future_odds_snapshot():
     rows = HistoricalRepository(store).get_historical_odds(
         [key], before=datetime(2026, 11, 13, 15, tzinfo=timezone.utc))
     assert [row["odds"] for row in rows] == [2.0]
+
+
+def test_historical_query_excludes_result_until_after_verification_time():
+    store = InMemoryObjectStore()
+    key = "results/season=2026/league=l/date=2026-11-13.parquet"
+    store.put_parquet(key, [{
+        "finished_at": datetime(2026, 11, 13, 14, tzinfo=timezone.utc),
+        "verified_at": datetime(2026, 11, 13, 17, tzinfo=timezone.utc),
+        "home_score": 2, "away_score": 0,
+    }])
+    repository = HistoricalRepository(store)
+    before_verification = repository._read([key], before=datetime(2026, 11, 13, 15, tzinfo=timezone.utc))
+    after_verification = repository._read([key], before=datetime(2026, 11, 13, 18, tzinfo=timezone.utc))
+    assert before_verification == []
+    assert len(after_verification) == 1 and after_verification[0]["home_score"] == 2
 
 
 def test_run_ledger_failure_is_retryable_and_has_bounded_error_detail():

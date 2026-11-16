@@ -2,61 +2,63 @@
 
 R2-first football analytics and paper simulation. It does not place bets or move real money.
 
-## Provider integration status
+## Provider integration
 
-No provider account or credentials are configured, and no vendor adapter is connected. The app therefore does not invent a live adapter. `create_provider()` returns `PROVIDER_NOT_CONFIGURED` until credentials, scope, and a registered provider adapter are supplied; a configured name without an adapter returns `PROVIDER_UNAVAILABLE`. `PROVIDER_OK` is reported only when the adapter implements and passes `health_check()`.
+Sportmonks API 3 is the first implemented provider adapter. Authentication uses the `Authorization` header. The app resolves Turkish Süper Lig and its seasons from the account's league catalogue; it does not assume league or season IDs. `/api/v1/health` shows provider state, latency, last successful API request, and configured league/season scope. `ONLINE` is returned only after the provider health endpoint succeeds. Tokens are never included in health responses or adapter errors.
 
-Phase 4A discovery recommends Sportmonks API 3 as the first single-provider candidate to evaluate, not as a selected or connected source. Its official documentation describes football seasons/fixtures and standard plus Premium pre-match odds. Premium stores opening and subsequent odds changes, but the history is only available until seven days after kickoff; Sportmonks also says historical football data is still being integrated. No official source reviewed verified that its bookmaker list includes İddaa. See [Phase 4A provider discovery](docs/phase4a-provider-discovery.md) for the comparison, historical capability status, request estimate, and live-test blockers.
+The adapter supports league/season discovery, fixtures by date and ID, Premium fixture odds, and finalized fixture results. Odds are labeled `SPORTMONKS` and retain the provider's actual bookmaker name and IDs. They are not labeled İddaa. Sportmonks documents Premium odds history as available only through seven days after kickoff, so this provider cannot supply full-season historical odds for 2024-25 or 2025-26. Do not start a historical odds backfill on that assumption. Premium odds access is account/add-on dependent; verify account coverage before relying on it.
 
-To implement the live adapter, provide the vendor's official API documentation or a sample contract for:
-- league discovery and stable league IDs;
-- matches by date/season, individual match lookup, and historical range behavior;
-- odds by match, available 1X2 / totals / BTTS markets, bookmaker and snapshot timestamps;
-- finalized results, score fields, final-state values and finished timestamps;
-- authentication header/query parameter, pagination, rate limits, and retry/Retry-After rules.
+Official contract references: [authentication](https://docs.sportmonks.com/v3/welcome/authentication), [leagues](https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/leagues/get-all-leagues), [fixtures by date](https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixtures-by-date), [fixture by ID](https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/fixtures/get-fixture-by-id), [Premium odds by fixture](https://docs.sportmonks.com/v3/endpoints-and-entities/endpoints/premium-odds-feed/premium-pre-match-odds/get-premium-odds-by-fixture-id), and [scores](https://docs.sportmonks.com/v3/tutorials-and-guides/tutorials/includes/scores).
 
-Until then, the app uses no production mock data. See provider states below.
+See [Phase 4A provider discovery](docs/phase4a-provider-discovery.md) and [Phase 4B integration report](docs/phase4b-integration.md) for verified limitations and current test status.
 
 ## Configuration
 
-Copy .env.example to .env and set only credentials/accounts you actually have:
+Copy `.env.example` to `.env` and configure only accounts you have:
 
-- PROVIDER_NAME, PROVIDER_BASE_URL, PROVIDER_API_KEY
-- PROVIDER_REQUEST_TIMEOUT_SECONDS, PROVIDER_REQUESTS_PER_MINUTE, PROVIDER_MAX_RETRIES
-- ENABLED_LEAGUES as comma-separated provider league IDs; ENABLED_SEASONS as comma-separated season IDs
-- HISTORICAL_START_DATE to bound historical backfills
-- DATABASE_URL for PostgreSQL active state and run ledgers
-- R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
-- TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID for deduplicated daily reports and threshold alerts
-- AI settings remain optional and do not change strategy automatically.
+- Provider: `PROVIDER_NAME=sportmonks`, `SPORTMONKS_API_TOKEN`, `SPORTMONKS_BASE_URL`, `SPORTMONKS_TIMEOUT_SECONDS`, `SPORTMONKS_MAX_RETRIES`, `PROVIDER_REQUESTS_PER_MINUTE`.
+- Scope for scheduled ingestion: `ENABLED_LEAGUES` and `ENABLED_SEASONS`, comma-separated provider IDs. The one-day smoke command discovers Turkish Süper Lig IDs dynamically and does not require these values.
+- PostgreSQL active state and job ledgers: `DATABASE_URL` (the existing app connection setting).
+- Cloudflare R2: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_REGION` (`auto` for Cloudflare R2).
+- Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`; optional for this phase.
 
-Provider status meanings: PROVIDER_NOT_CONFIGURED means credentials/scope/adapter are absent; PROVIDER_UNAVAILABLE means the named adapter cannot be constructed or reached; PROVIDER_RATE_LIMITED means the provider's bounded retry budget was exhausted; PROVIDER_ERROR means a non-retryable adapter/protocol error; PROVIDER_OK requires a successful adapter health check.
+Never put credentials in source control, reports, or screenshots. Provider failures use explicit codes such as `PROVIDER_NOT_CONFIGURED`, `PROVIDER_AUTH_ERROR`, `PROVIDER_RATE_LIMITED`, `PROVIDER_UNAVAILABLE`, and `PROVIDER_INVALID_RESPONSE`; failed calls are not converted to successful empty datasets.
+
+## One-day smoke test
+
+Install `backend/requirements.txt`, set `DATABASE_URL` and R2 credentials if you want to verify writes, then select a date from actual account coverage and run from `backend`:
+
+```text
+python -m app.jobs.provider_smoke_test --date YYYY-MM-DD
+```
+
+This performs bounded read-only discovery and checks one date, reporting normalized/rejected matches, odds markets/bookmakers and timestamp capabilities, results, errors, and request latency. It does not pick a fictitious date or start a backfill. To also migrate and upsert only that league/date in PostgreSQL, verify duplicate behavior and result settlement idempotency, and write/verify the date's match, odds, and result Parquet partitions in R2, pass `--persist`:
+
+```text
+python -m app.jobs.provider_smoke_test --date YYYY-MM-DD --persist
+```
+
+`--persist` never invokes cleanup. It reports database/R2 failures without claiming success. A live smoke test needs a real provider token; a persistence run additionally needs reachable PostgreSQL and R2 credentials. No live API, database, or R2 test has been recorded in the Phase 4B report unless explicitly marked as performed there.
 
 ## Pipeline commands
 
-Run commands from backend after installing requirements.txt and applying migrations:
+Run commands from `backend` after installing requirements and applying migrations:
 
-- Daily match ingestion: python -m app.jobs.daily_ingest
-- Daily match + odds worker: python -m app.worker
-- Daily result/archive/cleanup/aggregate run: python -m app.jobs.daily_archive
-- Results only: python -m app.jobs.daily_results
-- Archive: python -m app.jobs.daily_archive
-- Cleanup: python -m app.jobs.daily_cleanup
-- Daily metrics: python -m app.jobs.daily_metrics
-- Historical backfill: python -m app.jobs.historical_ingest --season 2024-25 --league provider-league-id --start-date 2024-08-01 --end-date 2025-06-30
+- Daily match ingestion: `python -m app.jobs.daily_ingest`
+- Daily match + odds worker: `python -m app.worker`
+- Results/archive/cleanup/aggregate run: `python -m app.jobs.daily_archive`
+- Results only: `python -m app.jobs.daily_results`
+- Archive: `python -m app.jobs.daily_archive`
+- Cleanup: `python -m app.jobs.daily_cleanup`
+- Daily metrics: `python -m app.jobs.daily_metrics`
+- Historical match/result ingestion (not odds): `python -m app.jobs.historical_ingest --season 2024-25 --league provider-league-id --start-date 2024-08-01 --end-date 2025-06-30`
 
-Historical match and finalized-result partitions are stored as matches/season=<season>/league=<league>/date=YYYY-MM-DD.parquet and results/season=<season>/league=<league>/date=YYYY-MM-DD.parquet, with Zstandard compression, SHA-256 and row-count/key metadata. Odds history is explicitly unavailable unless the configured provider adapter exposes historical snapshots; current snapshots are never rewritten as opening/closing history.
-
-The worker and cron commands write idempotent job_runs with counts and bounded errors. Transient provider timeouts/unavailability/rate limits retry with bounded exponential or Retry-After backoff. Failed and partial runs can be retried; successful/skipped idempotency keys are not reprocessed. PostgreSQL job history retention defaults to 30 days.
-
-PostgreSQL stores active/recent matches, odds, pending predictions/coupons, verified operational results and daily aggregates. Historical datasets belong in R2/Parquet. Cleanup re-reads each R2 object and requires matching key, metadata, SHA-256, row count, persisted VERIFIED state, and a one-day buffer. Match cleanup waits until dependent odds/results/predictions/coupon items have been removed safely.
-
-Telegram sends an aggregated daily summary and a deduplicated PostgreSQL storage alert; ingestion messages are grouped by configured leagues/date. No per-odds notifications are sent. Missing R2 or Telegram credentials are reported as not configured.
+Historical matches and finalized results use R2 Parquet partitions with Zstandard compression, SHA-256 and row-count/key metadata. Cleanup re-reads each object and requires matching metadata, checksum, row count, persisted `VERIFIED` state, and a one-day buffer. It does not remove data before a verified archive. Provider daily jobs skip safely until credentials and league scope are configured. Job records are idempotent and retained for 30 days by default.
 
 ## Verification
 
-- Backend: py -m pytest -q
-- Frontend: npm run typecheck and npm run build
-- Migration SQL: alembic upgrade head --sql
-- Compose config: docker compose config -q
-- Render Blueprint: JSON Schema validation; no deployment is automatic.
+- Backend: `py -m pytest -q`
+- Frontend: `npm run typecheck` and `npm run build` from `frontend`
+- Migration SQL: `alembic upgrade head --sql` from `backend`
+- Compose config: `docker compose config -q`
+- Render Blueprint: validate `render.yaml` against Render's schema; this does not deploy.

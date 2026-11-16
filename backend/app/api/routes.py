@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import engine, get_db
 from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Coupon, CouponItem, DailyMetric, JobRun, Lesson, Prediction
-from app.providers.registry import provider_status
+from app.providers.registry import provider_health
 from app.storage.monitor import StorageMonitor
 
 router = APIRouter()
@@ -18,7 +19,7 @@ def _serialize(model) -> dict:
     return {column.name: getattr(model, column.name) for column in model.__table__.columns}
 
 
-def health() -> dict[str, str]:
+def health() -> dict[str, Any]:
     settings = get_settings()
     database = "DATABASE_NOT_CONFIGURED"
     worker, archive = "UNKNOWN", "NO_VERIFIED_ARCHIVES"
@@ -35,10 +36,12 @@ def health() -> dict[str, str]:
             database = "OFFLINE"
             worker = "UNKNOWN"
             archive = "UNKNOWN"
-    provider = provider_status()
+    provider_info = provider_health()
+    provider = provider_info["status"]
     return {
         "status": "ok",
         "provider": provider,
+        "provider_health": provider_info,
         "database": database,
         "r2": "CONFIGURED" if settings.r2_endpoint and settings.r2_access_key_id and settings.r2_secret_access_key else "R2_NOT_CONFIGURED",
         "worker": worker,
@@ -49,7 +52,7 @@ def health() -> dict[str, str]:
 
 
 @router.get("/health")
-def health_endpoint() -> dict[str, str]:
+def health_endpoint() -> dict[str, Any]:
     return health()
 
 

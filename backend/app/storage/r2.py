@@ -97,7 +97,7 @@ class R2ObjectStore(ParquetObjectStoreMixin):
         self.bucket = cfg.r2_bucket
         self.client = boto3.client("s3", endpoint_url=cfg.r2_endpoint,
             aws_access_key_id=cfg.r2_access_key_id,
-            aws_secret_access_key=cfg.r2_secret_access_key, region_name="auto")
+            aws_secret_access_key=cfg.r2_secret_access_key, region_name=cfg.r2_region)
 
     def put_object(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=content_type, Metadata=metadata or {})

@@ -7,11 +7,21 @@ from threading import Lock
 from typing import Any
 
 from app.core.config import Settings, get_settings
-from app.providers.base import MatchProvider, ProviderNotConfigured, ProviderRateLimited, ProviderUnavailable
+from app.providers.base import MatchProvider, ProviderFailure, ProviderNotConfigured, ProviderUnavailable
 
 
 ProviderFactory = Callable[[Settings], MatchProvider]
 _FACTORIES: dict[str, ProviderFactory] = {}
+
+
+def _register_builtins() -> None:
+    if "sportmonks" not in _FACTORIES:
+        from app.providers.sportmonks import SportmonksProvider
+        register_provider("sportmonks", lambda cfg: SportmonksProvider(
+            token=cfg.provider_api_token or "",
+            base_url=cfg.provider_api_base_url or "https://api.sportmonks.com/v3/football",
+            timeout_seconds=cfg.provider_timeout_seconds,
+        ))
 
 
 def register_provider(name: str, factory: ProviderFactory) -> None:
@@ -23,9 +33,10 @@ def register_provider(name: str, factory: ProviderFactory) -> None:
 
 def create_provider(settings: Settings | None = None) -> MatchProvider:
     cfg = settings or get_settings()
+    _register_builtins()
     name = cfg.provider_id
-    if not name or not cfg.provider_base_url or not cfg.provider_api_key or not cfg.enabled_league_ids:
-        raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: set provider name, base URL, API key, and enabled leagues")
+    if not name or not cfg.provider_api_base_url or not cfg.provider_api_token:
+        raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: set provider name, API base URL, and API credentials")
     if name.lower() == "mock":
         raise ProviderNotConfigured("MOCK_PROVIDER_TEST_ONLY")
     factory = _FACTORIES.get(name.lower())
@@ -39,29 +50,51 @@ def create_provider(settings: Settings | None = None) -> MatchProvider:
         raise ProviderUnavailable("PROVIDER_UNAVAILABLE: adapter initialization failed") from exc
 
 
-def provider_status(settings: Settings | None = None) -> str:
+def provider_health(settings: Settings | None = None) -> dict[str, Any]:
     cfg = settings or get_settings()
-    if not (cfg.provider_id and cfg.provider_base_url and cfg.provider_api_key and cfg.enabled_league_ids):
-        return "PROVIDER_NOT_CONFIGURED"
-    if cfg.provider_id.lower() == "mock":
-        return "PROVIDER_NOT_CONFIGURED"
-    if cfg.provider_id.lower() not in _FACTORIES:
-        return "PROVIDER_UNAVAILABLE"
+    _register_builtins()
+    provider_name = cfg.provider_id
+    coverage = {"leagues": list(cfg.enabled_league_ids), "seasons": list(cfg.enabled_season_ids)}
+    if not (provider_name and cfg.provider_api_base_url and cfg.provider_api_token):
+        return {"provider": (provider_name or "UNKNOWN").upper(), "status": "PROVIDER_NOT_CONFIGURED",
+                "display_status": "NOT CONFIGURED", "latency_ms": None,
+                "error_code": "PROVIDER_NOT_CONFIGURED", "last_successful_request": None, "coverage": coverage}
+    if provider_name.lower() == "mock":
+        return {"provider": "MOCK", "status": "PROVIDER_NOT_CONFIGURED", "display_status": "NOT CONFIGURED",
+                "latency_ms": None, "error_code": "MOCK_PROVIDER_TEST_ONLY", "last_successful_request": None,
+                "coverage": coverage}
+    if provider_name.lower() not in _FACTORIES:
+        return {"provider": provider_name.upper(), "status": "PROVIDER_UNAVAILABLE", "display_status": "OFFLINE",
+                "latency_ms": None, "error_code": "PROVIDER_UNAVAILABLE", "last_successful_request": None,
+                "coverage": coverage}
+    provider = None
     try:
         provider = create_provider(cfg)
         probe = getattr(provider, "health_check", None)
         if probe is None:
-            return "PROVIDER_UNAVAILABLE"
-        probe()
-        return "PROVIDER_OK"
-    except ProviderNotConfigured:
-        return "PROVIDER_NOT_CONFIGURED"
-    except ProviderRateLimited:
-        return "PROVIDER_RATE_LIMITED"
-    except ProviderUnavailable:
-        return "PROVIDER_UNAVAILABLE"
+            raise ProviderUnavailable("PROVIDER_UNAVAILABLE: adapter has no health check")
+        ProviderCaller(provider, requests_per_minute=cfg.provider_requests_per_minute,
+                       max_retries=cfg.provider_retry_count).call("health_check")
+        return {"provider": provider_name.upper(), "status": "PROVIDER_OK", "display_status": "ONLINE",
+                "latency_ms": getattr(provider, "last_latency_ms", None), "error_code": None,
+                "last_successful_request": getattr(provider, "last_successful_request", None), "coverage": coverage}
+    except ProviderFailure as exc:
+        display = "DEGRADED" if exc.code == "PROVIDER_RATE_LIMITED" else "OFFLINE"
+        return {"provider": provider_name.upper(), "status": exc.code, "display_status": display,
+                "latency_ms": getattr(provider, "last_latency_ms", None), "error_code": exc.code,
+                "last_successful_request": getattr(provider, "last_successful_request", None), "coverage": coverage}
     except Exception:
-        return "PROVIDER_ERROR"
+        return {"provider": provider_name.upper(), "status": "PROVIDER_ERROR", "display_status": "OFFLINE",
+                "latency_ms": getattr(provider, "last_latency_ms", None), "error_code": "PROVIDER_ERROR",
+                "last_successful_request": getattr(provider, "last_successful_request", None), "coverage": coverage}
+    finally:
+        close = getattr(provider, "close", None)
+        if callable(close):
+            close()
+
+
+def provider_status(settings: Settings | None = None) -> str:
+    return provider_health(settings)["status"]
 
 
 class ProviderCaller:

@@ -69,6 +69,8 @@ def normalize_odds(payload: dict, *, match_id: str, provider: str | None = None)
         "match_id": match_id,
         "provider": str(payload.get("provider", provider or "unknown")),
         "provider_odds_id": str(payload["provider_odds_id"]) if payload.get("provider_odds_id") is not None else None,
+        "provider_market_id": str(payload["provider_market_id"]) if payload.get("provider_market_id") is not None else None,
+        "provider_bookmaker_id": str(payload["provider_bookmaker_id"]) if payload.get("provider_bookmaker_id") is not None else None,
         "bookmaker": str(payload["bookmaker"]).strip(),
         "market": str(payload["market"]).strip().upper(),
         "selection": str(payload["selection"]).strip().upper(),

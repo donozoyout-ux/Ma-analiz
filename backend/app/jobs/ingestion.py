@@ -33,8 +33,13 @@ def upsert_matches(session: Session, matches: list[dict], *, now: datetime | Non
         if match["start_time"] < current - timedelta(days=retention):
             skipped += 1
             continue
-        values = {**match, "status": _safe_status(match["status"]),
-                  "expires_at": _expires(match["start_time"], retention)}
+        # Provider adapters may attach useful discovery metadata (for example,
+        # a provider season ID) which is not part of the active SQL schema.
+        # Keep only mapped columns at this persistence boundary.
+        columns = {column.name for column in ActiveMatch.__table__.columns}
+        values = {key: value for key, value in match.items() if key in columns}
+        values.update({"status": _safe_status(match["status"]),
+                       "expires_at": _expires(match["start_time"], retention)})
         statement = insert(ActiveMatch).values(**values)
         updates = {key: getattr(statement.excluded, key) for key in
                    ("league_id", "league_name", "season", "home_team", "away_team", "start_time", "status", "venue", "round", "country", "sport", "expires_at")}
@@ -285,6 +290,7 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
     ).where(ActiveOdds.expires_at <= current, ActiveOdds.captured_at < cutoff)).all()
     for odds, match in odds_rows:
         row = {"match_id": str(match.id), "provider": odds.provider, "provider_odds_id": odds.provider_odds_id,
+               "provider_market_id": odds.provider_market_id, "provider_bookmaker_id": odds.provider_bookmaker_id,
                "league_id": match.league_id, "league_name": match.league_name, "season": match.season,
                "home_team": match.home_team, "away_team": match.away_team, "start_time": match.start_time,
                "bookmaker": odds.bookmaker, "market": odds.market, "selection": odds.selection,

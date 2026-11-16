@@ -38,6 +38,8 @@ class ActiveOdds(Base):
     match_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("active_matches.id", ondelete="CASCADE"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown")
     provider_odds_id: Mapped[str | None] = mapped_column(String(160))
+    provider_market_id: Mapped[str | None] = mapped_column(String(160))
+    provider_bookmaker_id: Mapped[str | None] = mapped_column(String(160))
     bookmaker: Mapped[str] = mapped_column(String(120), nullable=False)
     market: Mapped[str] = mapped_column(String(80), nullable=False)
     selection: Mapped[str] = mapped_column(String(120), nullable=False)

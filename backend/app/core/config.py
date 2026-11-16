@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     provider_request_timeout_seconds: float = 15
     provider_requests_per_minute: int = 60
     provider_max_retries: int = 3
+    sportmonks_api_token: str | None = None
+    sportmonks_base_url: str = "https://api.sportmonks.com/v3/football"
+    sportmonks_timeout_seconds: float = 15
+    sportmonks_max_retries: int = 3
     enabled_leagues: str = ""
     enabled_seasons: str = ""
     historical_start_date: date | None = None
@@ -24,6 +28,7 @@ class Settings(BaseSettings):
     r2_access_key_id: str | None = None
     r2_secret_access_key: str | None = None
     r2_bucket: str = "sports-analytics"
+    r2_region: str = "auto"
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None
     ai_provider: str | None = None
@@ -40,7 +45,25 @@ class Settings(BaseSettings):
 
     @property
     def provider_id(self) -> str | None:
-        return self.provider_name or self.match_provider
+        return self.provider_name or self.match_provider or ("sportmonks" if self.sportmonks_api_token else None)
+
+    @property
+    def provider_api_token(self) -> str | None:
+        return self.sportmonks_api_token if (self.provider_id or "").lower() == "sportmonks" else self.provider_api_key
+
+    @property
+    def provider_api_base_url(self) -> str | None:
+        if (self.provider_id or "").lower() == "sportmonks":
+            return self.sportmonks_base_url or self.provider_base_url
+        return self.provider_base_url
+
+    @property
+    def provider_timeout_seconds(self) -> float:
+        return self.sportmonks_timeout_seconds if (self.provider_id or "").lower() == "sportmonks" else self.provider_request_timeout_seconds
+
+    @property
+    def provider_retry_count(self) -> int:
+        return self.sportmonks_max_retries if (self.provider_id or "").lower() == "sportmonks" else self.provider_max_retries
 
     @property
     def enabled_league_ids(self) -> tuple[str, ...]:
