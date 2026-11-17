@@ -100,6 +100,22 @@ def collect_odds(day: date | None = None) -> dict[str, Any]:
             return _missing_provider_result(exc)
 
 
+def scheduled_scan(slot_start: datetime | None = None, session: Any | None = None,
+                  limit: int = 50) -> dict[str, Any]:
+    if session is None:
+        return {"status": "SKIPPED", "error_code": "DATABASE_NOT_CONFIGURED", "reason": "DATABASE_NOT_CONFIGURED",
+                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
+    from app.analysis.scanning import _run_analysis, scan_upcoming_matches
+
+    interval = max(60, get_settings().worker_scanner_interval_seconds)
+    now = datetime.now(timezone.utc)
+    run_at = slot_start or datetime.fromtimestamp(int(now.timestamp() // interval) * interval, tz=timezone.utc)
+    result = scan_upcoming_matches(session, analyze_one=_run_analysis, limit=limit, as_of=now,
+                                   scheduled_slot_start=run_at)
+    return {**result, "status": "SUCCESS" if result["matches_scanned"] else "SKIPPED",
+            "reason": None if result["matches_scanned"] else "NO_UPCOMING_MATCHES"}
+
+
 def process_results(day: date | None = None) -> dict[str, Any]:
     today = day or datetime.now(timezone.utc).date()
     try:
@@ -228,12 +244,19 @@ HANDLERS = {
     "cleanup_database": cleanup_database,
     "process_results": process_results,
     "calculate_daily_metrics": calculate_daily_metrics,
+    "scheduled_scan": scheduled_scan,
 }
 
 
-def run_task(job_type: str, key: str, ledger: Any, *, day: date | None = None) -> dict[str, Any]:
+def run_task(job_type: str, key: str, ledger: Any, *, day: date | None = None,
+             limit: int | None = None) -> dict[str, Any]:
     if job_type not in HANDLERS:
         raise ValueError(f"UNKNOWN_JOB_TYPE: {job_type}")
+    if job_type == "scheduled_scan":
+        slot_start = datetime.fromisoformat(key.removeprefix("scheduled_scan:"))
+        return run_idempotent_job(ledger, key, job_type,
+                                  lambda: HANDLERS[job_type](slot_start, getattr(ledger, "session", None),
+                                                             limit=limit or 50))
     return run_idempotent_job(ledger, key, job_type, lambda: HANDLERS[job_type](day) if job_type in
                               {"collect_matches", "collect_odds", "process_results", "calculate_daily_metrics", "archive_data"}
                               else HANDLERS[job_type]())
@@ -246,6 +269,4 @@ def run_daily(job_type: str, day: date | None = None) -> dict[str, Any]:
     if SessionLocal is None:
         return run_task(job_type, key, MemoryLedger(), day=today)
     with SessionLocal() as session:
-        result = run_task(job_type, key, SQLLedger(session), day=today)
-        prune_job_history(session)
-        return result
+        return run_task(job_type, key, SQLLedger(session), day=today)

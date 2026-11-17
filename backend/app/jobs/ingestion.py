@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Callable
+from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, MatchResult
+from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, HistoricalIngestDay, MatchResult
 from app.providers.base import ProviderError, ProviderFailure, ProviderNotConfigured
 from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result
 from app.storage.archive import ArchiveStatus, SQLArchiveTracker, archive_partition, cleanup_database_rows_after_verified
@@ -118,32 +120,9 @@ def daily_ingest(session: Session, caller: Any, day: date, *, enabled_leagues: t
     normalized = [m for m in normalize_matches(raw_matches, provider=provider.name)
                   if m["league_id"] in leagues]
     written, skipped = upsert_matches(session, normalized, now=now)
-    odds_written = odds_skipped = failures = 0
-    match_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    match_end = match_start + timedelta(days=1)
-    matches = session.scalars(select(ActiveMatch).where(
-        ActiveMatch.provider == provider.name,
-        ActiveMatch.start_time >= match_start,
-        ActiveMatch.start_time < match_end,
-        ActiveMatch.league_id.in_(leagues),
-    )).all()
-    for match in matches:
-        try:
-            payloads = caller.call("get_odds", match.provider_match_id)
-            count, ignored = upsert_odds(session, provider.name, match, payloads, now=now)
-            odds_written += count
-            odds_skipped += ignored
-        except ProviderFailure:
-            failures += 1
-        except (KeyError, TypeError, ValueError) as exc:
-            failures += 1
     session.commit()
-    total_written = written + odds_written
-    total_skipped = skipped + odds_skipped
-    status = "PARTIAL" if failures else "SUCCESS" if total_written else "SKIPPED"
-    return {"status": status, "records_seen": len(raw_matches), "records_written": total_written,
-            "records_skipped": total_skipped, "records_failed": failures,
-            "error_code": "PROVIDER_PARTIAL_FAILURE" if failures else None}
+    return {"status": "SUCCESS" if written else "SKIPPED", "records_seen": len(raw_matches),
+            "records_written": written, "records_skipped": skipped, "records_failed": 0}
 
 
 def daily_odds(session: Session, caller: Any, day: date, *, enabled_leagues: tuple[str, ...],
@@ -184,9 +163,93 @@ def archive_rows(store: ObjectStore, tracker: Any, *, dataset: str, season: str,
             "size_bytes": receipt.size, "checksum": receipt.checksum}
 
 
+def _claim_historical_day(session: Session, *, provider: str, season: str, league: str,
+                          day: date) -> tuple[HistoricalIngestDay | None, str | None]:
+    now = datetime.now(timezone.utc)
+    lease_seconds = max(60, get_settings().historical_ingest_lease_seconds)
+    lease_expiry = now + timedelta(seconds=lease_seconds)
+    token = uuid4().hex
+    row = session.scalar(select(HistoricalIngestDay).where(
+        HistoricalIngestDay.provider == provider,
+        HistoricalIngestDay.season == season,
+        HistoricalIngestDay.league_id == league,
+        HistoricalIngestDay.ingest_date == day,
+    ).with_for_update())
+    if row is None:
+        row = HistoricalIngestDay(provider=provider, season=season, league_id=league, ingest_date=day,
+                                  status="RUNNING", lease_token=token, lease_expires_at=lease_expiry,
+                                  attempt_count=1, last_attempt_at=now)
+        session.add(row)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            row = session.scalar(select(HistoricalIngestDay).where(
+                HistoricalIngestDay.provider == provider,
+                HistoricalIngestDay.season == season,
+                HistoricalIngestDay.league_id == league,
+                HistoricalIngestDay.ingest_date == day,
+            ).with_for_update())
+            if row is None:
+                raise
+        else:
+            return row, token
+
+    if row.status in {"COMPLETED", "EMPTY"}:
+        session.rollback()
+        return row, None
+
+    active_until = row.lease_expires_at
+    if active_until is not None and active_until.tzinfo is None:
+        active_until = active_until.replace(tzinfo=timezone.utc)
+    updated_at = row.updated_at
+    if updated_at is not None and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    if row.status == "RUNNING" and active_until is None and updated_at is not None:
+        active_until = updated_at + timedelta(seconds=lease_seconds)
+    if row.status == "RUNNING" and active_until is not None and active_until > now:
+        session.rollback()
+        return row, None
+
+    row.status = "RUNNING"
+    row.lease_token = token
+    row.lease_expires_at = lease_expiry
+    row.error_code = None
+    row.failed_match_ids = []
+    row.records_failed = 0
+    row.attempt_count = (row.attempt_count or 0) + 1
+    row.last_attempt_at = now
+    session.commit()
+    return row, token
+
+
+def _renew_historical_lease(session: Session, *, progress_id: Any, token: str) -> None:
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(seconds=max(60, get_settings().historical_ingest_lease_seconds))
+    result = session.execute(update(HistoricalIngestDay).where(
+        HistoricalIngestDay.id == progress_id,
+        HistoricalIngestDay.status == "RUNNING",
+        HistoricalIngestDay.lease_token == token,
+    ).values(lease_expires_at=expiry, updated_at=now))
+    session.commit()
+    if result.rowcount != 1:
+        raise RuntimeError("HISTORICAL_INGEST_LEASE_LOST")
+
+
+def _finish_historical_day(session: Session, *, progress_id: Any, token: str,
+                           values: dict[str, Any]) -> None:
+    result = session.execute(update(HistoricalIngestDay).where(
+        HistoricalIngestDay.id == progress_id,
+        HistoricalIngestDay.status == "RUNNING",
+        HistoricalIngestDay.lease_token == token,
+    ).values(**values, lease_token=None, lease_expires_at=None, updated_at=datetime.now(timezone.utc)))
+    session.commit()
+    if result.rowcount != 1:
+        raise RuntimeError("HISTORICAL_INGEST_LEASE_LOST")
+
+
 def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, season: str, league: str,
                       start_date: date, end_date: date) -> dict[str, Any]:
-    from app.models import HistoricalIngestDay
     if end_date < start_date:
         raise ValueError("end_date must be on or after start_date")
     configured_start = get_settings().historical_start_date
@@ -199,41 +262,22 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
     if league not in available:
         return {"status": "SKIPPED", "error_code": "LEAGUE_NOT_AVAILABLE", "records_seen": 0,
                 "records_written": 0, "records_skipped": 0, "records_failed": 0, "dates_completed": 0}
-    completed = failed = partial = seen = archived = records_failed = 0
+    completed = failed = partial = seen = archived = records_failed = dates_skipped = 0
     tracker = SQLArchiveTracker(session)
     day = start_date
     while day <= end_date:
-        progress = session.scalar(select(HistoricalIngestDay).where(
-            HistoricalIngestDay.provider == caller.provider.name,
-            HistoricalIngestDay.season == season,
-            HistoricalIngestDay.league_id == league,
-            HistoricalIngestDay.ingest_date == day,
-        ).with_for_update())
-        if progress and progress.status in {"COMPLETED", "EMPTY"}:
+        progress, lease_token = _claim_historical_day(
+            session, provider=caller.provider.name, season=season, league=league, day=day)
+        if progress is not None and progress.status in {"COMPLETED", "EMPTY"}:
             completed += 1
             day += timedelta(days=1)
             continue
-        if progress is None:
-            progress = HistoricalIngestDay(provider=caller.provider.name, season=season,
-                                           league_id=league, ingest_date=day, status="PENDING")
-            session.add(progress)
-        session.commit()
-        progress = session.scalar(select(HistoricalIngestDay).where(
-            HistoricalIngestDay.provider == caller.provider.name,
-            HistoricalIngestDay.season == season,
-            HistoricalIngestDay.league_id == league,
-            HistoricalIngestDay.ingest_date == day,
-        ).with_for_update())
-        if progress.status in {"FAILED", "PARTIAL", "RUNNING", "RETRYING"}:
-            progress.status = "RETRYING"
-            session.commit()
-        progress.status, progress.error_code = "RUNNING", None
-        progress.failed_match_ids = []
-        progress.records_failed = 0
-        progress.attempt_count = (progress.attempt_count or 0) + 1
-        progress.last_attempt_at = datetime.now(timezone.utc)
-        session.commit()
+        if lease_token is None:
+            dates_skipped += 1
+            day += timedelta(days=1)
+            continue
         try:
+            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
             raw = caller.call("get_matches", day)
             normalized, failed_ids = [], []
             for payload in raw:
@@ -249,8 +293,10 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
             if normalized:
                 for match_row in normalized:
                     match_row["season"] = season
+                _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
                 archive_rows(store, tracker, dataset="matches", season=season, league=league, day=day, rows=normalized)
                 archive_count += len(normalized)
+            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
             raw_results = caller.call("get_results", day)
             final_results = []
             match_ids = {match["provider_match_id"] for match in normalized}
@@ -269,16 +315,17 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 verified_at = datetime.now(timezone.utc)
                 for item in final_results:
                     item.update({"league_id": league, "season": season, "verified_at": verified_at})
+                _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
                 archive_rows(store, tracker, dataset="results", season=season, league=league,
                              day=day, rows=final_results)
                 archive_count += len(final_results)
             archived += archive_count
-            progress.records_seen = len(raw)
-            progress.records_archived = archive_count
-            progress.records_failed = len(failed_ids)
-            progress.failed_match_ids = sorted(set(failed_ids))
-            progress.status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
-            session.commit()
+            status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
+            _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
+                "records_seen": len(raw), "records_archived": archive_count,
+                "records_failed": len(failed_ids), "failed_match_ids": sorted(set(failed_ids)),
+                "status": status, "error_code": "INVALID_PROVIDER_RECORDS" if failed_ids else None,
+            })
             records_failed += len(failed_ids)
             if failed_ids:
                 partial += 1
@@ -286,24 +333,19 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 completed += 1
         except Exception as exc:
             session.rollback()
-            progress = session.scalar(select(HistoricalIngestDay).where(
-                HistoricalIngestDay.provider == caller.provider.name,
-                HistoricalIngestDay.season == season,
-                HistoricalIngestDay.league_id == league,
-                HistoricalIngestDay.ingest_date == day,
-            ))
-            if progress:
-                progress.status = "FAILED"
-                progress.records_failed = max(1, progress.records_failed or 0)
-                progress.error_code = getattr(exc, "code", "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())[:80]
-                session.commit()
+            error_code = getattr(exc, "code", None) or (
+                "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())
+            _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
+                "status": "FAILED", "records_failed": 1, "error_code": error_code[:80],
+            })
             failed += 1
             records_failed += 1
         day += timedelta(days=1)
     status = "PARTIAL" if (failed or partial) and (completed or partial or archived) else "FAILED" if failed else "PARTIAL" if partial else "SUCCESS" if archived else "SKIPPED"
     return {"status": status, "records_seen": seen, "records_written": archived,
-            "records_skipped": completed if not archived else max(0, completed - 1),
+            "records_skipped": dates_skipped + (completed if not archived else max(0, completed - 1)),
             "records_failed": records_failed, "dates_completed": completed, "dates_partial": partial, "dates_failed": failed,
+            "dates_skipped": dates_skipped,
             "odds_history": "UNAVAILABLE_UNLESS_PROVIDER_ADAPTER_EXPOSES_HISTORICAL_ODDS"}
 def ingest_results(session: Session, caller: Any, day: date) -> dict[str, Any]:
     raw = caller.call("get_results", day)

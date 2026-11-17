@@ -9,12 +9,12 @@ from sqlalchemy.pool import StaticPool
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models import ActiveMatch, ActiveOdds, MatchAnalysis, MatchResult
+from app.models import ActiveMatch, ActiveOdds, JobRun, MatchAnalysis, MatchResult
 
 
 def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no_bet():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    for table in (ActiveMatch.__table__, ActiveOdds.__table__, MatchResult.__table__, MatchAnalysis.__table__):
+    for table in (ActiveMatch.__table__, ActiveOdds.__table__, MatchResult.__table__, MatchAnalysis.__table__, JobRun.__table__):
         table.create(engine)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
     now = datetime.now(timezone.utc)
@@ -57,6 +57,6 @@ def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no
         assert scanner.json()["matches_scanned"] == 1
     finally:
         app.dependency_overrides.pop(get_db, None)
-        for table in (MatchAnalysis.__table__, MatchResult.__table__, ActiveOdds.__table__, ActiveMatch.__table__):
+        for table in (JobRun.__table__, MatchAnalysis.__table__, MatchResult.__table__, ActiveOdds.__table__, ActiveMatch.__table__):
             table.drop(engine)
         engine.dispose()

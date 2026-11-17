@@ -44,7 +44,8 @@ class MemoryLedger:
     def claim(self, key: str, job_type: str) -> tuple[Run, bool]:
         existing = self.runs.get(key)
         if existing:
-            stale = existing.status == "RUNNING" and existing.started_at < datetime.now(timezone.utc) - timedelta(hours=1)
+            stale_seconds = max(60, get_settings().job_run_stale_after_seconds)
+            stale = existing.status == "RUNNING" and existing.started_at < datetime.now(timezone.utc) - timedelta(seconds=stale_seconds)
             retryable = existing.status in {"FAILED", "PARTIAL"}
             if stale or retryable:
                 existing.started_at = datetime.now(timezone.utc)
@@ -83,7 +84,9 @@ class SQLLedger:
         row = self.session.scalar(select(JobRun).where(JobRun.idempotency_key == key).with_for_update())
         now = datetime.now(timezone.utc)
         if row:
-            stale = row.status == "RUNNING" and row.started_at < now - timedelta(hours=1)
+            stale_seconds = max(60, get_settings().job_run_stale_after_seconds)
+            started = row.started_at.replace(tzinfo=timezone.utc) if row.started_at.tzinfo is None else row.started_at
+            stale = row.status == "RUNNING" and started < now - timedelta(seconds=stale_seconds)
             if stale or row.status in {"FAILED", "PARTIAL"}:
                 row.started_at, row.finished_at, row.status = now, None, "RUNNING"
                 row.error = row.error_code = row.error_message = None
@@ -116,8 +119,9 @@ class SQLLedger:
         if row is None:
             raise RuntimeError("JOB_RUN_DISAPPEARED")
         finished = datetime.now(timezone.utc)
+        started = row.started_at.replace(tzinfo=timezone.utc) if row.started_at.tzinfo is None else row.started_at
         row.finished_at = finished
-        row.duration_ms = max(0, int((finished - row.started_at).total_seconds() * 1000))
+        row.duration_ms = max(0, int((finished - started).total_seconds() * 1000))
         row.status = status
         row.records_seen = int(values.get("records_seen", 0))
         row.records_written = int(values.get("records_written", values.get("records_processed", 0)))
@@ -165,6 +169,9 @@ def run_idempotent_job(ledger: Ledger, key: str, job_type: str, handler: Callabl
     except Exception as exc:
         from app.providers.base import ProviderFailure
         code = exc.code if isinstance(exc, ProviderFailure) else type(exc).__name__.upper()
+        session = getattr(ledger, "session", None)
+        if session is not None:
+            session.rollback()
         ledger.finish(run, "FAILED", error_code=code, error_message=type(exc).__name__)
         return {"job": job_type, "status": "FAILED", "error_code": code,
                 "reason": type(exc).__name__, "records_seen": 0, "records_written": 0,

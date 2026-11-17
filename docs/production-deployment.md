@@ -1,6 +1,6 @@
-# Maçanaliz single-service Render deployment
+# Maçanaliz Render deployment architecture
 
-This configuration runs Next.js and FastAPI in one native Python Render Web Service. It does not provision a database, worker, cron job, or separate frontend service. Keep Maçanaliz's external PostgreSQL and any storage credentials separate from Kuponanalizii.
+The frontend and FastAPI remain together in one native Python Render Web Service. A single Background Worker runs bounded scheduled ingestion, result settlement, and scanning. One daily Cron runs archive, cleanup, and metrics. PostgreSQL is external to this Blueprint. Keep Maçanaliz's database and credentials separate from Kuponanalizii.
 
 ## Render service configuration
 
@@ -14,7 +14,24 @@ This configuration runs Next.js and FastAPI in one native Python Render Web Serv
 - Health Check Path: `/health/live`.
 - `PORT` is supplied by Render and used for the public Next.js server. FastAPI binds only to `127.0.0.1:8000` (`BACKEND_PORT`). The two ports must differ.
 
-The Node supervisor starts FastAPI, waits for its process-only liveness route, then starts Next.js. If either process exits unexpectedly, it terminates the other and exits unhealthy. On SIGTERM/SIGINT it signals both children and waits up to 10 seconds before force-killing any remaining child. The API is not started through shell backgrounding.
+The Node supervisor starts FastAPI, waits for its process-only liveness route, then starts Next.js. If either process exits unexpectedly, it terminates the other and exits unhealthy. On SIGTERM/SIGINT it signals both children and waits up to 25 seconds before force-killing any remaining child. The API is not started through shell backgrounding.
+
+### Background Worker
+
+- Runtime: Python, repository root.
+- Build: `python -m pip install -r backend/requirements.txt`.
+- Start: `cd backend && python -m app.worker`.
+- Instances: one. This polling worker uses PostgreSQL `job_runs`; no queue/Redis is required for the current serialized workload.
+- Defaults: fixtures hourly; odds, results/settlement, and scanner every 30 minutes; job history pruning daily. Each interval is configurable through its `WORKER_*_INTERVAL_SECONDS` environment variable.
+
+### Daily Cron
+
+- Runtime: Python, repository root.
+- Schedule: `0 2 * * *` UTC.
+- Build: `python -m pip install -r backend/requirements.txt`.
+- Command: `cd backend && python -m app.jobs.daily_archive`.
+- This one command processes previous-day results, archives data, cleans only verified R2 partitions, then calculates daily metrics. `daily_pipeline` is not scheduled.
+- `FAILED`, `PARTIAL`, and configuration-blocked `SKIPPED` outcomes produce a non-zero process exit so Render records a failed run. Empty/no-op work remains a successful run.
 
 ## Routing and CORS
 
@@ -26,14 +43,14 @@ The Node supervisor starts FastAPI, waits for its process-only liveness route, t
 
 ## Environment variables
 
-Required in the one Web Service:
+The Web Service, Worker, and Cron must use the same external Maçanaliz `DATABASE_URL`. Configure provider, archive, AI, and notification variables on the services that need them:
 
 - `DATABASE_URL`: connection URL for the separately provisioned Maçanaliz PostgreSQL. The Blueprint prompts for it; it does not create or reference a database resource.
 - `PROVIDER_NAME=goaloo` and `ENABLED_LEAGUES`: configured Goaloo league IDs, supplied in Render's environment.
 - `API_INTERNAL_URL=http://127.0.0.1:8000`, `SINGLE_SERVICE_MODE=true`, and `BACKEND_PORT=8000` for the internal API proxy.
 - `PYTHON_VERSION=3.12.11`, `NODE_VERSION=22`, `APP_ENV=production`, and `CORS_ORIGINS` empty.
 
-The Goaloo base URLs, timeout, retries, and request rate are set to the adapter defaults in `render.yaml`. Do not add Goaloo API keys; this adapter uses the public source endpoints and may be subject to source-side availability or schema changes.
+`render.yaml` carries the same Goaloo, database, R2, and notification variable names to the Worker/Cron that need them. The Worker additionally receives `WORKER_INTERVAL_SECONDS`, `WORKER_MATCH_INTERVAL_SECONDS`, `WORKER_ODDS_INTERVAL_SECONDS`, `WORKER_RESULTS_INTERVAL_SECONDS`, `WORKER_SCANNER_INTERVAL_SECONDS`, `WORKER_PRUNE_INTERVAL_SECONDS`, `JOB_RUN_STALE_AFTER_SECONDS`, `HISTORICAL_INGEST_LEASE_SECONDS`, and `JOB_HISTORY_RETENTION_DAYS`. Goaloo base URLs, timeout, retries, and request rate are set in the Blueprint. Do not add Goaloo API keys; this adapter uses public source endpoints and may be subject to source-side availability or schema changes.
 
 Optional integrations can be added manually to the service environment:
 
@@ -47,7 +64,7 @@ Never put secret values in Git, the Blueprint, or logs. Missing optional R2/Groq
 
 Set `DATABASE_URL` to the new Maçanaliz database before enabling deployments. The paid-service Pre-Deploy Command runs `alembic upgrade head` before the new version starts. The Start Command does not run migrations. Review migration compatibility and backup/rollback procedures before the first production migration.
 
-The service still requires a Postgres instance externally. Since this Blueprint intentionally creates only one Web Service, database lifecycle, backups, and credentials are managed separately.
+The Blueprint does not create a PostgreSQL resource. Database lifecycle, backups, and credentials are managed separately.
 
 ## Local production verification
 
@@ -68,4 +85,4 @@ Goaloo/R2/Postgres/Groq live tests remain separately reported as PASS only when 
 
 ## Operational limitation
 
-This one-service Blueprint intentionally omits the background worker and scheduled archive, cleanup, and metrics jobs. The API and frontend can run, but ingestion and scheduled maintenance will not run automatically in this deployment shape. If those jobs are required, they need an explicitly approved single-service process design or separate services; this Blueprint does not create them.
+The Worker is intentionally configured for one instance. Do not scale it horizontally until job leases and duplicate behavior are designed for multiple workers. Historical backfill remains a manually scoped command; it is not run continuously or added to the daily Cron. Render Cron is a separate bounded process, not a loop inside the Web Service.

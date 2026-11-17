@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     cors_origins: str = "http://localhost:3000"
     worker_interval_seconds: int = 300
+    worker_match_interval_seconds: int = 3600
+    worker_odds_interval_seconds: int = 1800
+    worker_results_interval_seconds: int = 1800
+    worker_scanner_interval_seconds: int = 1800
+    worker_prune_interval_seconds: int = 86400
+    job_run_stale_after_seconds: int = 21600
+    historical_ingest_lease_seconds: int = 3600
     postgres_normal_mb: int = 300
     postgres_warning_mb: int = 500
     postgres_high_mb: int = 750

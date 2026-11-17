@@ -132,4 +132,6 @@ class HistoricalIngestDay(Base):
     records_failed: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     failed_match_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     error_code: Mapped[str | None] = mapped_column(String(80))
+    lease_token: Mapped[str | None] = mapped_column(String(64))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
