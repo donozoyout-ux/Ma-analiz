@@ -69,7 +69,9 @@ def _market_name(value: str) -> str:
     if normalized in {"1x2", "fulltime_result", "full_time_result", "match_result", "match_winner"}:
         return "1X2"
     if normalized in {"over_under", "over/under", "total_goals", "goals_over_under"}:
-        return "OVER_UNDER"
+        return "OU"
+    if normalized in {"asian_handicap", "asian_handicap_result", "handicap"}:
+        return "AH"
     if normalized in {"btts", "both_teams_to_score"}:
         return "BTTS"
     return value.strip()
@@ -243,13 +245,18 @@ class SportmonksProvider:
             "home_team": teams["home"], "away_team": teams["away"],
             "start_time": start_time, "status": status,
         }
+        round_data = fixture.get("round")
+        if isinstance(round_data, dict) and round_data.get("name") is not None:
+            canonical["round"] = str(round_data["name"])
+        elif fixture.get("round_id") is not None:
+            canonical["round"] = str(fixture["round_id"])
         match = normalize_match(canonical, provider=self.name)
         match["provider_season_id"] = _identifier(fixture.get("season_id", season.get("id")), "season id")
         return match
 
     def _fixtures(self, day: date) -> list[dict]:
         return self._pages(f"fixtures/date/{day.isoformat()}", {
-            "include": "league;season;participants;state;scores", "per_page": 50,
+            "include": "league;season;participants;state;scores;round", "per_page": 50,
         })
 
     def get_matches(self, day: date) -> list[dict]:
@@ -271,11 +278,27 @@ class SportmonksProvider:
         fixture_id = _identifier(match_id, "fixture id")
         try:
             payload = self._get(f"fixtures/{fixture_id}", {
-                "include": "league;season;participants;state;scores",
+                "include": "league;season;participants;state;scores;round",
             })
         except ProviderNotFound:
             return None
         return self._fixture_match(_object(payload["data"], "fixture"))
+
+    def get_statistics(self, match_id: str) -> list[dict]:
+        fixture_id = _identifier(match_id, "fixture id")
+        payload = self._get(f"fixtures/{fixture_id}", {"include": "statistics.type"})
+        fixture = _object(payload["data"], "fixture")
+        statistics = fixture.get("statistics")
+        if not isinstance(statistics, list):
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: fixture statistics were not included")
+        output = []
+        for item in statistics:
+            item = _object(item, "fixture statistic")
+            output.append({"id": item.get("id"), "fixture_id": fixture_id,
+                           "team_id": item.get("participant_id", item.get("team_id")),
+                           "type_id": item.get("type_id"), "value": item.get("data", item.get("value")),
+                           "source": self.name})
+        return output
 
     def get_odds(self, match_id: str) -> list[dict]:
         fixture_id = _identifier(match_id, "fixture id")
@@ -300,6 +323,9 @@ class SportmonksProvider:
             market_name = _market_name(market_name)
             if not isinstance(bookmaker_name, str) or not bookmaker_name.strip():
                 bookmaker_name = bookmaker_id
+            bookmaker_country = bookmaker_obj.get("country")
+            if isinstance(bookmaker_country, dict):
+                bookmaker_country = bookmaker_country.get("name")
             history = row.get("history")
             snapshots = []
             if history is not None:
@@ -335,7 +361,11 @@ class SportmonksProvider:
                     "provider": self.name,
                     "provider_odds_id": f"{odd_id}:{history_id}" if history_id is not None else odd_id,
                     "bookmaker": bookmaker_name.strip(), "market": market_name.strip(),
+                    "bookmaker_country": bookmaker_country,
                     "selection": selection.strip(), "odds": value, "captured_at": captured_at,
+                    "line": row.get("handicap") if market_name == "AH" else row.get("total") if market_name == "OU" else None,
+                    "period": "PREMATCH", "status": "SUSPENDED" if row.get("stopped") is True else "AVAILABLE",
+                    "source": self.provider_label,
                     "provider_market_id": market_id, "provider_bookmaker_id": bookmaker_id,
                 })
         self.historical_odds_supported = has_history if rows else None

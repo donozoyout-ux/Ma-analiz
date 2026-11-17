@@ -69,12 +69,13 @@ class StorageMonitor:
                 db_bytes = None
                 table_rows = []
 
-        configured = bool(self.settings.r2_endpoint and self.settings.r2_access_key_id
-                          and self.settings.r2_secret_access_key and self.settings.r2_bucket)
         r2_bytes = None
         object_count = None
-        if not configured:
+        configured = self.settings.r2_configured
+        if self.settings.r2_missing_env:
             r2_status = "R2_NOT_CONFIGURED"
+        elif self.settings.r2_invalid_env:
+            r2_status = "R2_ERROR"
         else:
             try:
                 store = R2ObjectStore()

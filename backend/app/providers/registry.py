@@ -22,6 +22,14 @@ def _register_builtins() -> None:
             base_url=cfg.provider_api_base_url or "https://api.sportmonks.com/v3/football",
             timeout_seconds=cfg.provider_timeout_seconds,
         ))
+    if "goaloo" not in _FACTORIES:
+        from app.providers.goaloo import GoalooProvider
+        register_provider("goaloo", lambda cfg: GoalooProvider(
+            base_url=cfg.provider_api_base_url or cfg.goaloo_base_url,
+            odds_base_url=cfg.goaloo_odds_base_url,
+            league_ids=cfg.enabled_league_ids, season_ids=cfg.enabled_season_ids,
+            timeout_seconds=cfg.provider_timeout_seconds,
+        ))
 
 
 def register_provider(name: str, factory: ProviderFactory) -> None:
@@ -35,8 +43,9 @@ def create_provider(settings: Settings | None = None) -> MatchProvider:
     cfg = settings or get_settings()
     _register_builtins()
     name = cfg.provider_id
-    if not name or not cfg.provider_api_base_url or not cfg.provider_api_token:
-        raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: set provider name, API base URL, and API credentials")
+    credentials_required = (name or "").lower() != "goaloo"
+    if not name or not cfg.provider_api_base_url or (credentials_required and not cfg.provider_api_token):
+        raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: set provider name, API base URL, and required credentials")
     if name.lower() == "mock":
         raise ProviderNotConfigured("MOCK_PROVIDER_TEST_ONLY")
     factory = _FACTORIES.get(name.lower())
@@ -55,7 +64,8 @@ def provider_health(settings: Settings | None = None) -> dict[str, Any]:
     _register_builtins()
     provider_name = cfg.provider_id
     coverage = {"leagues": list(cfg.enabled_league_ids), "seasons": list(cfg.enabled_season_ids)}
-    if not (provider_name and cfg.provider_api_base_url and cfg.provider_api_token):
+    credentials_required = (provider_name or "").lower() != "goaloo"
+    if not (provider_name and cfg.provider_api_base_url and (not credentials_required or cfg.provider_api_token)):
         return {"provider": (provider_name or "UNKNOWN").upper(), "status": "PROVIDER_NOT_CONFIGURED",
                 "display_status": "NOT CONFIGURED", "latency_ms": None,
                 "error_code": "PROVIDER_NOT_CONFIGURED", "last_successful_request": None, "coverage": coverage}

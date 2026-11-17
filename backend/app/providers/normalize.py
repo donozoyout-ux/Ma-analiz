@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 
@@ -6,7 +6,7 @@ def utc_datetime(value) -> datetime:
     parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("Provider timestamps must include a timezone")
-    return parsed
+    return parsed.astimezone(timezone.utc)
 
 
 def _team_name(value) -> str:
@@ -52,6 +52,72 @@ def normalize_matches(payloads: list[dict], *, provider: str) -> list[dict]:
     return list(unique.values())
 
 
+def normalize_line(value) -> Decimal | None:
+    """Normalize a decimal or split Asian line without losing its raw value."""
+    if value is None or not str(value).strip():
+        return None
+    raw = str(value).strip().replace("−", "-")
+    try:
+        if "/" in raw:
+            parts = [Decimal(part.strip()) for part in raw.split("/")]
+            if len(parts) != 2:
+                raise InvalidOperation
+            line = sum(parts, Decimal("0")) / Decimal("2")
+        else:
+            line = Decimal(raw)
+    except (InvalidOperation, ValueError):
+        raise ValueError("Odds line must be a decimal or two-part split line") from None
+    if not line.is_finite():
+        raise ValueError("Odds line must be finite")
+    return line.quantize(Decimal("0.001"))
+
+
+def _canonical_market(value: str) -> str:
+    folded = " ".join(value.strip().upper().replace("_", " ").replace("-", " ").split())
+    if folded in {"1X2", "1 X 2", "FULLTIME RESULT", "FULL TIME RESULT", "MATCH RESULT", "MATCH WINNER"}:
+        return "1X2"
+    if folded in {"AH", "ASIAN HANDICAP", "ASIAN HANDICAP RESULT", "HANDICAP"}:
+        return "AH"
+    if folded in {"OU", "O/U", "OVER/UNDER", "OVER UNDER", "TOTAL GOALS", "GOALS OVER UNDER"}:
+        return "OU"
+    if folded in {"BTTS", "BOTH TEAMS TO SCORE"}:
+        return "BTTS"
+    return folded
+
+
+def _canonical_selection(value: str, market: str) -> str:
+    folded = " ".join(value.strip().upper().replace("_", " ").split())
+    aliases = {"HOME": "HOME", "1": "HOME", "DRAW": "DRAW", "X": "DRAW",
+               "AWAY": "AWAY", "2": "AWAY"}
+    if folded in aliases:
+        return aliases[folded]
+    if folded.startswith("HOME ") or folded.startswith("HOME("):
+        return "HOME"
+    if folded.startswith("AWAY ") or folded.startswith("AWAY("):
+        return "AWAY"
+    if folded.startswith("DRAW ") or folded.startswith("DRAW("):
+        return "DRAW"
+    if folded.startswith("OVER"):
+        return "OVER"
+    if folded.startswith("UNDER"):
+        return "UNDER"
+    if market == "BTTS" and folded in {"YES", "NO"}:
+        return folded
+    return folded
+
+
+def _canonical_period(payload: dict) -> str:
+    raw = str(payload.get("period") or "").strip().upper().replace("-", "_").replace(" ", "_")
+    status = str(payload.get("status") or "").strip().upper().replace("-", "_").replace(" ", "_")
+    if (payload.get("is_live") is True or payload.get("in_play") is True
+            or raw in {"LIVE", "INPLAY", "IN_PLAY", "R"}
+            or status in {"LIVE", "INPLAY", "IN_PLAY", "R"}):
+        return "LIVE"
+    if raw in {"PREMATCH", "PRE_MATCH", "PRE_GAME", "PRE"}:
+        return "PREMATCH"
+    return "UNKNOWN"
+
+
 def normalize_odds(payload: dict, *, match_id: str, provider: str | None = None) -> dict:
     try:
         price = Decimal(str(payload["odds"]))
@@ -65,6 +131,27 @@ def normalize_odds(payload: dict, *, match_id: str, provider: str | None = None)
     required = ("bookmaker", "market", "selection")
     if any(not isinstance(payload.get(field), str) or not payload[field].strip() for field in required):
         raise ValueError("Odds snapshot is missing bookmaker, market, or selection")
+    market = _canonical_market(payload["market"])
+    line_value = payload.get("line")
+    if line_value is None and market == "AH":
+        line_value = payload.get("handicap")
+    if line_value is None and market == "OU":
+        line_value = payload.get("total")
+    raw_line_value = payload.get("raw_line", line_value)
+    line = normalize_line(line_value)
+    period = _canonical_period(payload)
+    raw_status = str(payload.get("status") or "").strip().upper()
+    if payload.get("stopped") is True:
+        raw_status = "SUSPENDED"
+    status = raw_status if raw_status in {"ACTIVE", "AVAILABLE", "OPEN", "SUSPENDED", "CLOSED", "UNKNOWN"} else "AVAILABLE"
+    source = str(payload.get("source") or payload.get("provider") or provider or "unknown").strip()
+    if not source:
+        source = "unknown"
+    canonical_selection = _canonical_selection(payload["selection"], market)
+    snapshot_type = str(payload.get("snapshot_type") or "OBSERVED").strip().upper()
+    if snapshot_type not in {"OPENING", "LATEST", "CLOSING", "LIVE", "OBSERVED"}:
+        raise ValueError("Odds snapshot type is unsupported")
+    line_key = format(line.normalize(), "f") if line is not None else ""
     return {
         "match_id": match_id,
         "provider": str(payload.get("provider", provider or "unknown")),
@@ -72,10 +159,20 @@ def normalize_odds(payload: dict, *, match_id: str, provider: str | None = None)
         "provider_market_id": str(payload["provider_market_id"]) if payload.get("provider_market_id") is not None else None,
         "provider_bookmaker_id": str(payload["provider_bookmaker_id"]) if payload.get("provider_bookmaker_id") is not None else None,
         "bookmaker": str(payload["bookmaker"]).strip(),
-        "market": str(payload["market"]).strip().upper(),
-        "selection": str(payload["selection"]).strip().upper(),
+        "bookmaker_country": str(payload["bookmaker_country"]).strip() if payload.get("bookmaker_country") else None,
+        "market": market,
+        "selection": canonical_selection,
+        "line": line,
+        "raw_line": str(raw_line_value).strip() if raw_line_value is not None else None,
+        "line_key": line_key,
         "odds": price,
+        "price": price,
         "captured_at": utc_datetime(captured),
+        "source": source,
+        "period": period,
+        "snapshot_type": snapshot_type,
+        "raw_value": str(payload["raw_value"]) if payload.get("raw_value") is not None else None,
+        "status": status,
     }
 
 

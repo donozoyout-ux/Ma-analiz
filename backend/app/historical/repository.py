@@ -38,8 +38,8 @@ class HistoricalRepository:
                 for row in batch.to_pylist():
                     # A finalized result is not available to analysis until it has
                     # been verified; prefer that availability timestamp to match time.
-                    event_time = (row.get("captured_at") or row.get("settled_at")
-                                  or row.get("verified_at") or row.get("created_at")
+                    event_time = (row.get("available_at") or row.get("verified_at")
+                                  or row.get("settled_at") or row.get("captured_at") or row.get("created_at")
                                   or row.get("finished_at") or row.get("start_time")
                                   or row.get("match_start"))
                     if event_time is None:
@@ -88,3 +88,117 @@ class HistoricalRepository:
 
     def get_previous_predictions(self, keys: list[str], *, before: datetime) -> list[dict]:
         return self._read(keys, before=before)
+
+    def get_similarity_history(self, *, league: str, season: str, start: datetime, end: datetime,
+                               before: datetime, bookmaker: str | None = None) -> list[dict]:
+        """Load only requested league/season/date partitions and join verified results.
+
+        If a bookmaker is supplied, exact bookmaker odds snapshots are attached
+        by provider match ID. Rows without verified outcomes are not training data.
+        """
+        if before.tzinfo is None or before.utcoffset() is None:
+            raise ValueError("Historical cutoff must include a timezone")
+        matches = self._read(self.partition_keys(dataset="matches", season=season, league=league,
+            start=start, end=end), before=before)
+        results = self._read(self.partition_keys(dataset="results", season=season, league=league,
+            start=start, end=end), before=before)
+        outcomes = {str(row.get("provider_match_id")): row for row in results
+                    if row.get("provider_match_id") is not None and row.get("verified_at") is not None
+                    and row.get("home_score") is not None and row.get("away_score") is not None
+                    and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}}
+        odds_rows = self._read(self.partition_keys(dataset="odds", season=season, league=league,
+            start=start, end=end), before=before) if bookmaker else []
+        odds_by_match: dict[str, list[dict]] = {}
+        for row in odds_rows:
+            if str(row.get("bookmaker", "")) != bookmaker or str(row.get("period", "")).upper() != "PREMATCH":
+                continue
+            match_key = row.get("provider_match_id")
+            if match_key is not None:
+                odds_by_match.setdefault(str(match_key), []).append(row)
+
+        # Partition retries or overlapping source exports can contain a fixture
+        # more than once. Keep one stable row per provider match identity.
+        matches_by_id: dict[str, dict] = {}
+        for match in matches:
+            identity = match.get("provider_match_id")
+            if identity is not None:
+                matches_by_id.setdefault(str(identity), match)
+        output = []
+        for match_key, match in sorted(matches_by_id.items()):
+            result = outcomes.get(match_key)
+            if not result:
+                continue
+            row = {**match, "home_score": result["home_score"], "away_score": result["away_score"],
+                   "status": "FINISHED", "verified_at": result["verified_at"]}
+            snapshots = odds_by_match.get(match_key, [])
+            if snapshots:
+                row["historical_odds"] = snapshots
+                by_market: dict[tuple[str, str, str], dict[str, dict]] = {}
+                for quote in snapshots:
+                    key = (str(quote.get("market", "")), str(quote.get("selection", "")),
+                           str(quote.get("line_key", "")))
+                    by_market.setdefault(key, {})[str(quote.get("snapshot_type", "OBSERVED")).upper()] = quote
+                for (market, selection, line), values in by_market.items():
+                    if market == "1X2" and selection in {"HOME", "DRAW", "AWAY"}:
+                        for kind in ("OPENING", "LATEST", "CLOSING"):
+                            quote = values.get(kind)
+                            if quote and quote.get("odds") is not None:
+                                row[f"{kind.lower()}_{selection.lower()}_odds"] = float(quote["odds"])
+                        preferred = values.get("CLOSING") or values.get("LATEST") or values.get("OBSERVED") or values.get("OPENING")
+                        if preferred and preferred.get("odds") is not None:
+                            row[f"{selection.lower()}_odds"] = float(preferred["odds"])
+                    if market == "OU" and selection == "OVER" and line and "ou_line" not in row:
+                        row["ou_line"] = float(line)
+                opening, closing = row.get("opening_home_odds"), row.get("closing_home_odds")
+                if opening and closing and opening > 1:
+                    row["odds_movement"] = (closing - opening) / opening * 100
+            output.append(row)
+        def fixture_time(row: dict) -> datetime | None:
+            value = row.get("start_time") or row.get("match_start")
+            if isinstance(value, str):
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+                return None
+            return value
+
+        ordered = sorted((row for row in output if fixture_time(row) is not None), key=fixture_time)
+        by_team: dict[str, list[dict]] = {}
+        for row in ordered:
+            at = fixture_time(row)
+            verified = row.get("verified_at")
+            if isinstance(verified, str):
+                verified = datetime.fromisoformat(verified.replace("Z", "+00:00"))
+            prior_home = [item for item in by_team.get(row["home_team"], [])
+                          if item.get("verified_at") and item["verified_at"] <= at]
+            prior_away = [item for item in by_team.get(row["away_team"], [])
+                          if item.get("verified_at") and item["verified_at"] <= at]
+
+            def form(items: list[dict], team: str, count: int) -> float | None:
+                recent = items[-count:]
+                if len(recent) < 5:
+                    return None
+                points = 0
+                for item in recent:
+                    home_side = item["home_team"] == team
+                    scored = item["home_score"] if home_side else item["away_score"]
+                    conceded = item["away_score"] if home_side else item["home_score"]
+                    points += 3 if scored > conceded else 1 if scored == conceded else 0
+                return points / (3 * len(recent))
+
+            home_only = [item for item in prior_home if item["home_team"] == row["home_team"]]
+            away_only = [item for item in prior_away if item["away_team"] == row["away_team"]]
+            row["home_strength"] = form(prior_home, row["home_team"], 10)
+            row["away_strength"] = form(prior_away, row["away_team"], 10)
+            row["home_form"] = form(home_only, row["home_team"], 5)
+            row["away_form"] = form(away_only, row["away_team"], 5)
+            if row["home_strength"] is not None and row["away_strength"] is not None:
+                row["form"] = (row["home_strength"] + row["away_strength"]) / 2
+            team_prior_by_id = {str(item.get("provider_match_id")): item for item in prior_home + prior_away}
+            team_prior = list(team_prior_by_id.values())
+            if len(team_prior) >= 5:
+                team_prior = team_prior[-20:]
+                row["avg_goals"] = sum(item["home_score"] + item["away_score"] for item in team_prior) / len(team_prior)
+                row["btts_rate"] = sum(item["home_score"] > 0 and item["away_score"] > 0 for item in team_prior) / len(team_prior)
+            by_team.setdefault(row["home_team"], []).append(row)
+            by_team.setdefault(row["away_team"], []).append(row)
+        return output

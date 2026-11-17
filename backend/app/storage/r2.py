@@ -92,9 +92,9 @@ class ParquetObjectStoreMixin:
 class R2ObjectStore(ParquetObjectStoreMixin):
     def __init__(self) -> None:
         cfg = get_settings()
-        if not (cfg.r2_endpoint and cfg.r2_access_key_id and cfg.r2_secret_access_key and cfg.r2_bucket):
+        if not cfg.r2_configured:
             raise R2NotConfigured("R2_NOT_CONFIGURED")
-        self.bucket = cfg.r2_bucket
+        self.bucket = cfg.r2_bucket or ""
         self.client = boto3.client("s3", endpoint_url=cfg.r2_endpoint,
             aws_access_key_id=cfg.r2_access_key_id,
             aws_secret_access_key=cfg.r2_secret_access_key, region_name=cfg.r2_region)

@@ -154,6 +154,14 @@ def run_idempotent_job(ledger: Ledger, key: str, job_type: str, handler: Callabl
         ledger.finish(run, status, **counts, records_processed=counts["records_written"],
                       error_code=result.get("error_code"), error_message=result.get("reason"))
         return {"job": job_type, **result, **counts, "status": status}
+    except KeyboardInterrupt:
+        # A user stop is durable and immediately claimable on the next run; do
+        # not leave a live-looking RUNNING ledger row for the one-hour stale check.
+        session = getattr(ledger, "session", None)
+        if session is not None:
+            session.rollback()
+        ledger.finish(run, "PARTIAL", error_code="JOB_INTERRUPTED", error_message="Interrupted by operator")
+        raise
     except Exception as exc:
         from app.providers.base import ProviderFailure
         code = exc.code if isinstance(exc, ProviderFailure) else type(exc).__name__.upper()

@@ -138,7 +138,9 @@ class FakeSession:
 
 
 def test_r2_adapter_refuses_missing_credentials(monkeypatch):
-    monkeypatch.setattr("app.storage.r2.get_settings", lambda: SimpleNamespace(r2_endpoint=None, r2_access_key_id=None, r2_secret_access_key=None, r2_bucket=""))
+    monkeypatch.setattr("app.storage.r2.get_settings", lambda: SimpleNamespace(
+        r2_endpoint=None, r2_access_key_id=None, r2_secret_access_key=None, r2_bucket="",
+        r2_configured=False))
     with pytest.raises(R2NotConfigured, match="R2_NOT_CONFIGURED"):
         R2ObjectStore()
 
@@ -154,6 +156,7 @@ def test_storage_thresholds_and_unconfigured_sizes_are_honest():
     snapshot = StorageMonitor(None, settings=SimpleNamespace(
         postgres_normal_mb=300, postgres_warning_mb=500, postgres_high_mb=750, postgres_critical_mb=750,
         r2_endpoint=None, r2_access_key_id=None, r2_secret_access_key=None, r2_bucket="",
+        r2_configured=False, r2_missing_env=("R2_ENDPOINT",), r2_invalid_env=(),
     )).snapshot()
     assert snapshot["postgres"]["bytes"] is None
     assert snapshot["r2"]["bytes"] is None and snapshot["r2"]["object_count"] is None
@@ -180,6 +183,87 @@ def test_small_sample_caps_confidence_and_gates_prediction():
 def test_coupon_engine_returns_no_bet_without_value():
     prediction = make_prediction(market="1X2", selection="HOME", probability=.52, raw_confidence=.9, sample_size=30, decimal_odds=1.9)
     assert prediction is not None and build_coupon([("match-1", 1.9, prediction)], kind="SAFE") is None
+
+
+def test_canonical_odds_normalizes_split_lines_and_preserves_raw_values():
+    from app.providers.normalize import normalize_line
+    assert normalize_line("0.5/1") == Decimal("0.750")
+    assert normalize_line("-0.5/-1") == Decimal("-0.750")
+    assert normalize_line("3/3.5") == Decimal("3.250")
+    row = normalize_odds({"bookmaker": "Book A", "market": "Asian Handicap", "selection": "Home",
+                          "handicap": "-0.5/-1", "odds": "2.05", "captured_at": "2026-11-13T11:00:00Z",
+                          "period": "PREMATCH", "source": "provider"}, match_id="m-1")
+    assert row["market"] == "AH" and row["selection"] == "HOME"
+    assert row["line"] == Decimal("-0.750") and row["raw_line"] == "-0.5/-1"
+    assert row["price"] == row["odds"] == Decimal("2.05")
+    assert row["period"] == "PREMATCH" and row["source"] == "provider"
+    contradictory_live = normalize_odds({"bookmaker": "Book A", "market": "1X2", "selection": "Home",
+                                         "odds": "1.5", "captured_at": "2026-11-13T11:00:00Z",
+                                         "period": "PREMATCH", "status": "r"}, match_id="m-1")
+    assert contradictory_live["period"] == "LIVE"
+
+
+def test_live_odds_cannot_be_closing():
+    from app.analysis.odds import movement_percent, project_odds_snapshots
+    kickoff = datetime(2026, 11, 13, 20, tzinfo=timezone.utc)
+    as_of = datetime(2026, 11, 13, 21, tzinfo=timezone.utc)
+    rows = [
+        SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
+                        odds=Decimal("2.1"), captured_at=kickoff.replace(hour=19), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+        SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
+                        odds=Decimal("1.95"), captured_at=kickoff.replace(hour=19, minute=59), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+        SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
+                        odds=Decimal("1.8"), captured_at=kickoff.replace(minute=5), period="LIVE", status="AVAILABLE", source="SPORTMONKS"),
+        SimpleNamespace(bookmaker="Crown", market="1X2", selection="HOME", line=None, line_key="",
+                        odds=Decimal("2.2"), captured_at=kickoff.replace(hour=19, minute=30), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+        SimpleNamespace(bookmaker="Bet365", market="1X2", selection="AWAY", line=None, line_key="",
+                        odds=Decimal("3.0"), captured_at=as_of.replace(minute=30), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+    ]
+    rows[2].captured_at = kickoff.replace(minute=5)
+    projected, live = project_odds_snapshots(rows, kickoff=kickoff, match_status="FINISHED", as_of=as_of)
+    home = next(row for row in projected if row["bookmaker"] == "Bet365" and row["selection"] == "HOME")
+    assert home["opening"]["price"] == Decimal("2.1")
+    assert home["latest"]["price"] == Decimal("1.95")
+    assert home["closing"] is None
+    assert len(live) == 1 and live[0]["price"] == Decimal("1.8")
+    assert movement_percent(home["opening"]["price"], home["latest"]["price"]) == Decimal("-7.14")
+    scheduled, _ = project_odds_snapshots(rows, kickoff=kickoff, match_status="SCHEDULED", as_of=as_of)
+    assert all(row["closing"] is None for row in scheduled)
+
+
+def test_match_detail_api_does_not_infer_closing_from_latest_or_live_odds():
+    from app.api.routes import match_detail
+    from app.models import ActiveMatch, ActiveOdds, Bookmaker
+
+    engine = create_engine("sqlite://")
+    ActiveMatch.__table__.create(engine)
+    Bookmaker.__table__.create(engine)
+    ActiveOdds.__table__.create(engine)
+    now = datetime.now(timezone.utc)
+    kickoff = now - timedelta(hours=3)
+    with Session(engine) as db:
+        bookmaker = Bookmaker(provider="sportmonks", provider_bookmaker_id="8", name="Bookmaker A",
+                              source="SPORTMONKS", active=True)
+        match = ActiveMatch(provider="sportmonks", provider_match_id="m-1", league_id="l-1",
+                            league_name="League", season="2026-27", home_team="Home", away_team="Away",
+                            start_time=kickoff, status="FINISHED", expires_at=now + timedelta(days=1))
+        db.add_all([bookmaker, match]); db.flush()
+        db.add_all([
+            ActiveOdds(match_id=match.id, bookmaker_entity_id=bookmaker.id, provider="sportmonks",
+                       provider_bookmaker_id="8", bookmaker="Bookmaker A", market="1X2", selection="HOME",
+                       line_key="", odds=Decimal("2.1"), captured_at=kickoff - timedelta(hours=1),
+                       source="SPORTMONKS", period="PREMATCH", status="AVAILABLE", expires_at=now + timedelta(days=1)),
+            ActiveOdds(match_id=match.id, bookmaker_entity_id=bookmaker.id, provider="sportmonks",
+                       provider_bookmaker_id="8", bookmaker="Bookmaker A", market="1X2", selection="HOME",
+                       line_key="", odds=Decimal("1.8"), captured_at=kickoff + timedelta(minutes=5),
+                       source="SPORTMONKS", period="LIVE", status="AVAILABLE", expires_at=now + timedelta(days=1)),
+        ])
+        db.flush()
+        data = match_detail(match.id, db)
+        assert data["odds_summary"][0]["closing"] is None
+        assert len(data["live_odds"]) == 1 and data["live_odds"][0]["price"] == Decimal("1.8")
+        assert data["odds_history"][0]["bookmaker_entity"]["name"] == "Bookmaker A"
+    engine.dispose()
 
 
 def test_lessons_require_evidence_and_changes_remain_proposals():
@@ -224,13 +308,26 @@ def test_telegram_fingerprint_deduplicates_messages(monkeypatch):
     assert len(sent) == 1
 
 
-def test_api_status_aliases_and_unconfigured_storage_are_real():
+def test_api_status_aliases_and_unconfigured_storage_are_real(monkeypatch):
+    import app.api.routes as route_module
+    from app.core.config import Settings
+
+    monkeypatch.setattr(route_module, "get_settings", lambda: Settings(_env_file=None))
+    monkeypatch.setattr(route_module, "provider_health", lambda: {
+        "provider": "UNKNOWN", "status": "PROVIDER_NOT_CONFIGURED", "display_status": "NOT CONFIGURED",
+        "latency_ms": None, "error_code": "PROVIDER_NOT_CONFIGURED", "last_successful_request": None,
+        "coverage": {"leagues": [], "seasons": []},
+    })
     client = TestClient(app)
     health = client.get("/health").json()
     status = client.get("/api/system/status").json()
     storage = client.get("/api/system/storage").json()
     assert health["provider"] == "PROVIDER_NOT_CONFIGURED"
     assert status["provider_mode"] == "PROVIDER_NOT_CONFIGURED"
+    assert status["services"]["goaloo"] == "NOT_CONFIGURED"
+    assert status["services"]["postgres"] == "NOT_CONFIGURED"
+    assert status["services"]["r2"] == "NOT_CONFIGURED"
+    assert status["services"]["groq"] == "NOT_CONFIGURED"
     assert storage["postgres"]["bytes"] is None
     assert storage["r2"]["bytes"] is None and storage["r2"]["object_count"] is None
 
@@ -241,6 +338,16 @@ def test_versionless_api_data_routes_return_unavailable_without_database():
         response = client.get(f"/api/{endpoint}")
         assert response.status_code == 503
         assert response.json()["detail"] in {"DATABASE_NOT_CONFIGURED", "DATABASE_OFFLINE"}
+
+
+def test_provider_discovery_reports_not_configured_without_network_fallback(monkeypatch):
+    import app.api.routes as route_module
+    from app.core.config import Settings
+
+    monkeypatch.setattr(route_module, "get_settings", lambda: Settings(_env_file=None))
+    response = TestClient(app).get("/api/v1/provider/leagues")
+    assert response.status_code == 503
+    assert response.json()["detail"] == "PROVIDER_NOT_CONFIGURED"
 from datetime import datetime, timedelta, timezone
 
 from app.jobs.ledger import MemoryLedger, run_idempotent_job
@@ -297,7 +404,7 @@ def test_provider_registry_does_not_invent_live_adapter():
     from app.core.config import Settings
     from app.providers.base import ProviderNotConfigured, ProviderUnavailable
     from app.providers.registry import create_provider, provider_status
-    assert provider_status(Settings()) == "PROVIDER_NOT_CONFIGURED"
+    assert provider_status(Settings(_env_file=None)) == "PROVIDER_NOT_CONFIGURED"
     configured = Settings(provider_name="unknown", provider_base_url="https://provider.example",
                           provider_api_key="not-a-real-secret", enabled_leagues="league-1")
     assert provider_status(configured) == "PROVIDER_UNAVAILABLE"
@@ -336,9 +443,10 @@ def test_normalize_result_accepts_only_final_scores():
 
 def test_upsert_match_and_odds_snapshots_are_idempotent():
     from app.jobs.ingestion import upsert_matches, upsert_odds
-    from app.models import ActiveMatch, ActiveOdds
+    from app.models import ActiveMatch, ActiveOdds, Bookmaker
     engine = create_engine("sqlite://")
     ActiveMatch.__table__.create(engine)
+    Bookmaker.__table__.create(engine)
     ActiveOdds.__table__.create(engine)
     now = datetime(2026, 11, 13, 12, tzinfo=timezone.utc)
     match_data = normalize_match({"id": "m-1", "league_id": "league-1", "season": "2026-27",
@@ -351,10 +459,18 @@ def test_upsert_match_and_odds_snapshots_are_idempotent():
         match = db.query(ActiveMatch).one()
         assert match.season == "2026-27"
         payload = {"provider_odds_id": "o-1", "bookmaker": "book", "market": "1X2",
-                   "selection": "HOME", "odds": "2.1", "captured_at": "2026-11-13T11:00:00Z"}
-        assert upsert_odds(db, "p", match, [payload], now=now) == (1, 0)
+                   "selection": "HOME", "odds": "2.1", "captured_at": "2026-11-13T11:00:00Z",
+                   "period": "PREMATCH", "source": "provider"}
+        second_book = {**payload, "bookmaker": "Book B", "provider_bookmaker_id": "book-b"}
+        over25 = {**payload, "market": "Over/Under", "selection": "Over", "line": "2.5"}
+        over30 = {**over25, "line": "3/3.5"}
+        assert upsert_odds(db, "p", match, [payload, second_book, over25, over30], now=now) == (4, 0)
         assert upsert_odds(db, "p", match, [payload], now=now) == (0, 1)
-        assert db.query(ActiveOdds).count() == 1
+        assert db.query(ActiveOdds).count() == 4
+        assert db.query(Bookmaker).count() == 2
+        totals = db.query(ActiveOdds).filter(ActiveOdds.market == "OU").order_by(ActiveOdds.line_key).all()
+        assert [(row.selection, row.line, row.raw_line) for row in totals] == [
+            ("OVER", Decimal("2.500"), "2.5"), ("OVER", Decimal("3.250"), "3/3.5")]
     engine.dispose()
 
 
@@ -446,6 +562,56 @@ def test_run_ledger_failure_is_retryable_and_has_bounded_error_detail():
     assert ledger.prune(0) == 0
 
 
+def test_interrupted_durable_job_becomes_retryable_without_stale_wait():
+    ledger = MemoryLedger()
+    with pytest.raises(KeyboardInterrupt):
+        run_idempotent_job(ledger, "resume:1", "historical_ingest", lambda: (_ for _ in ()).throw(KeyboardInterrupt()))
+    assert ledger.runs["resume:1"].status == "PARTIAL"
+    run, claimed = ledger.claim("resume:1", "historical_ingest")
+    assert claimed and run.status == "RUNNING"
+
+
+def test_historical_backfill_checkpoints_valid_rows_and_retries_only_failed_day(monkeypatch):
+    from app.core.config import Settings
+    from app.jobs.ingestion import historical_ingest
+    from app.models import ArchiveJob, HistoricalIngestDay
+    from app.providers.registry import ProviderCaller
+
+    engine = create_engine("sqlite://")
+    ArchiveJob.__table__.create(engine)
+    HistoricalIngestDay.__table__.create(engine)
+    monkeypatch.setattr("app.jobs.ingestion.get_settings",
+                        lambda: Settings(enabled_leagues="league-1", enabled_seasons="2026-27"))
+
+    class Adapter:
+        name = "test-provider"
+        def get_leagues(self): return [{"id": "league-1"}]
+        def get_matches(self, day): return [
+            {"id": "valid-1", "league_id": "league-1", "season": "2026-27",
+             "home_team": "Home", "away_team": "Away", "start_time": "2026-11-13T18:00:00Z"},
+            {"league_id": "league-1", "home_team": "Broken", "away_team": "Row",
+             "start_time": "2026-11-13T19:00:00Z"},
+        ]
+        def get_results(self, day): return []
+
+    caller = ProviderCaller(Adapter(), requests_per_minute=100000, max_retries=1)
+    store = InMemoryObjectStore()
+    day = date(2026, 11, 13)
+    with Session(engine) as db:
+        first = historical_ingest(db, caller, store, season="2026-27", league="league-1",
+                                  start_date=day, end_date=day)
+        checkpoint = db.query(HistoricalIngestDay).one()
+        assert first["status"] == "PARTIAL" and first["records_written"] == 1
+        assert checkpoint.status == "PARTIAL" and checkpoint.attempt_count == 1
+        assert checkpoint.records_failed == 1 and checkpoint.failed_match_ids == ["unknown"]
+        second = historical_ingest(db, caller, store, season="2026-27", league="league-1",
+                                   start_date=day, end_date=day)
+        assert second["status"] == "PARTIAL"
+        assert checkpoint.attempt_count == 2 and checkpoint.status == "PARTIAL"
+        assert store.read_parquet("matches/season=2026-27/league=league-1/date=2026-11-13.parquet")[0]["provider_match_id"] == "valid-1"
+    engine.dispose()
+
+
 def test_provider_timeout_is_retried_and_then_classified_unavailable():
     import httpx
     from app.providers.base import ProviderUnavailable
@@ -466,10 +632,10 @@ def test_provider_timeout_is_retried_and_then_classified_unavailable():
 
 def test_cleanup_reverifies_r2_checksum_before_deleting_expired_odds():
     from app.jobs.ingestion import archive_rows, cleanup_verified_archives
-    from app.models import ActiveMatch, ActiveOdds, ArchiveJob
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker
     store = InMemoryObjectStore()
     engine = create_engine("sqlite://")
-    for model in (ActiveMatch, ActiveOdds, ArchiveJob):
+    for model in (ActiveMatch, Bookmaker, ActiveOdds, ArchiveJob):
         model.__table__.create(engine)
     day = date(2026, 11, 10)
     captured = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)
@@ -497,11 +663,11 @@ def test_cleanup_reverifies_r2_checksum_before_deleting_expired_odds():
 
 def test_cleanup_deletes_only_after_live_object_reverification():
     from app.jobs.ingestion import archive_rows, cleanup_verified_archives
-    from app.models import ActiveMatch, ActiveOdds, ArchiveJob
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker
     from app.storage.archive import SQLArchiveTracker
     store = InMemoryObjectStore()
     engine = create_engine("sqlite://")
-    for model in (ActiveMatch, ActiveOdds, ArchiveJob):
+    for model in (ActiveMatch, Bookmaker, ActiveOdds, ArchiveJob):
         model.__table__.create(engine)
     day = date(2026, 11, 10)
     captured = datetime(2026, 11, 10, 12, tzinfo=timezone.utc)

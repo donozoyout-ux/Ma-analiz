@@ -20,7 +20,7 @@ def main() -> None:
     settings = get_settings()
     try:
         provider = ProviderCaller(create_provider(settings), requests_per_minute=settings.provider_requests_per_minute,
-                                  max_retries=settings.provider_max_retries)
+                                  max_retries=settings.provider_retry_count)
     except ProviderFailure as exc:
         print({"status": "SKIPPED", "error_code": exc.code, "message": str(exc)})
         return
@@ -31,11 +31,16 @@ def main() -> None:
     with SessionLocal() as session:
         ledger = SQLLedger(session)
         key = f"historical_ingest:{args.season}:{args.league}:{args.start_date}:{args.end_date}"
-        result = run_idempotent_job(
-            ledger, key, "historical_ingest",
-            lambda: historical_ingest(session, provider, store, season=args.season, league=args.league,
-                                      start_date=args.start_date, end_date=args.end_date),
-        )
+        try:
+            result = run_idempotent_job(
+                ledger, key, "historical_ingest",
+                lambda: historical_ingest(session, provider, store, season=args.season, league=args.league,
+                                          start_date=args.start_date, end_date=args.end_date),
+            )
+        except KeyboardInterrupt:
+            print({"job": "historical_ingest", "status": "PARTIAL", "error_code": "JOB_INTERRUPTED",
+                   "resume_with": f"python -m app.jobs.historical_ingest --season {args.season} --league {args.league} --start-date {args.start_date} --end-date {args.end_date}"})
+            raise SystemExit(130) from None
         print(result)
 
 

@@ -12,6 +12,14 @@ Official contract references: [authentication](https://docs.sportmonks.com/v3/we
 
 See [Phase 4A provider discovery](docs/phase4a-provider-discovery.md) and [Phase 4B integration report](docs/phase4b-integration.md) for verified limitations and current test status.
 
+### Bookmaker odds and backfill integrity
+
+Odds snapshots retain provider source, bookmaker entity, market, selection, optional canonical numeric line plus original line text, capture timestamp, period, and status. Match detail projects bookmaker-specific Opening → Latest → Closing from observed valid pre-match snapshots. Closing is withheld until the provider marks the match started, considers only snapshots no later than kickoff, and never reads `LIVE` odds. Live rows are shown separately. If no qualifying source records exist the panel says “Veri bekleniyor”.
+
+`GET /api/v1/provider/leagues` and `GET /api/v1/provider/leagues/{league_id}/seasons` discover provider competitions/seasons; unconfigured or unavailable providers return an explicit 503 error code. `GET /api/v1/bookmakers` returns only bookmakers actually observed and stored. No bookmaker is renamed İddaa.
+
+Historical ingestion persists date-level attempt/checkpoint state and failed provider record IDs while continuing past individual malformed match/result rows. A stopped CLI run is persisted as partial; rerun the same command to retry unfinished dates. Historical rows still go to R2. Sportmonks Premium odds history is only available through seven days after kickoff, so it is not a source for full prior-season odds backfills. See [the Bet-app213 transfer report](docs/bet-app213-transfer.md) for what was adapted and deliberately omitted.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and configure only accounts you have:

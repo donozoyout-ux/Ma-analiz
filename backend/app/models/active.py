@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,20 +31,45 @@ class ActiveMatch(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
+class Bookmaker(Base):
+    __tablename__ = "bookmakers"
+    __table_args__ = (UniqueConstraint("provider", "name"),)
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_bookmaker_id: Mapped[str | None] = mapped_column(String(160))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    country: Mapped[str | None] = mapped_column(String(100))
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 class ActiveOdds(Base):
     __tablename__ = "active_odds"
-    __table_args__ = (UniqueConstraint("match_id", "bookmaker", "market", "selection", "captured_at"),)
+    __table_args__ = (UniqueConstraint(
+        "match_id", "bookmaker", "market", "selection", "line_key", "snapshot_type", "captured_at",
+        name="uq_active_odds_snapshot_natural",
+    ),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     match_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("active_matches.id", ondelete="CASCADE"), nullable=False, index=True)
     provider: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown")
     provider_odds_id: Mapped[str | None] = mapped_column(String(160))
     provider_market_id: Mapped[str | None] = mapped_column(String(160))
     provider_bookmaker_id: Mapped[str | None] = mapped_column(String(160))
+    bookmaker_entity_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("bookmakers.id"))
     bookmaker: Mapped[str] = mapped_column(String(120), nullable=False)
     market: Mapped[str] = mapped_column(String(80), nullable=False)
     selection: Mapped[str] = mapped_column(String(120), nullable=False)
+    line: Mapped[Decimal | None] = mapped_column(Numeric(8, 3))
+    raw_line: Mapped[str | None] = mapped_column(String(80))
+    line_key: Mapped[str] = mapped_column(String(80), nullable=False, default="")
     odds: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
     captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="unknown")
+    period: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
+    snapshot_type: Mapped[str] = mapped_column(String(16), nullable=False, default="OBSERVED")
+    raw_value: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="AVAILABLE")
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
@@ -77,6 +102,12 @@ class Prediction(Base):
     evidence_status: Mapped[str] = mapped_column(String(16), nullable=False)
     model_version: Mapped[str] = mapped_column(String(80), nullable=False)
     decimal_odds: Mapped[Decimal | None] = mapped_column(Numeric(10, 4))
+    market_probability: Mapped[Decimal | None] = mapped_column(Numeric(6, 5))
+    final_score: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    risk_level: Mapped[str | None] = mapped_column(String(16))
+    analysis_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False, default="canonical-features-1")
+    feature_snapshot: Mapped[str | None] = mapped_column(Text)
     paper_stake: Mapped[Decimal] = mapped_column(Numeric(12, 4), nullable=False, default=Decimal("1"))
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING", index=True)
     paper_return: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))

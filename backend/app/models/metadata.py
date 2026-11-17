@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, Integer, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, CheckConstraint, Date, DateTime, ForeignKey, Integer, JSON, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -71,6 +71,20 @@ class Lesson(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class MatchAnalysis(Base):
+    __tablename__ = "match_analyses"
+    __table_args__ = (UniqueConstraint("match_id", "analysis_timestamp", "model_version"),)
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    match_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("active_matches.id", ondelete="CASCADE"), nullable=False, index=True)
+    analysis_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    analysis_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    final_decision: Mapped[str] = mapped_column(String(16), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    feature_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    analysis_output: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class NotificationDelivery(Base):
     __tablename__ = "notification_deliveries"
     fingerprint: Mapped[str] = mapped_column(String(64), primary_key=True)
@@ -110,8 +124,12 @@ class HistoricalIngestDay(Base):
     season: Mapped[str] = mapped_column(String(32), nullable=False)
     league_id: Mapped[str] = mapped_column(String(100), nullable=False)
     ingest_date: Mapped[date] = mapped_column(Date, nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="RUNNING", index=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING", index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     records_seen: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     records_archived: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    records_failed: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    failed_match_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     error_code: Mapped[str | None] = mapped_column(String(80))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

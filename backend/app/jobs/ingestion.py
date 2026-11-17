@@ -9,9 +9,9 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import ActiveMatch, ActiveOdds, ArchiveJob, MatchResult
+from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, MatchResult
 from app.providers.base import ProviderError, ProviderFailure, ProviderNotConfigured
-from app.providers.normalize import normalize_matches, normalize_odds, normalize_result
+from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result
 from app.storage.archive import ArchiveStatus, SQLArchiveTracker, archive_partition, cleanup_database_rows_after_verified
 from app.storage.r2 import ObjectStore
 
@@ -57,14 +57,45 @@ def upsert_odds(session: Session, provider: str, match: ActiveMatch, payloads: l
     current = now or datetime.now(timezone.utc)
     retention = get_settings().odds_retention_days
     written = skipped = 0
+    bookmaker_cache: dict[tuple[str, str], Bookmaker] = {}
     for payload in payloads:
         odds = normalize_odds(payload, match_id=str(match.id), provider=provider)
         if odds["captured_at"] > current + timedelta(minutes=5):
             skipped += 1
             continue
-        values = {**odds, "match_id": match.id, "expires_at": max(odds["captured_at"] + timedelta(days=retention), current + timedelta(hours=1))}
+        bookmaker_key = (odds["provider"], odds["bookmaker"])
+        bookmaker = bookmaker_cache.get(bookmaker_key)
+        if bookmaker is None:
+            bookmaker = session.scalar(select(Bookmaker).where(
+                Bookmaker.provider == odds["provider"], Bookmaker.name == odds["bookmaker"]))
+        if bookmaker is None:
+            bookmaker = Bookmaker(provider=odds["provider"],
+                                  provider_bookmaker_id=odds.get("provider_bookmaker_id"),
+                                  name=odds["bookmaker"], source=odds["source"],
+                                  country=odds.get("bookmaker_country"), active=True)
+            session.add(bookmaker)
+            session.flush()
+        else:
+            if odds.get("provider_bookmaker_id") and not bookmaker.provider_bookmaker_id:
+                bookmaker.provider_bookmaker_id = odds["provider_bookmaker_id"]
+            if odds.get("bookmaker_country") and not bookmaker.country:
+                bookmaker.country = odds["bookmaker_country"]
+        bookmaker_cache[bookmaker_key] = bookmaker
+        columns = {column.name for column in ActiveOdds.__table__.columns}
+        values = {key: value for key, value in odds.items() if key in columns and key != "price"}
+        values.update({"match_id": match.id, "bookmaker_entity_id": bookmaker.id,
+                       "expires_at": max(odds["captured_at"] + timedelta(days=retention), current + timedelta(hours=1))})
+        duplicate = session.scalar(select(ActiveOdds).where(
+            ActiveOdds.match_id == match.id, ActiveOdds.bookmaker == odds["bookmaker"],
+            ActiveOdds.market == odds["market"], ActiveOdds.selection == odds["selection"],
+            ActiveOdds.line_key == odds["line_key"], ActiveOdds.snapshot_type == odds["snapshot_type"],
+        ).order_by(ActiveOdds.captured_at.desc()).limit(1))
+        if duplicate is not None and duplicate.odds == odds["odds"] and duplicate.period == odds["period"]:
+            skipped += 1
+            continue
         statement = insert(ActiveOdds).values(**values).on_conflict_do_nothing(
-            index_elements=[ActiveOdds.match_id, ActiveOdds.bookmaker, ActiveOdds.market, ActiveOdds.selection, ActiveOdds.captured_at]
+            index_elements=[ActiveOdds.match_id, ActiveOdds.bookmaker, ActiveOdds.market,
+                            ActiveOdds.selection, ActiveOdds.line_key, ActiveOdds.snapshot_type, ActiveOdds.captured_at]
         )
         result = session.execute(statement)
         written += result.rowcount or 0
@@ -168,7 +199,7 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
     if league not in available:
         return {"status": "SKIPPED", "error_code": "LEAGUE_NOT_AVAILABLE", "records_seen": 0,
                 "records_written": 0, "records_skipped": 0, "records_failed": 0, "dates_completed": 0}
-    completed = failed = seen = archived = 0
+    completed = failed = partial = seen = archived = records_failed = 0
     tracker = SQLArchiveTracker(session)
     day = start_date
     while day <= end_date:
@@ -184,15 +215,35 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
             continue
         if progress is None:
             progress = HistoricalIngestDay(provider=caller.provider.name, season=season,
-                                           league_id=league, ingest_date=day, status="RUNNING")
+                                           league_id=league, ingest_date=day, status="PENDING")
             session.add(progress)
-        else:
-            progress.status, progress.error_code = "RUNNING", None
+        session.commit()
+        progress = session.scalar(select(HistoricalIngestDay).where(
+            HistoricalIngestDay.provider == caller.provider.name,
+            HistoricalIngestDay.season == season,
+            HistoricalIngestDay.league_id == league,
+            HistoricalIngestDay.ingest_date == day,
+        ).with_for_update())
+        if progress.status in {"FAILED", "PARTIAL", "RUNNING", "RETRYING"}:
+            progress.status = "RETRYING"
+            session.commit()
+        progress.status, progress.error_code = "RUNNING", None
+        progress.failed_match_ids = []
+        progress.records_failed = 0
+        progress.attempt_count = (progress.attempt_count or 0) + 1
+        progress.last_attempt_at = datetime.now(timezone.utc)
         session.commit()
         try:
             raw = caller.call("get_matches", day)
-            normalized = [row for row in normalize_matches(raw, provider=caller.provider.name)
-                          if row["league_id"] == league]
+            normalized, failed_ids = [], []
+            for payload in raw:
+                try:
+                    row = normalize_match(payload, provider=caller.provider.name)
+                except (KeyError, TypeError, ValueError):
+                    failed_ids.append(str(payload.get("id", "unknown")) if isinstance(payload, dict) else "unknown")
+                    continue
+                if row["league_id"] == league:
+                    normalized.append(row)
             seen += len(raw)
             archive_count = 0
             if normalized:
@@ -201,21 +252,38 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 archive_rows(store, tracker, dataset="matches", season=season, league=league, day=day, rows=normalized)
                 archive_count += len(normalized)
             raw_results = caller.call("get_results", day)
-            final_results = [normalize_result(item, provider=caller.provider.name) for item in raw_results]
+            final_results = []
+            match_ids = {match["provider_match_id"] for match in normalized}
+            for payload in raw_results:
+                try:
+                    result = normalize_result(payload, provider=caller.provider.name)
+                except (KeyError, TypeError, ValueError):
+                    failed_ids.append(str(payload.get("provider_match_id", payload.get("id", "unknown")))
+                                      if isinstance(payload, dict) else "unknown")
+                    continue
+                if result["status"] == "FINAL" and result["provider_match_id"] in match_ids:
+                    final_results.append(result)
             final_results = [item for item in final_results if item["status"] == "FINAL"
-                             and any(match["provider_match_id"] == item["provider_match_id"] for match in normalized)]
+                             and item["provider_match_id"] in match_ids]
             if final_results:
+                verified_at = datetime.now(timezone.utc)
                 for item in final_results:
-                    item.update({"league_id": league, "season": season})
+                    item.update({"league_id": league, "season": season, "verified_at": verified_at})
                 archive_rows(store, tracker, dataset="results", season=season, league=league,
                              day=day, rows=final_results)
                 archive_count += len(final_results)
             archived += archive_count
             progress.records_seen = len(raw)
             progress.records_archived = archive_count
-            progress.status = "COMPLETED" if archive_count else "EMPTY"
+            progress.records_failed = len(failed_ids)
+            progress.failed_match_ids = sorted(set(failed_ids))
+            progress.status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
             session.commit()
-            completed += 1
+            records_failed += len(failed_ids)
+            if failed_ids:
+                partial += 1
+            else:
+                completed += 1
         except Exception as exc:
             session.rollback()
             progress = session.scalar(select(HistoricalIngestDay).where(
@@ -226,14 +294,16 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
             ))
             if progress:
                 progress.status = "FAILED"
+                progress.records_failed = max(1, progress.records_failed or 0)
                 progress.error_code = getattr(exc, "code", "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())[:80]
                 session.commit()
             failed += 1
+            records_failed += 1
         day += timedelta(days=1)
-    status = "PARTIAL" if failed and completed else "FAILED" if failed else "SUCCESS" if archived else "SKIPPED"
+    status = "PARTIAL" if (failed or partial) and (completed or partial or archived) else "FAILED" if failed else "PARTIAL" if partial else "SUCCESS" if archived else "SKIPPED"
     return {"status": status, "records_seen": seen, "records_written": archived,
             "records_skipped": completed if not archived else max(0, completed - 1),
-            "records_failed": failed, "dates_completed": completed, "dates_failed": failed,
+            "records_failed": records_failed, "dates_completed": completed, "dates_partial": partial, "dates_failed": failed,
             "odds_history": "UNAVAILABLE_UNLESS_PROVIDER_ADAPTER_EXPOSES_HISTORICAL_ODDS"}
 def ingest_results(session: Session, caller: Any, day: date) -> dict[str, Any]:
     raw = caller.call("get_results", day)
@@ -289,12 +359,17 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
         ActiveMatch, ActiveMatch.id == ActiveOdds.match_id
     ).where(ActiveOdds.expires_at <= current, ActiveOdds.captured_at < cutoff)).all()
     for odds, match in odds_rows:
-        row = {"match_id": str(match.id), "provider": odds.provider, "provider_odds_id": odds.provider_odds_id,
+        row = {"match_id": str(match.id), "provider_match_id": match.provider_match_id,
+               "provider": odds.provider, "provider_odds_id": odds.provider_odds_id,
                "provider_market_id": odds.provider_market_id, "provider_bookmaker_id": odds.provider_bookmaker_id,
                "league_id": match.league_id, "league_name": match.league_name, "season": match.season,
                "home_team": match.home_team, "away_team": match.away_team, "start_time": match.start_time,
-               "bookmaker": odds.bookmaker, "market": odds.market, "selection": odds.selection,
-               "odds": float(odds.odds), "captured_at": odds.captured_at}
+               "bookmaker": odds.bookmaker, "bookmaker_entity_id": str(odds.bookmaker_entity_id) if odds.bookmaker_entity_id else None,
+               "market": odds.market, "selection": odds.selection, "line": float(odds.line) if odds.line is not None else None,
+               "raw_line": odds.raw_line, "line_key": odds.line_key, "odds": float(odds.odds),
+               "price": float(odds.odds), "source": odds.source, "period": odds.period, "status": odds.status,
+               "captured_at": odds.captured_at, "snapshot_type": odds.snapshot_type,
+               "raw_value": odds.raw_value}
         partitions[("odds", match.season or "unknown", match.league_id or "unknown", odds.captured_at.date())].append(row)
 
     result_rows = session.execute(select(MatchResult, ActiveMatch).join(

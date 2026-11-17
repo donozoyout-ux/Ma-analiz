@@ -9,9 +9,9 @@ from app.core.config import get_settings
 
 settings = get_settings()
 database_url = settings.database_url
-if database_url and database_url.startswith("postgresql://"):
+if settings.database_url_valid and database_url and database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
-engine = create_engine(database_url, pool_pre_ping=True) if database_url else None
+engine = create_engine(database_url, pool_pre_ping=True) if settings.database_url_valid else None
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False) if engine else None
 
 
