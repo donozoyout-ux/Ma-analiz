@@ -112,6 +112,11 @@ try {
   if (!home.ok) throw new Error(`Next.js root returned HTTP ${home.status}.`);
   const html = await home.text();
   if (!html.toLowerCase().includes("<!doctype html")) throw new Error("Next.js root did not return an HTML document.");
+  const staticAsset = [...html.matchAll(/(?:src|href)="([^"]*\/_next\/static\/[^"]+)"/g)]
+    .map((match) => match[1])[0];
+  if (!staticAsset) throw new Error("Next.js root did not reference a standalone static asset.");
+  const staticResponse = await fetch(new URL(staticAsset, origin), { signal: AbortSignal.timeout(5000) });
+  if (!staticResponse.ok) throw new Error(`Next.js static asset returned HTTP ${staticResponse.status}.`);
 
   const liveResponse = await fetch(new URL("/health/live", origin), { signal: AbortSignal.timeout(5000) });
   if (!liveResponse.ok || (await liveResponse.json()).status !== "ok") {
