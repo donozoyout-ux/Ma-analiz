@@ -24,6 +24,7 @@ if (renderPort === backendPort) {
 const pythonCommand = process.env.PYTHON_EXECUTABLE || (process.platform === "win32" ? "python" : "python3");
 const runtimeEnv = { ...process.env, NODE_ENV: "production" };
 const children = [];
+const shutdownGraceMs = 25_000;
 let shutdownPromise;
 let isShuttingDown = false;
 
@@ -50,7 +51,7 @@ function shutdown(exitCode = 0, signal = "SIGTERM") {
     const stoppedGracefully = await Promise.race([
       Promise.all(children.map(waitForChild)).then(() => true),
       new Promise((resolve) => {
-        graceTimer = setTimeout(() => resolve(false), 10_000);
+        graceTimer = setTimeout(() => resolve(false), shutdownGraceMs);
       }),
     ]);
     clearTimeout(graceTimer);
@@ -75,7 +76,9 @@ function startChild(name, command, args, cwd, env) {
   child.once("exit", (code, signal) => {
     if (isShuttingDown) return;
     console.error(`${name} process exited unexpectedly (code=${code ?? "none"}, signal=${signal ?? "none"}).`);
-    void shutdown(1);
+    // Preserve a real non-zero child status for Render; an unexpected clean
+    // exit or signal termination is still a service failure.
+    void shutdown(code !== null && code !== 0 ? code : 1);
   });
   return child;
 }
@@ -119,10 +122,9 @@ async function main() {
     startChild(
       "Next.js",
       process.execPath,
-      [path.join(frontendRoot, "node_modules", "next", "dist", "bin", "next"),
-        "start", "--hostname", "0.0.0.0", "--port", String(renderPort)],
+      [path.join(frontendRoot, ".next", "standalone", "server.js")],
       frontendRoot,
-      runtimeEnv,
+      { ...runtimeEnv, HOSTNAME: "0.0.0.0", PORT: String(renderPort) },
     );
   } catch (error) {
     console.error(`Single-service startup failed: ${error.message}`);

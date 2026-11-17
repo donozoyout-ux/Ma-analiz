@@ -7,6 +7,7 @@ const frontendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const repoRoot = path.resolve(frontendRoot, "..");
 const supervisorPath = path.join(frontendRoot, "scripts", "run-single-service.mjs");
 const backendPort = 8000;
+const shutdownSignal = process.platform === "win32" ? "SIGINT" : "SIGTERM";
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -126,13 +127,16 @@ try {
   if (diagnostics.database !== "NOT_CONFIGURED") {
     throw new Error("Smoke test did not isolate the database configuration as intended.");
   }
-  console.log(`PASS: Next.js on PORT=${renderPort}; /health/live and /api/v1/health reached FastAPI through rewrites.`);
+  const shutdownNote = process.platform === "win32"
+    ? "Windows signal-handler semantics NOT_TESTED"
+    : "SIGTERM graceful shutdown verified";
+  console.log(`PASS: Next.js standalone server on PORT=${renderPort}; /health/live and /api/v1/health reached FastAPI through rewrites; ${shutdownNote}.`);
 } catch (error) {
   failed = true;
   console.error(`FAIL: ${error.message}`);
 } finally {
   if (child.exitCode === null) {
-    child.kill("SIGTERM");
+    child.kill(shutdownSignal);
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 15_000);
       child.once("close", () => { clearTimeout(timer); resolve(); });
@@ -141,7 +145,12 @@ try {
   if (child.exitCode === null && child.signalCode === null) {
     child.kill("SIGKILL");
     failed = true;
-    console.error("FAIL: single-service supervisor did not stop after SIGTERM.");
+    console.error(`FAIL: single-service supervisor did not stop after ${shutdownSignal}.`);
+  } else if (child.exitCode !== 0) {
+    if (process.platform !== "win32" || child.signalCode !== shutdownSignal) {
+      failed = true;
+      console.error(`FAIL: supervisor exited with ${child.exitCode ?? `signal ${child.signalCode}`} after shutdown signal.`);
+    }
   }
 }
 
