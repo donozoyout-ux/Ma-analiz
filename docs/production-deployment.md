@@ -1,59 +1,71 @@
-# Maçanaliz production deployment notes
+# Maçanaliz single-service Render deployment
 
-This document describes the current Render configuration for this repository. It does not contain credentials. Keep Maçanaliz resources separate from Kuponanalizii: use the `mac-analiz-*` service names and a newly created Maçanaliz PostgreSQL database. Never point `DATABASE_URL` at the other application's database.
+This configuration runs Next.js and FastAPI in one native Python Render Web Service. It does not provision a database, worker, cron job, or separate frontend service. Keep Maçanaliz's external PostgreSQL and any storage credentials separate from Kuponanalizii.
 
-## Render services
+## Render service configuration
 
-### Backend Web Service
+- Repository: `donozoyout-ux/Ma-analiz`, branch `main` after this PR is merged.
+- Runtime: Python native runtime. Render's native runtime includes Node.js and npm for the frontend build and server.
+- Root Directory: repository root (`.`).
+- Region: Frankfurt.
+- Build Command: `python -m pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build`
+- Pre-Deploy Command: `cd backend && alembic upgrade head` (requires a paid Web Service plan).
+- Start Command: `node frontend/scripts/run-single-service.mjs`
+- Health Check Path: `/health/live`.
+- `PORT` is supplied by Render and used for the public Next.js server. FastAPI binds only to `127.0.0.1:8000` (`BACKEND_PORT`). The two ports must differ.
 
-- Runtime: native Python; root directory: `backend`; region: `frankfurt`.
-- Build: `pip install -r requirements.txt`.
-- Pre-deploy: `alembic upgrade head` (requires a paid Render web service).
-- Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-- Health check: `/health/live`. The route checks only the API process.
-- `render.yaml` also describes the worker, database, and scheduled jobs. Review the planned resource list before applying any Blueprint so it is clear which services will be created.
+The Node supervisor starts FastAPI, waits for its process-only liveness route, then starts Next.js. If either process exits unexpectedly, it terminates the other and exits unhealthy. On SIGTERM/SIGINT it signals both children and waits up to 10 seconds before force-killing any remaining child. The API is not started through shell backgrounding.
 
-### Frontend Web Service
+## Routing and CORS
 
-- Runtime: Node.js 22; root directory: `frontend`; region: `frankfurt`.
-- Build: `npm ci && npm run build`.
-- Start: `npm start`.
-- Set `API_INTERNAL_URL` from the Backend Web Service's Render `hostport` property. Render makes the referenced environment variable available to the frontend build and running service; Next.js captures the rewrite target while building.
-- Production builds fail if `API_INTERNAL_URL` is absent or points to loopback. The development fallback to `http://localhost:8000` is local-only.
-- The browser uses same-origin `/api/v1/*` requests and Next.js rewrites them to the backend. Therefore `CORS_ORIGINS` is empty in the Blueprint. If the frontend is later changed to call the backend directly from a browser, set `CORS_ORIGINS` to the exact HTTPS frontend origin.
+- `/` and frontend pages are served by Next.js on Render's `PORT`.
+- `/api/v1/*` is rewritten by Next.js to `http://127.0.0.1:8000/api/v1/*`.
+- `/health/live` is rewritten to FastAPI's dependency-free `GET /health/live`.
+- Browser code continues to use same-origin `/api/v1/*` paths. `CORS_ORIGINS` is empty; the browser does not call the backend's loopback URL directly.
+- The single-service exception for loopback API rewrites is enabled only with `SINGLE_SERVICE_MODE=true`. Other production builds still reject loopback API targets.
 
 ## Environment variables
 
-Set variables in Render's service environment or by service references. Do not commit secret values or include them in logs.
+Required in the one Web Service:
 
-### Backend
+- `DATABASE_URL`: connection URL for the separately provisioned Maçanaliz PostgreSQL. The Blueprint prompts for it; it does not create or reference a database resource.
+- `PROVIDER_NAME=goaloo` and `ENABLED_LEAGUES`: configured Goaloo league IDs, supplied in Render's environment.
+- `API_INTERNAL_URL=http://127.0.0.1:8000`, `SINGLE_SERVICE_MODE=true`, and `BACKEND_PORT=8000` for the internal API proxy.
+- `PYTHON_VERSION=3.12.11`, `NODE_VERSION=22`, `APP_ENV=production`, and `CORS_ORIGINS` empty.
 
-- Required for persistent state: `DATABASE_URL`, referenced from the new Maçanaliz Render PostgreSQL `connectionString`.
-- Goaloo: `PROVIDER_NAME=goaloo`, `GOALOO_BASE_URL`, `GOALOO_ODDS_BASE_URL`, `ENABLED_LEAGUES` (comma-separated configured Goaloo league IDs), optional `ENABLED_SEASONS`, `PROVIDER_REQUEST_TIMEOUT_SECONDS`, `PROVIDER_REQUESTS_PER_MINUTE`, `PROVIDER_MAX_RETRIES`.
-- Optional R2 historical archive: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, optional `R2_REGION`.
-- Optional Groq: `AI_PROVIDER=groq`, `GROQ_MODEL`, and `GROQ_API_KEY`. `AI_API_KEY` remains a supported fallback for the key. `GROQ_BASE_URL` defaults to the official OpenAI-compatible endpoint.
-- Optional notifications: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-- Other runtime settings include `APP_ENV`, `LOG_LEVEL`, and `CORS_ORIGINS`.
+The Goaloo base URLs, timeout, retries, and request rate are set to the adapter defaults in `render.yaml`. Do not add Goaloo API keys; this adapter uses the public source endpoints and may be subject to source-side availability or schema changes.
 
-`ENABLED_LEAGUES` is intentionally supplied by the deploy operator rather than populated with guessed IDs. Without it ingestion safely reports that provider coverage is not configured. Groq and R2 are optional to API startup; their dependent features report unavailable/not-configured and must not be represented as connected.
+Optional integrations can be added manually to the service environment:
 
-### Frontend
+- R2: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, optional `R2_REGION`.
+- Groq: `AI_PROVIDER=groq`, `GROQ_API_KEY` (or the existing `AI_API_KEY` fallback), `GROQ_MODEL`, optional `GROQ_BASE_URL`.
+- Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 
-- Required: `API_INTERNAL_URL` (Render service reference to the Backend Web Service's `hostport`).
-- `NODE_VERSION=22`.
+Never put secret values in Git, the Blueprint, or logs. Missing optional R2/Groq settings must remain reported as not configured; they do not prevent the API process from starting.
 
-## Migration procedure
+## Migration and database
 
-The API start command does not run migrations. On paid Render, `preDeployCommand` runs `alembic upgrade head` before a new backend version starts. Confirm the database reference is the new Maçanaliz database and review Alembic revisions before the first production run. For initial setup, provision the database, run and verify the migration, then enable worker and scheduled ingestion. Use backward-compatible migrations when services can deploy concurrently; pause ingestion for schema changes that are not backward compatible. No production migration has been run as part of this preparation.
+Set `DATABASE_URL` to the new Maçanaliz database before enabling deployments. The paid-service Pre-Deploy Command runs `alembic upgrade head` before the new version starts. The Start Command does not run migrations. Review migration compatibility and backup/rollback procedures before the first production migration.
 
-## Health and API verification
+The service still requires a Postgres instance externally. Since this Blueprint intentionally creates only one Web Service, database lifecycle, backups, and credentials are managed separately.
 
-- Render liveness: `GET /health/live`, with no database, R2, provider, or AI calls.
-- Diagnostics/readiness: `GET /api/v1/health`; the payload reports `status=degraded` when PostgreSQL is unavailable or not configured.
-- After both services are live, run `npm run smoke:production-api` in `frontend/` with `FRONTEND_ORIGIN` and `BACKEND_ORIGIN` set to their deployed URLs. The script checks backend liveness and that the frontend rewrite reaches a backend reporting a connected database. It does not create data or use credentials.
+## Local production verification
 
-## Goaloo data and odds caveats
+From the repository root:
 
-`backend/app/providers/goaloo.py` is the Goaloo adapter. It validates source response shapes and fails on unsupported status/schema values instead of fabricating fixtures. It maps 1X2, Asian Handicap, and Over/Under quotes. `OPENING` and `LATEST` are distinct prematch snapshots; live quotes use `LIVE` period/type. The adapter does not infer a `CLOSING` quote from the latest value. Closing-line metrics remain unavailable until Goaloo exposes a verified closing snapshot contract.
+```sh
+python -m pip install -r backend/requirements.txt
+cd frontend
+npm ci
+API_INTERNAL_URL=http://127.0.0.1:8000 SINGLE_SERVICE_MODE=true npm run build
+npm run typecheck
+npm run test:single-service
+```
 
-The fixture-based adapter tests do not count as a live provider check. `backend/tests/test_goaloo_live.py` performs an opt-in request using the configured Goaloo leagues and reports `NOT_TESTED` as a pytest skip if configuration, live fixtures, or provider availability is missing. A live response schema change remains a test failure requiring review.
+The integration smoke command launches both production processes with a non-default `PORT`, clears database/provider/storage/AI credentials for the child processes, verifies the frontend root and both API rewrites, then sends SIGTERM and checks that both ports stop responding. The test does not claim external service connectivity. For a deployed service, set `SERVICE_ORIGIN` and run `npm run smoke:production-api`; that checks route plumbing and reports the database status without treating a missing dependency as connected.
+
+Goaloo/R2/Postgres/Groq live tests remain separately reported as PASS only when their actual live checks run; otherwise report `NOT_TESTED`/SKIP.
+
+## Operational limitation
+
+This one-service Blueprint intentionally omits the background worker and scheduled archive, cleanup, and metrics jobs. The API and frontend can run, but ingestion and scheduled maintenance will not run automatically in this deployment shape. If those jobs are required, they need an explicitly approved single-service process design or separate services; this Blueprint does not create them.
