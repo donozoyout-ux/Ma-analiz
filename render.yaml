@@ -17,10 +17,6 @@ services:
         value: production
       - key: CORS_ORIGINS
         value: ""
-      - key: API_INTERNAL_URL
-        value: http://127.0.0.1:8000
-      - key: SINGLE_SERVICE_MODE
-        value: "true"
       - key: BACKEND_PORT
         value: "8000"
       - key: DATABASE_URL

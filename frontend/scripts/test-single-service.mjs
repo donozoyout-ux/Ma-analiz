@@ -62,6 +62,8 @@ const safeEnv = { ...process.env };
 for (const name of Object.keys(safeEnv)) {
   if (/(?:API_KEY|ACCESS_KEY|SECRET|PASSWORD|TOKEN|CREDENTIAL|DATABASE_URL)/i.test(name)) safeEnv[name] = "";
 }
+delete safeEnv.API_INTERNAL_URL;
+delete safeEnv.SINGLE_SERVICE_MODE;
 Object.assign(safeEnv, {
   APP_ENV: "production",
   CORS_ORIGINS: "",
@@ -84,8 +86,6 @@ Object.assign(safeEnv, {
   GROQ_MODEL: "",
   TELEGRAM_BOT_TOKEN: "",
   TELEGRAM_CHAT_ID: "",
-  API_INTERNAL_URL: `http://127.0.0.1:${backendPort}`,
-  SINGLE_SERVICE_MODE: "true",
   BACKEND_PORT: String(backendPort),
   PORT: String(renderPort),
   NODE_ENV: "production",

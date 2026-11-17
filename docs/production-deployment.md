@@ -39,7 +39,7 @@ The Node supervisor starts FastAPI, waits for its process-only liveness route, t
 - `/api/v1/*` is rewritten by Next.js to `http://127.0.0.1:8000/api/v1/*`.
 - `/health/live` is rewritten to FastAPI's dependency-free `GET /health/live`.
 - Browser code continues to use same-origin `/api/v1/*` paths. `CORS_ORIGINS` is empty; the browser does not call the backend's loopback URL directly.
-- The single-service exception for loopback API rewrites is enabled only with `SINGLE_SERVICE_MODE=true`. Other production builds still reject loopback API targets.
+- The rewrite target defaults to `http://127.0.0.1:8000`; `API_INTERNAL_URL` is an optional override. No single-service mode flag is required.
 
 ## Environment variables
 
@@ -47,7 +47,7 @@ The Web Service, Worker, and Cron must use the same external Maçanaliz `DATABAS
 
 - `DATABASE_URL`: connection URL for the separately provisioned Maçanaliz PostgreSQL. The Blueprint prompts for it; it does not create or reference a database resource.
 - `PROVIDER_NAME=goaloo` and `ENABLED_LEAGUES`: configured Goaloo league IDs, supplied in Render's environment.
-- `API_INTERNAL_URL=http://127.0.0.1:8000`, `SINGLE_SERVICE_MODE=true`, and `BACKEND_PORT=8000` for the internal API proxy.
+- `BACKEND_PORT=8000` for the internal API process. `API_INTERNAL_URL` may optionally override the Next.js rewrite target; its default already matches this backend port.
 - `PYTHON_VERSION=3.12.11`, `NODE_VERSION=22`, `APP_ENV=production`, and `CORS_ORIGINS` empty.
 
 `render.yaml` carries the same Goaloo, database, R2, and notification variable names to the Worker/Cron that need them. The Worker additionally receives `WORKER_INTERVAL_SECONDS`, `WORKER_MATCH_INTERVAL_SECONDS`, `WORKER_ODDS_INTERVAL_SECONDS`, `WORKER_RESULTS_INTERVAL_SECONDS`, `WORKER_SCANNER_INTERVAL_SECONDS`, `WORKER_PRUNE_INTERVAL_SECONDS`, `JOB_RUN_STALE_AFTER_SECONDS`, `HISTORICAL_INGEST_LEASE_SECONDS`, and `JOB_HISTORY_RETENTION_DAYS`. Goaloo base URLs, timeout, retries, and request rate are set in the Blueprint. Do not add Goaloo API keys; this adapter uses public source endpoints and may be subject to source-side availability or schema changes.
@@ -74,7 +74,7 @@ From the repository root:
 python -m pip install -r backend/requirements.txt
 cd frontend
 npm ci
-API_INTERNAL_URL=http://127.0.0.1:8000 SINGLE_SERVICE_MODE=true npm run build
+npm run build
 npm run typecheck
 npm run test:single-service
 ```
