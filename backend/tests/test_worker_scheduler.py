@@ -59,6 +59,27 @@ def test_worker_cycle_uses_configured_intervals_and_separate_jobs(monkeypatch):
     assert all(key.endswith("10:30:00+00:00") for _, key in calls[1:])
 
 
+def test_worker_checks_job_history_pruning_once_per_utc_day(monkeypatch):
+    from contextlib import nullcontext
+    import app.worker as worker
+
+    prune_claims = []
+    monkeypatch.setattr(worker, "_last_prune_check_slot", None)
+    monkeypatch.setattr(worker, "SessionLocal", lambda: nullcontext(object()))
+    monkeypatch.setattr(worker, "run_task", lambda *_args: {"status": "SKIPPED"})
+    monkeypatch.setattr(worker, "run_idempotent_job", lambda _ledger, key, *_args, **_kwargs:
+                        prune_claims.append(key) or {"status": "SUCCESS"})
+
+    worker.cycle(datetime(2026, 11, 17, 10, 0, tzinfo=timezone.utc))
+    worker.cycle(datetime(2026, 11, 17, 10, 5, tzinfo=timezone.utc))
+    worker.cycle(datetime(2026, 11, 18, 10, 0, tzinfo=timezone.utc))
+
+    assert prune_claims == [
+        "prune_job_history:2026-11-17T00:00:00+00:00",
+        "prune_job_history:2026-11-18T00:00:00+00:00",
+    ]
+
+
 def test_scheduled_scanner_claims_one_durable_slot(monkeypatch):
     from app.jobs import tasks
     from app.jobs.ledger import SQLLedger

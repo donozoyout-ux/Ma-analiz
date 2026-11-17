@@ -12,9 +12,11 @@ from app.db.session import SessionLocal
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(message)s")
 logger = logging.getLogger("sports.worker")
+_last_prune_check_slot: int | None = None
 
 
 def cycle(now: datetime | None = None) -> list[dict]:
+    global _last_prune_check_slot
     timestamp = now or datetime.now(timezone.utc)
     job_specs = (
         ("collect_matches", settings.worker_match_interval_seconds),
@@ -36,11 +38,13 @@ def cycle(now: datetime | None = None) -> list[dict]:
         outcomes = [run_task(name, key, ledger) for name, key in scheduled]
         prune_interval = max(60, settings.worker_prune_interval_seconds)
         prune_slot = int(timestamp.timestamp() // prune_interval) * prune_interval
-        prune_key = f"prune_job_history:{datetime.fromtimestamp(prune_slot, tz=timezone.utc).date().isoformat()}"
-        outcomes.append(run_idempotent_job(
-            ledger, prune_key, "prune_job_history",
-            lambda: {"status": "SUCCESS", "records_written": prune_job_history(session)},
-        ))
+        if _last_prune_check_slot != prune_slot:
+            prune_key = f"prune_job_history:{datetime.fromtimestamp(prune_slot, tz=timezone.utc).isoformat()}"
+            outcomes.append(run_idempotent_job(
+                ledger, prune_key, "prune_job_history",
+                lambda: {"status": "SUCCESS", "records_written": prune_job_history(session)},
+            ))
+            _last_prune_check_slot = prune_slot
         return outcomes
 
 
