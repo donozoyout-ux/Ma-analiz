@@ -105,6 +105,7 @@ def test_operations_output_never_prints_secret_values(monkeypatch, capsys):
     malicious = _passing_report()
     malicious["postgres_details"].update({"database": "macanaliz", "host": "ma-db.internal",
                                            "connection_string": secret_values[0]})
+    malicious["alembic_details"] = {"status": "NEEDS_MIGRATION", "current": ["0007"], "heads": ["0008"]}
     malicious["r2_details"]["secret"] = secret_values[1]
     malicious["goaloo_details"]["api_key"] = secret_values[2]
     monkeypatch.setattr(ops, "execute", lambda **_: (malicious, 0))
@@ -112,6 +113,7 @@ def test_operations_output_never_prints_secret_values(monkeypatch, capsys):
     assert ops.main([]) == 0
     output = capsys.readouterr().out
     assert "DATABASE_NAME=macanaliz" in output
+    assert "ALEMBIC_DETAIL=NEEDS_MIGRATION" in output
     assert all(secret not in output for secret in secret_values)
 
 

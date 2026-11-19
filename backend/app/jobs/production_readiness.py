@@ -301,6 +301,8 @@ def main(argv: list[str] | None = None) -> int:
     if pg.get("host"):
         print("DATABASE_HOST=" + str(pg["host"]))
     alembic = report.get("alembic_details", {})
+    if alembic.get("status") == "NEEDS_MIGRATION":
+        print("ALEMBIC_DETAIL=NEEDS_MIGRATION")
     print("ALEMBIC_CURRENT=" + (",".join(alembic.get("current", [])) or "NONE"))
     print("ALEMBIC_HEADS=" + (",".join(alembic.get("heads", [])) or "NONE"))
     for key, value in report.get("internal_health", {}).items():
