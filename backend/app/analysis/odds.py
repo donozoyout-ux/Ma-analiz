@@ -84,9 +84,11 @@ def project_odds_snapshots(rows: list[Any], *, kickoff: datetime, match_status: 
         latest_rows = [row for row in snapshots
                        if str(_get(row, "snapshot_type", "OBSERVED")).upper() not in {"OPENING", "CLOSING"}
                        and _as_utc(_get(row, "captured_at")) <= kickoff]
-        opening = opening_rows[0] if opening_rows else snapshots[0]
+        # Never infer the provider's opening snapshot from the first row. In
+        # particular, a lone LATEST/OBSERVED quote is not opening data.
+        opening = opening_rows[0] if opening_rows else None
         source_closings = [row for row in snapshots if str(_get(row, "snapshot_type", "")).upper() == "CLOSING"]
-        latest = latest_rows[-1] if latest_rows else source_closings[-1] if started and source_closings else opening
+        latest = latest_rows[-1] if latest_rows else None
         closing = source_closings[-1] if started and source_closings else None
         projected.append({
             "bookmaker": bookmaker,
@@ -94,8 +96,8 @@ def project_odds_snapshots(rows: list[Any], *, kickoff: datetime, match_status: 
             "selection": selection,
             "line": _get(latest, "line"),
             "line_key": line_key,
-            "opening": _snapshot(opening),
-            "latest": _snapshot(latest),
+            "opening": _snapshot(opening) if opening is not None else None,
+            "latest": _snapshot(latest) if latest is not None else None,
             "closing": _snapshot(closing) if closing is not None else None,
         })
     return projected, live

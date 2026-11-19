@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.analysis.engine import (SimilarityThresholds, form_analyzer, goals_analyzer,
@@ -17,6 +19,15 @@ from app.core.config import get_settings
 from app.historical.repository import HistoricalRepository
 from app.models import ActiveMatch, ActiveOdds, MatchAnalysis, MatchResult
 from app.storage.r2 import R2NotConfigured, R2ObjectStore
+
+logger = logging.getLogger("sports.scanner")
+
+
+def _valid_season(value: str | None) -> bool:
+    if not value or not re.fullmatch(r"\d{4}-\d{4}", value):
+        return False
+    start, end = (int(part) for part in value.split("-"))
+    return end == start + 1
 
 
 def _serialize(model) -> dict:
@@ -127,35 +138,91 @@ def scan_upcoming_matches(db: Session, *, analyze_one: Callable[..., dict], limi
                           as_of: datetime | None = None,
                           scheduled_slot_start: datetime | None = None) -> dict[str, Any]:
     now = as_of or datetime.now(timezone.utc)
-    bounded_limit = max(1, min(limit, 100))
-    matches = db.scalars(select(ActiveMatch).where(
-        ActiveMatch.start_time >= now, ActiveMatch.expires_at > now
-    ).order_by(ActiveMatch.start_time).limit(bounded_limit)).all()
+    settings = get_settings()
+    configured_leagues = settings.enabled_league_ids
+    if not settings.provider_id:
+        return {"status": "NO_CONFIGURED_PROVIDER", "as_of": now, "matches_scanned": 0,
+                "matches_skipped": 0, "signals": 0, "no_bet": 0, "unavailable": 0,
+                "records_seen": 0, "records_written": 0, "records_skipped": 0,
+                "records_failed": 0, "reason": "NO_CONFIGURED_PROVIDER"}
+    if not configured_leagues:
+        return {"status": "NO_CONFIGURED_LEAGUES", "as_of": now, "matches_scanned": 0,
+                "matches_skipped": 0, "signals": 0, "no_bet": 0, "unavailable": 0,
+                "records_seen": 0, "records_written": 0, "records_skipped": 0,
+                "records_failed": 0, "reason": "NO_CONFIGURED_LEAGUES"}
+    lookahead = min(7 * 24 * 60, max(0, int(settings.scanner_lookahead_minutes)))
+    deadline = now + timedelta(minutes=lookahead)
+    bounded_limit = max(1, min(limit, settings.scanner_max_matches_per_run, 100))
+    valid_seasons = settings.enabled_season_ids
+    query = select(ActiveMatch).where(
+        ActiveMatch.start_time >= now, ActiveMatch.start_time <= deadline,
+        ActiveMatch.expires_at > now, ActiveMatch.league_id.in_(configured_leagues),
+        ActiveMatch.status.in_(("SCHEDULED", "NOT_STARTED", "PREMATCH")),
+    )
+    if valid_seasons:
+        query = query.where(ActiveMatch.season.in_(valid_seasons))
+    if settings.provider_id:
+        query = query.where(ActiveMatch.provider == settings.provider_id.lower())
+    matches = db.scalars(query.order_by(ActiveMatch.start_time).limit(bounded_limit)).all()
+    matches = [match for match in matches if _valid_season(match.season)]
+    logger.info(json.dumps({"event": "scanner_started", "as_of": now.isoformat(),
+                            "lookahead_minutes": lookahead, "candidate_matches": len(matches)},
+                           separators=(",", ":")))
 
-    recent: dict[str, MatchAnalysis] = {}
-    if matches and scheduled_slot_start is not None:
+    latest_analyses: dict[str, MatchAnalysis] = {}
+    latest_odds: dict[str, datetime] = {}
+    if matches:
         match_ids = [match.id for match in matches]
         rows = db.scalars(select(MatchAnalysis).where(
-            MatchAnalysis.match_id.in_(match_ids),
-            MatchAnalysis.analysis_timestamp >= scheduled_slot_start,
-            MatchAnalysis.analysis_timestamp <= now,
+            MatchAnalysis.match_id.in_(match_ids), MatchAnalysis.analysis_timestamp <= now,
         ).order_by(MatchAnalysis.analysis_timestamp.desc())).all()
         for row in rows:
-            recent.setdefault(str(row.match_id), row)
+            latest_analyses.setdefault(str(row.match_id), row)
+        odds_rows = db.execute(select(ActiveOdds.match_id, func.max(ActiveOdds.captured_at))
+            .where(ActiveOdds.match_id.in_(match_ids), ActiveOdds.captured_at <= now)
+            .group_by(ActiveOdds.match_id)).all()
+        latest_odds = {str(match_id): captured_at for match_id, captured_at in odds_rows
+                       if captured_at is not None}
 
     results = []
     skipped = 0
     for match in matches:
-        stored = recent.get(str(match.id))
+        match_key = str(match.id)
+        stored = latest_analyses.get(match_key)
+        stored_time = None
         if stored is not None:
-            results.append(json.loads(stored.analysis_output))
+            stored_time = (stored.analysis_timestamp.replace(tzinfo=timezone.utc)
+                           if stored.analysis_timestamp.tzinfo is None else stored.analysis_timestamp)
+        odds_time = latest_odds.get(match_key)
+        if odds_time is not None and odds_time.tzinfo is None:
+            odds_time = odds_time.replace(tzinfo=timezone.utc)
+        changed_since_analysis = stored_time is not None and odds_time is not None and odds_time > stored_time
+        if stored is not None and not changed_since_analysis:
+            result = json.loads(stored.analysis_output)
+            results.append(result)
             skipped += 1
+            logger.info(json.dumps({"event": "scanner_duplicate_skipped", "match_id": match_key,
+                                    "reason": "NO_NEW_ODDS_SNAPSHOT"}, separators=(",", ":")))
             continue
-        results.append(analyze_one(db, match, as_of=now))
+        result = analyze_one(db, match, as_of=now)
+        results.append(result)
+        logger.info(json.dumps({"event": "scanner_match_evaluated", "match_id": match_key,
+                                "signal": (result.get("final") or {}).get("signal", "NO BET"),
+                                "reasons": (result.get("final") or {}).get("reasons", []),
+                                "analysis_status": result.get("analysis_status")}, separators=(",", ":")))
+        if (result.get("final") or {}).get("signal") == "SIGNAL":
+            logger.info(json.dumps({"event": "scanner_signal", "match_id": match_key}, separators=(",", ":")))
+        else:
+            logger.info(json.dumps({"event": "scanner_no_bet", "match_id": match_key,
+                                    "reasons": (result.get("final") or {}).get("reasons", [])},
+                                   separators=(",", ":")))
 
-    return {
+    report = {
         "status": "COMPLETED" if matches else "NO_UPCOMING_MATCHES",
         "as_of": now,
+        "next_run": datetime.fromtimestamp(
+            (int(now.timestamp() // max(60, settings.worker_scanner_interval_seconds)) + 1)
+            * max(60, settings.worker_scanner_interval_seconds), tz=timezone.utc),
         "matches_scanned": len(matches),
         "matches_skipped": skipped,
         "signals": sum(result.get("final", {}).get("signal") == "SIGNAL" for result in results),
@@ -167,3 +234,7 @@ def scan_upcoming_matches(db: Session, *, analyze_one: Callable[..., dict], limi
         "records_skipped": skipped,
         "records_failed": 0,
     }
+    logger.info(json.dumps({"event": "scanner_completed", "matches_scanned": report["matches_scanned"],
+                            "signals": report["signals"], "no_bet": report["no_bet"],
+                            "matches_skipped": skipped}, separators=(",", ":")))
+    return report

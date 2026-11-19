@@ -49,7 +49,9 @@ class Settings(BaseSettings):
     worker_match_interval_seconds: int = 3600
     worker_odds_interval_seconds: int = 1800
     worker_results_interval_seconds: int = 1800
-    worker_scanner_interval_seconds: int = 1800
+    worker_scanner_interval_seconds: int = 300
+    scanner_lookahead_minutes: int = 1440
+    scanner_max_matches_per_run: int = 50
     worker_prune_interval_seconds: int = 86400
     job_run_stale_after_seconds: int = 21600
     historical_ingest_lease_seconds: int = 3600

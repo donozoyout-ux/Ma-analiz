@@ -60,6 +60,24 @@ Run commands from `backend` after installing requirements and applying migration
 
 Historical matches and finalized results use R2 Parquet partitions with Zstandard compression, SHA-256 and row-count/key metadata. Daily archiving processes every configured season. Cleanup re-reads each object and requires matching metadata, checksum, row count, persisted `VERIFIED` state, and a one-day buffer. It does not remove data before a verified archive. PostgreSQL active matches and odds are short-lived operational state (14 and 30 days by default); these jobs do not remove R2 archive objects. Provider daily jobs skip safely until credentials and league scope are configured.
 
+## Automatic scanner
+
+The Worker schedules scanner runs independently of the web process. The default
+scanner interval is five minutes (`WORKER_SCANNER_INTERVAL_SECONDS=300`); set a
+higher value for a low-cost/free worker. `SCANNER_LOOKAHEAD_MINUTES` bounds the
+fixture window (default 1440), and `SCANNER_MAX_MATCHES_PER_RUN` caps each run
+(default 50, maximum 100). The scanner uses only configured leagues/seasons,
+future scheduled Goaloo fixtures, and odds already observed by ingestion. It
+does not call Goaloo separately for each scanner pass. It suppresses a repeat
+analysis unless a newer observed odds snapshot exists, and the SQL job ledger
+deduplicates worker/manual requests within the same scheduled slot.
+
+Manual operations are available at `POST /api/v1/scanner/run`; status and
+stored match outcomes are at `GET /api/v1/scanner/status` and
+`GET /api/v1/scanner/results`. Missing odds, inadequate verified history, or
+unavailable probability remain `NO BET` with explicit reason codes. Only a
+real `SIGNAL` can reach the existing paper-prediction persistence path.
+
 ## Verification
 
 - Backend: `py -m pytest -q`

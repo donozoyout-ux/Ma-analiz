@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import json
 import os
 import secrets
 from typing import Any
@@ -12,9 +13,10 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import engine, get_db
 from app.analysis.odds import project_odds_snapshots
-from app.analysis.scanning import (_r2_history, _run_analysis, _statistics_for_match, _verified_history, scan_upcoming_matches)
+from app.analysis.scanning import (_r2_history, _run_analysis, _statistics_for_match, _valid_season,
+                                   _verified_history)
 from app.analysis.engine import (SimilarityThresholds, form_analyzer, goals_analyzer,
-    historical_similarity, h2h_analyzer, no_bet_reasons, scan_matches)
+    historical_similarity, h2h_analyzer, no_bet_reasons)
 from app.analysis.ai import create_ai_provider
 from app.analysis.pipeline import analyze_match
 from app.analysis.persistence import persist_paper_prediction, record_analysis
@@ -312,46 +314,159 @@ def run_match_analysis(match_id: UUID, db: Session = Depends(get_db)) -> dict:
 @router.get("/scanner/status")
 def scanner_status(db: Session = Depends(get_db)) -> dict:
     now = datetime.now(timezone.utc)
-    total = db.scalar(select(func.count()).select_from(ActiveMatch).where(ActiveMatch.start_time >= now)) or 0
-    provider = provider_health()
-    completed = db.scalar(select(func.count()).select_from(MatchAnalysis).where(
-        MatchAnalysis.analysis_timestamp >= datetime.combine(now.date(), datetime.min.time(), tzinfo=timezone.utc))) or 0
-    return {"status": "READY" if provider["status"] == "PROVIDER_OK" and total else "DEGRADED",
-            "as_of": now, "upcoming_matches": total, "provider_status": provider["status"],
-            "analysis_status": "AVAILABLE" if completed else "NOT_RUN",
-            "analyzed": completed, "signals": None, "no_bet": None}
+    settings = get_settings()
+    interval = max(60, settings.worker_scanner_interval_seconds)
+    configured = bool(settings.provider_id and settings.enabled_league_ids)
+    lookahead = min(7 * 24 * 60, max(0, settings.scanner_lookahead_minutes))
+    latest_run = db.scalar(select(JobRun).where(JobRun.job_type == "scheduled_scan")
+                           .order_by(JobRun.started_at.desc()).limit(1))
+    last_success = db.scalar(select(JobRun.finished_at).where(
+        JobRun.job_type == "scheduled_scan", JobRun.status == "SUCCESS",
+        JobRun.finished_at.is_not(None)).order_by(JobRun.finished_at.desc()).limit(1))
+    upcoming_query = select(func.count()).select_from(ActiveMatch).where(
+        ActiveMatch.start_time >= now,
+        ActiveMatch.start_time <= now + timedelta(minutes=lookahead),
+        ActiveMatch.expires_at > now,
+        ActiveMatch.status.in_(("SCHEDULED", "NOT_STARTED", "PREMATCH")),
+    )
+    if settings.enabled_league_ids:
+        upcoming_query = upcoming_query.where(ActiveMatch.league_id.in_(settings.enabled_league_ids))
+    else:
+        upcoming_query = upcoming_query.where(False)
+    if settings.provider_id:
+        upcoming_query = upcoming_query.where(ActiveMatch.provider == settings.provider_id.lower())
+    upcoming = db.scalar(upcoming_query) or 0
+    since = now - timedelta(hours=24)
+    analysis_counts = db.execute(select(MatchAnalysis.final_decision, MatchAnalysis.analysis_status,
+        func.count()).where(MatchAnalysis.analysis_timestamp >= since,
+                            MatchAnalysis.analysis_timestamp <= now)
+        .group_by(MatchAnalysis.final_decision, MatchAnalysis.analysis_status)).all()
+    signals = sum(count for decision, _status, count in analysis_counts if decision == "SIGNAL")
+    no_bet = sum(count for decision, _status, count in analysis_counts if decision == "NO BET")
+    analyzed = sum(count for _decision, status, count in analysis_counts if status == "ANALYZED")
+    recent_total = sum(count for _decision, _status, count in analysis_counts)
+    latest_started = latest_run.started_at if latest_run is not None else None
+    if latest_started is not None and latest_started.tzinfo is None:
+        latest_started = latest_started.replace(tzinfo=timezone.utc)
+    latest_status = latest_run.status if latest_run is not None else None
+    recent_success = bool(last_success and (now - (last_success.replace(tzinfo=timezone.utc)
+        if last_success.tzinfo is None else last_success)).total_seconds() <= interval * 2)
+    state = ("ERROR" if latest_status in {"FAILED", "PARTIAL"} else
+             "ACTIVE" if configured and (latest_status == "RUNNING" or recent_success) else "IDLE")
+    return {
+        "enabled": configured,
+        "status": state,
+        "last_run": latest_started,
+        "next_run": datetime.fromtimestamp((int(now.timestamp() // interval) + 1) * interval,
+                                            tz=timezone.utc) if configured else None,
+        "last_success": last_success,
+        "last_error": latest_run.error_code if latest_status in {"FAILED", "PARTIAL"} else None,
+        "matches_scanned": int(latest_run.records_seen or 0) if latest_run else 0,
+        "upcoming_matches": int(upcoming),
+        "signals": int(signals),
+        "no_bet": int(no_bet),
+        "provider": settings.provider_id or "NOT_CONFIGURED",
+        "provider_latency_ms": None,
+        "data_quality": {"analyzed": int(analyzed), "records_24h": int(recent_total)},
+        "metrics_window_hours": 24,
+    }
 
 
 @router.get("/scanner/results")
 def scanner_results(db: Session = Depends(get_db), limit: int = 200) -> list[dict]:
     now = datetime.now(timezone.utc)
-    matches = db.scalars(select(ActiveMatch).where(ActiveMatch.start_time >= now,
-        ActiveMatch.expires_at > now).order_by(ActiveMatch.start_time).limit(max(1, min(limit, 500)))).all()
-    rows = []
-    for match in matches:
-        odds = db.scalars(select(ActiveOdds).where(ActiveOdds.match_id == match.id,
-            ActiveOdds.captured_at <= now, ActiveOdds.expires_at > now)).all()
-        rows.append({"id": str(match.id), "provider_match_id": match.provider_match_id,
-                     "home_team": match.home_team, "away_team": match.away_team,
-                     "start_time": (match.start_time.replace(tzinfo=timezone.utc)
-                                    if match.start_time.tzinfo is None else match.start_time),
-                     "ingested_at": (match.last_updated_at.replace(tzinfo=timezone.utc)
-                                     if match.last_updated_at and match.last_updated_at.tzinfo is None else match.last_updated_at),
-                     "odds": [{"captured_at": (row.captured_at.replace(tzinfo=timezone.utc)
-                                                 if row.captured_at.tzinfo is None else row.captured_at), "period": row.period,
-                               "status": row.status} for row in odds]})
-    readiness = scan_matches(rows, as_of=now)
+    settings = get_settings()
+    query = select(ActiveMatch).where(
+        ActiveMatch.start_time >= now,
+        ActiveMatch.start_time <= now + timedelta(minutes=min(
+            7 * 24 * 60, max(0, settings.scanner_lookahead_minutes))),
+        ActiveMatch.expires_at > now,
+        ActiveMatch.status.in_(("SCHEDULED", "NOT_STARTED", "PREMATCH")),
+    )
+    if not settings.provider_id or not settings.enabled_league_ids:
+        return []
+    query = query.where(ActiveMatch.league_id.in_(settings.enabled_league_ids))
+    if settings.enabled_season_ids:
+        query = query.where(ActiveMatch.season.in_(settings.enabled_season_ids))
+    if settings.provider_id:
+        query = query.where(ActiveMatch.provider == settings.provider_id.lower())
+    matches = db.scalars(query.order_by(ActiveMatch.start_time).limit(
+        max(1, min(limit, settings.scanner_max_matches_per_run, 100)))).all()
+    matches = [match for match in matches if _valid_season(match.season)]
     match_ids = [match.id for match in matches]
-    analyses = db.scalars(select(MatchAnalysis).where(MatchAnalysis.match_id.in_(match_ids))
-                          .order_by(MatchAnalysis.analysis_timestamp.desc())).all() if match_ids else []
+    analyses = db.scalars(select(MatchAnalysis).where(MatchAnalysis.match_id.in_(match_ids),
+        MatchAnalysis.analysis_timestamp <= now).order_by(MatchAnalysis.analysis_timestamp.desc())).all() if match_ids else []
     latest: dict[str, MatchAnalysis] = {}
     for analysis in analyses:
         latest.setdefault(str(analysis.match_id), analysis)
-    import json
     output = []
-    for item in readiness:
-        stored = latest.get(str(item["match_id"]))
-        output.append(json.loads(stored.analysis_output) if stored is not None else item)
+    for match in matches:
+        stored = latest.get(str(match.id))
+        if stored is None:
+            observed_odds = db.scalars(select(ActiveOdds).where(
+                ActiveOdds.match_id == match.id, ActiveOdds.captured_at <= now,
+                ActiveOdds.expires_at > now,
+                ActiveOdds.period.in_(("PREMATCH", "PRE-MATCH", "LIVE")),
+                ActiveOdds.status.in_(("AVAILABLE", "ACTIVE", "OPEN")),
+            ).order_by(ActiveOdds.captured_at)).all()
+            prematch_odds = [row for row in observed_odds if row.period in {"PREMATCH", "PRE-MATCH"}]
+            projected, live = project_odds_snapshots(observed_odds, kickoff=match.start_time,
+                match_status=match.status, as_of=now)
+            reason = "ODDS_INSUFFICIENT" if not prematch_odds else "ANALYSIS_NOT_RUN"
+            latest_home = next((row.get("latest", {}).get("price") for row in projected
+                                if row.get("market") == "1X2" and row.get("selection") == "HOME"
+                                and row.get("latest")), None)
+            output.append({
+                "id": str(match.id), "match_id": str(match.id),
+                "provider_match_id": match.provider_match_id, "provider": match.provider,
+                "home_team": match.home_team, "away_team": match.away_team,
+                "league": match.league_name or match.league_id, "league_id": match.league_id,
+                "season": match.season,
+                "start_time": match.start_time.replace(tzinfo=timezone.utc)
+                    if match.start_time.tzinfo is None else match.start_time,
+                "market": None, "selection": None, "odds": latest_home, "value": None,
+                "historical_sample_size": 0, "snapshot_type": None,
+                "markets": projected, "live_odds": live, "status": "NO BET", "signal": "NO BET",
+                "reason": [reason], "data_quality": "DATA_UNAVAILABLE",
+            })
+            continue
+        analysis = json.loads(stored.analysis_output)
+        cutoff = analysis.get("analysis_timestamp")
+        cutoff = datetime.fromisoformat(cutoff.replace("Z", "+00:00")) if isinstance(cutoff, str) else now
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        odds = db.scalars(select(ActiveOdds).where(ActiveOdds.match_id == match.id,
+            ActiveOdds.captured_at <= min(now, cutoff), ActiveOdds.expires_at > now,
+            ActiveOdds.status.in_(("AVAILABLE", "ACTIVE", "OPEN"))).order_by(ActiveOdds.captured_at)).all()
+        projected, live = project_odds_snapshots(odds, kickoff=match.start_time,
+            match_status=match.status, as_of=min(now, cutoff))
+        final = analysis.get("final") or {}
+        selected = analysis.get("selection")
+        market_odds = (analysis.get("odds") or {}).get("market_odds") or {}
+        value = analysis.get("value") or {}
+        history = analysis.get("historical") or {}
+        output.append({
+            "id": str(match.id), "match_id": str(match.id),
+            "provider_match_id": match.provider_match_id, "provider": match.provider,
+            "home_team": match.home_team, "away_team": match.away_team,
+            "league": match.league_name or match.league_id, "league_id": match.league_id,
+            "season": match.season,
+            "start_time": match.start_time.replace(tzinfo=timezone.utc)
+                if match.start_time.tzinfo is None else match.start_time,
+            "analysis_timestamp": stored.analysis_timestamp,
+            "market": "1X2" if selected else None, "selection": selected,
+            "odds": market_odds.get(selected) if selected else None,
+            "value": value.get("value"), "model_probability": analysis.get("model_probability"),
+            "implied_probability": analysis.get("market_probability"),
+            "historical_sample_size": int(history.get("sample_size", 0) or 0),
+            "snapshot_type": next((row.get("latest", {}).get("snapshot_type") for row in projected
+                                   if row.get("market") == "1X2" and row.get("selection") == selected), None),
+            "markets": projected, "live_odds": live,
+            "status": "SIGNAL" if final.get("signal") == "SIGNAL" else "NO BET",
+            "signal": final.get("signal", "NO BET"),
+            "reason": final.get("reasons", []),
+            "data_quality": analysis.get("analysis_status", "UNKNOWN"),
+        })
     return output
 
 
@@ -364,7 +479,9 @@ def run_scanner(db: Session = Depends(get_db), limit: int = 50) -> dict:
     from app.jobs.ledger import SQLLedger
     from app.jobs.tasks import run_task
 
-    outcome = run_task("scheduled_scan", f"scheduled_scan:{slot_start.isoformat()}", SQLLedger(db), limit=limit)
+    bounded_limit = max(1, min(limit, settings.scanner_max_matches_per_run, 100))
+    outcome = run_task("scheduled_scan", f"scheduled_scan:{slot_start.isoformat()}", SQLLedger(db),
+                       limit=bounded_limit)
     if outcome.get("reason") == "IDEMPOTENT_DUPLICATE":
         return {"status": "SKIPPED", **outcome}
     if outcome.get("status") == "SUCCESS":

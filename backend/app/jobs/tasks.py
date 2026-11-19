@@ -1,7 +1,9 @@
 """Bounded ingestion task entrypoints; no live provider is assumed."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
+import json
+import logging
 from typing import Any
 
 from app.core.config import get_settings
@@ -12,6 +14,8 @@ from app.providers.base import ProviderFailure, ProviderNotConfigured
 from app.providers.registry import ProviderCaller, create_provider
 from app.storage.r2 import R2ObjectStore
 
+logger = logging.getLogger("sports.worker.scanner")
+
 
 def _caller() -> ProviderCaller:
     settings = get_settings()
@@ -21,9 +25,42 @@ def _caller() -> ProviderCaller:
 
 
 def _missing_provider_result(exc: ProviderFailure) -> dict:
+    if exc.code == "PROVIDER_RATE_LIMITED":
+        logger.warning(json.dumps({"event": "scanner_rate_limited", "provider": "goaloo",
+                                   "error_code": exc.code}, separators=(",", ":")))
+    elif exc.code not in {"PROVIDER_NOT_CONFIGURED"}:
+        logger.warning(json.dumps({"event": "scanner_provider_error", "provider": "goaloo",
+                                   "error_code": exc.code}, separators=(",", ":")))
     return {"status": "SKIPPED" if isinstance(exc, ProviderNotConfigured) else "FAILED",
             "error_code": exc.code, "reason": exc.code, "records_seen": 0, "records_written": 0,
             "records_skipped": 0, "records_failed": 0 if isinstance(exc, ProviderNotConfigured) else 1}
+
+
+def _close_caller(caller: ProviderCaller) -> None:
+    close = getattr(caller.provider, "close", None)
+    if callable(close):
+        close()
+
+
+def _scanner_dates(*, start: date, lookahead_minutes: int) -> list[date]:
+    """Calendar days needed to cover the configured scanner lookahead."""
+    bounded_minutes = min(7 * 24 * 60, max(0, int(lookahead_minutes)))
+    end = datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc) + timedelta(minutes=bounded_minutes)
+    return [start + timedelta(days=offset) for offset in range((end.date() - start).days + 1)]
+
+
+def _aggregate_job_results(results: list[dict]) -> dict[str, Any]:
+    seen = sum(int(row.get("records_seen", 0) or 0) for row in results)
+    written = sum(int(row.get("records_written", 0) or 0) for row in results)
+    skipped = sum(int(row.get("records_skipped", 0) or 0) for row in results)
+    failed = sum(int(row.get("records_failed", 0) or 0) for row in results)
+    errors = [row.get("error_code") or row.get("reason") for row in results
+              if row.get("status") in {"FAILED", "PARTIAL"}]
+    status = "PARTIAL" if failed and written else "FAILED" if failed else "SUCCESS" if written else "SKIPPED"
+    return {"status": status, "records_seen": seen, "records_written": written,
+            "records_skipped": skipped, "records_failed": failed,
+            "error_code": errors[0] if errors else None,
+            "reason": errors[0] if errors else ("NO_MATCHES_IN_LOOKAHEAD" if not written else None)}
 
 
 def _send_operational_message(message: str, dedupe_key: str) -> str:
@@ -57,47 +94,71 @@ def _notify_ingestion(day: date, result: dict) -> None:
             f"Skipped: {result.get('records_skipped', 0)}\\nStatus: {result.get('status')}")
     _send_operational_message(text, f"ingestion:{leagues}:{day.isoformat()}")
 
-def _daily_matches(day: date) -> dict:
+def _daily_matches_for_days(days: list[date]) -> dict:
     from app.jobs.ingestion import daily_ingest
-    from app.core.config import get_settings
     try:
         caller = _caller()
     except ProviderFailure as exc:
         return _missing_provider_result(exc)
     if SessionLocal is None:
+        _close_caller(caller)
         return {"status": "SKIPPED", "error_code": "DATABASE_NOT_CONFIGURED", "reason": "DATABASE_NOT_CONFIGURED",
                 "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
-    with SessionLocal() as session:
-        try:
-            result = daily_ingest(session, caller, day, enabled_leagues=get_settings().enabled_league_ids)
-            _notify_ingestion(day, result)
-            return result
-        except ProviderFailure as exc:
-            session.rollback()
-            return _missing_provider_result(exc)
+    results = []
+    try:
+        with SessionLocal() as session:
+            for day in days:
+                try:
+                    result = daily_ingest(session, caller, day, enabled_leagues=get_settings().enabled_league_ids)
+                    results.append(result)
+                    _notify_ingestion(day, result)
+                except ProviderFailure as exc:
+                    session.rollback()
+                    results.append(_missing_provider_result(exc))
+                    break
+    finally:
+        _close_caller(caller)
+    return _aggregate_job_results(results)
+
+
+def _daily_matches(day: date) -> dict:
+    return _daily_matches_for_days([day])
 
 
 def collect_matches(day: date | None = None) -> dict[str, Any]:
-    today = day or datetime.now(timezone.utc).date()
-    return _daily_matches(today)
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    days = [day] if day else _scanner_dates(start=now.date(), lookahead_minutes=settings.scanner_lookahead_minutes)
+    return _daily_matches_for_days(days)
 
 
 def collect_odds(day: date | None = None) -> dict[str, Any]:
-    today = day or datetime.now(timezone.utc).date()
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    days = [day] if day else _scanner_dates(start=now.date(), lookahead_minutes=settings.scanner_lookahead_minutes)
     try:
         caller = _caller()
     except ProviderFailure as exc:
         return _missing_provider_result(exc)
     if SessionLocal is None:
+        _close_caller(caller)
         return {"status": "SKIPPED", "error_code": "DATABASE_NOT_CONFIGURED", "reason": "DATABASE_NOT_CONFIGURED",
                 "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
     from app.jobs.ingestion import daily_odds
-    with SessionLocal() as session:
-        try:
-            return daily_odds(session, caller, today, enabled_leagues=get_settings().enabled_league_ids)
-        except ProviderFailure as exc:
-            session.rollback()
-            return _missing_provider_result(exc)
+    results = []
+    try:
+        with SessionLocal() as session:
+            for target_day in days:
+                try:
+                    results.append(daily_odds(session, caller, target_day,
+                                              enabled_leagues=settings.enabled_league_ids))
+                except ProviderFailure as exc:
+                    session.rollback()
+                    results.append(_missing_provider_result(exc))
+                    break
+    finally:
+        _close_caller(caller)
+    return _aggregate_job_results(results)
 
 
 def scheduled_scan(slot_start: datetime | None = None, session: Any | None = None,
@@ -110,7 +171,8 @@ def scheduled_scan(slot_start: datetime | None = None, session: Any | None = Non
     interval = max(60, get_settings().worker_scanner_interval_seconds)
     now = datetime.now(timezone.utc)
     run_at = slot_start or datetime.fromtimestamp(int(now.timestamp() // interval) * interval, tz=timezone.utc)
-    result = scan_upcoming_matches(session, analyze_one=_run_analysis, limit=limit, as_of=now,
+    result = scan_upcoming_matches(session, analyze_one=_run_analysis,
+                                   limit=min(limit, get_settings().scanner_max_matches_per_run), as_of=now,
                                    scheduled_slot_start=run_at)
     return {**result, "status": "SUCCESS" if result["matches_scanned"] else "SKIPPED",
             "reason": None if result["matches_scanned"] else "NO_UPCOMING_MATCHES"}
