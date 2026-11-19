@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Callable
+from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, MatchResult
+from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, HistoricalIngestDay, MatchResult
 from app.providers.base import ProviderError, ProviderFailure, ProviderNotConfigured
 from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result
 from app.storage.archive import ArchiveStatus, SQLArchiveTracker, archive_partition, cleanup_database_rows_after_verified
@@ -118,32 +120,9 @@ def daily_ingest(session: Session, caller: Any, day: date, *, enabled_leagues: t
     normalized = [m for m in normalize_matches(raw_matches, provider=provider.name)
                   if m["league_id"] in leagues]
     written, skipped = upsert_matches(session, normalized, now=now)
-    odds_written = odds_skipped = failures = 0
-    match_start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    match_end = match_start + timedelta(days=1)
-    matches = session.scalars(select(ActiveMatch).where(
-        ActiveMatch.provider == provider.name,
-        ActiveMatch.start_time >= match_start,
-        ActiveMatch.start_time < match_end,
-        ActiveMatch.league_id.in_(leagues),
-    )).all()
-    for match in matches:
-        try:
-            payloads = caller.call("get_odds", match.provider_match_id)
-            count, ignored = upsert_odds(session, provider.name, match, payloads, now=now)
-            odds_written += count
-            odds_skipped += ignored
-        except ProviderFailure:
-            failures += 1
-        except (KeyError, TypeError, ValueError) as exc:
-            failures += 1
     session.commit()
-    total_written = written + odds_written
-    total_skipped = skipped + odds_skipped
-    status = "PARTIAL" if failures else "SUCCESS" if total_written else "SKIPPED"
-    return {"status": status, "records_seen": len(raw_matches), "records_written": total_written,
-            "records_skipped": total_skipped, "records_failed": failures,
-            "error_code": "PROVIDER_PARTIAL_FAILURE" if failures else None}
+    return {"status": "SUCCESS" if written else "SKIPPED", "records_seen": len(raw_matches),
+            "records_written": written, "records_skipped": skipped, "records_failed": 0}
 
 
 def daily_odds(session: Session, caller: Any, day: date, *, enabled_leagues: tuple[str, ...],
@@ -184,9 +163,93 @@ def archive_rows(store: ObjectStore, tracker: Any, *, dataset: str, season: str,
             "size_bytes": receipt.size, "checksum": receipt.checksum}
 
 
+def _claim_historical_day(session: Session, *, provider: str, season: str, league: str,
+                          day: date) -> tuple[HistoricalIngestDay | None, str | None]:
+    now = datetime.now(timezone.utc)
+    lease_seconds = max(60, get_settings().historical_ingest_lease_seconds)
+    lease_expiry = now + timedelta(seconds=lease_seconds)
+    token = uuid4().hex
+    row = session.scalar(select(HistoricalIngestDay).where(
+        HistoricalIngestDay.provider == provider,
+        HistoricalIngestDay.season == season,
+        HistoricalIngestDay.league_id == league,
+        HistoricalIngestDay.ingest_date == day,
+    ).with_for_update())
+    if row is None:
+        row = HistoricalIngestDay(provider=provider, season=season, league_id=league, ingest_date=day,
+                                  status="RUNNING", lease_token=token, lease_expires_at=lease_expiry,
+                                  attempt_count=1, last_attempt_at=now)
+        session.add(row)
+        try:
+            session.commit()
+        except IntegrityError:
+            session.rollback()
+            row = session.scalar(select(HistoricalIngestDay).where(
+                HistoricalIngestDay.provider == provider,
+                HistoricalIngestDay.season == season,
+                HistoricalIngestDay.league_id == league,
+                HistoricalIngestDay.ingest_date == day,
+            ).with_for_update())
+            if row is None:
+                raise
+        else:
+            return row, token
+
+    if row.status in {"COMPLETED", "EMPTY"}:
+        session.rollback()
+        return row, None
+
+    active_until = row.lease_expires_at
+    if active_until is not None and active_until.tzinfo is None:
+        active_until = active_until.replace(tzinfo=timezone.utc)
+    updated_at = row.updated_at
+    if updated_at is not None and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    if row.status == "RUNNING" and active_until is None and updated_at is not None:
+        active_until = updated_at + timedelta(seconds=lease_seconds)
+    if row.status == "RUNNING" and active_until is not None and active_until > now:
+        session.rollback()
+        return row, None
+
+    row.status = "RUNNING"
+    row.lease_token = token
+    row.lease_expires_at = lease_expiry
+    row.error_code = None
+    row.failed_match_ids = []
+    row.records_failed = 0
+    row.attempt_count = (row.attempt_count or 0) + 1
+    row.last_attempt_at = now
+    session.commit()
+    return row, token
+
+
+def _renew_historical_lease(session: Session, *, progress_id: Any, token: str) -> None:
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(seconds=max(60, get_settings().historical_ingest_lease_seconds))
+    result = session.execute(update(HistoricalIngestDay).where(
+        HistoricalIngestDay.id == progress_id,
+        HistoricalIngestDay.status == "RUNNING",
+        HistoricalIngestDay.lease_token == token,
+    ).values(lease_expires_at=expiry, updated_at=now))
+    session.commit()
+    if result.rowcount != 1:
+        raise RuntimeError("HISTORICAL_INGEST_LEASE_LOST")
+
+
+def _finish_historical_day(session: Session, *, progress_id: Any, token: str,
+                           values: dict[str, Any]) -> None:
+    result = session.execute(update(HistoricalIngestDay).where(
+        HistoricalIngestDay.id == progress_id,
+        HistoricalIngestDay.status == "RUNNING",
+        HistoricalIngestDay.lease_token == token,
+    ).values(**values, lease_token=None, lease_expires_at=None, updated_at=datetime.now(timezone.utc)))
+    session.commit()
+    if result.rowcount != 1:
+        raise RuntimeError("HISTORICAL_INGEST_LEASE_LOST")
+
+
 def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, season: str, league: str,
                       start_date: date, end_date: date) -> dict[str, Any]:
-    from app.models import HistoricalIngestDay
     if end_date < start_date:
         raise ValueError("end_date must be on or after start_date")
     configured_start = get_settings().historical_start_date
@@ -194,65 +257,157 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
         raise ValueError("start_date precedes HISTORICAL_START_DATE")
     if league not in get_settings().enabled_league_ids or season not in get_settings().enabled_season_ids:
         raise ValueError("season and league must be present in ENABLED_SEASONS and ENABLED_LEAGUES")
+    from app.storage.monitor import StorageMonitor
+    storage_status = StorageMonitor(session.get_bind(), get_settings()).historical_ingestion_status()
+    if storage_status == "critical":
+        return {"status": "BLOCKED", "error_code": "STORAGE_CRITICAL", "storage_status": storage_status,
+                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0,
+                "dates_completed": 0, "dates_partial": 0, "dates_failed": 0, "dates_skipped": 0,
+                "matches_written": 0, "results_written": 0, "odds_written": 0, "duplicates": 0,
+                "invalid_rows": 0, "r2_objects": 0, "r2_bytes": 0,
+                "postgres_rows_written": 0, "postgres_rows_deleted": 0}
+    if storage_status == "DATABASE_STORAGE_CHECK_FAILED":
+        return {"status": "BLOCKED", "error_code": storage_status, "storage_status": storage_status,
+                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0,
+                "dates_completed": 0, "dates_partial": 0, "dates_failed": 0, "dates_skipped": 0,
+                "matches_written": 0, "results_written": 0, "odds_written": 0, "duplicates": 0,
+                "invalid_rows": 0, "r2_objects": 0, "r2_bytes": 0,
+                "postgres_rows_written": 0, "postgres_rows_deleted": 0}
     provider_leagues = caller.call("get_leagues")
     available = {str(item.get("id", item.get("league_id", ""))) for item in provider_leagues}
     if league not in available:
         return {"status": "SKIPPED", "error_code": "LEAGUE_NOT_AVAILABLE", "records_seen": 0,
                 "records_written": 0, "records_skipped": 0, "records_failed": 0, "dates_completed": 0}
-    completed = failed = partial = seen = archived = records_failed = 0
+    season_discovery = getattr(caller.provider, "get_seasons", None)
+    if callable(season_discovery):
+        available_seasons = {str(item.get("id", item.get("season_id", "")))
+                             for item in caller.call("get_seasons", league)}
+        if season not in available_seasons:
+            return {"status": "SKIPPED", "error_code": "SEASON_NOT_AVAILABLE", "records_seen": 0,
+                    "records_written": 0, "records_skipped": 0, "records_failed": 0, "dates_completed": 0}
+    completed = failed = partial = seen = archived = records_failed = dates_skipped = 0
+    matches_written = results_written = odds_written = odds_skipped = duplicates = r2_objects = r2_bytes = 0
+    provider_failures = invalid_rows = checksum_failures = 0
+    odds_fetch_supported = callable(getattr(caller.provider, "get_odds", None))
     tracker = SQLArchiveTracker(session)
     day = start_date
     while day <= end_date:
-        progress = session.scalar(select(HistoricalIngestDay).where(
-            HistoricalIngestDay.provider == caller.provider.name,
-            HistoricalIngestDay.season == season,
-            HistoricalIngestDay.league_id == league,
-            HistoricalIngestDay.ingest_date == day,
-        ).with_for_update())
-        if progress and progress.status in {"COMPLETED", "EMPTY"}:
+        progress, lease_token = _claim_historical_day(
+            session, provider=caller.provider.name, season=season, league=league, day=day)
+        if progress is not None and progress.status in {"COMPLETED", "EMPTY"}:
             completed += 1
             day += timedelta(days=1)
             continue
-        if progress is None:
-            progress = HistoricalIngestDay(provider=caller.provider.name, season=season,
-                                           league_id=league, ingest_date=day, status="PENDING")
-            session.add(progress)
-        session.commit()
-        progress = session.scalar(select(HistoricalIngestDay).where(
-            HistoricalIngestDay.provider == caller.provider.name,
-            HistoricalIngestDay.season == season,
-            HistoricalIngestDay.league_id == league,
-            HistoricalIngestDay.ingest_date == day,
-        ).with_for_update())
-        if progress.status in {"FAILED", "PARTIAL", "RUNNING", "RETRYING"}:
-            progress.status = "RETRYING"
-            session.commit()
-        progress.status, progress.error_code = "RUNNING", None
-        progress.failed_match_ids = []
-        progress.records_failed = 0
-        progress.attempt_count = (progress.attempt_count or 0) + 1
-        progress.last_attempt_at = datetime.now(timezone.utc)
-        session.commit()
+        if lease_token is None:
+            dates_skipped += 1
+            day += timedelta(days=1)
+            continue
         try:
+            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
             raw = caller.call("get_matches", day)
-            normalized, failed_ids = [], []
+            normalized_by_id: dict[str, dict] = {}
+            failed_ids = []
             for payload in raw:
                 try:
                     row = normalize_match(payload, provider=caller.provider.name)
                 except (KeyError, TypeError, ValueError):
                     failed_ids.append(str(payload.get("id", "unknown")) if isinstance(payload, dict) else "unknown")
+                    invalid_rows += 1
                     continue
-                if row["league_id"] == league:
-                    normalized.append(row)
+                # Multi-season providers (including Goaloo) can return fixtures
+                # from every configured season for a date. Never relabel a row
+                # into the requested archive season when the source supplied
+                # its own season identity.
+                source_season = payload.get("season", payload.get("season_id"))
+                if row["league_id"] == league and (source_season is None or str(source_season) == season):
+                    match_id = str(row["provider_match_id"])
+                    previous = normalized_by_id.get(match_id)
+                    if previous is None:
+                        normalized_by_id[match_id] = row
+                    elif previous == row:
+                        duplicates += 1
+                    else:
+                        failed_ids.append(match_id)
+                        invalid_rows += 1
+            normalized = list(normalized_by_id.values())
             seen += len(raw)
             archive_count = 0
             if normalized:
                 for match_row in normalized:
                     match_row["season"] = season
-                archive_rows(store, tracker, dataset="matches", season=season, league=league, day=day, rows=normalized)
+                _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
+                receipt = archive_rows(store, tracker, dataset="matches", season=season, league=league, day=day, rows=normalized)
                 archive_count += len(normalized)
+                matches_written += len(normalized)
+                r2_objects += 1
+                r2_bytes += int(receipt.get("size_bytes", 0))
+            historical_odds: dict[str, dict] = {}
+            if odds_fetch_supported:
+                retrieved_at = datetime.now(timezone.utc)
+                for match in normalized:
+                    if match["status"] != "FINISHED":
+                        continue
+                    try:
+                        quotes = caller.call("get_odds", match["provider_match_id"])
+                    except ProviderFailure:
+                        provider_failures += 1
+                        failed_ids.append(f"odds:{match['provider_match_id']}")
+                        continue
+                    for quote in quotes:
+                        # Goaloo exposes opening (`f`) and latest (`l`) snapshots.
+                        # Ignore live (`r`) and never infer a closing snapshot.
+                        if quote.get("period") != "PREMATCH" or quote.get("snapshot_type") not in {"OPENING", "LATEST"}:
+                            continue
+                        odds_id = str(quote.get("provider_odds_id", ""))
+                        if not odds_id:
+                            failed_ids.append(f"odds:{match['provider_match_id']}:missing-id")
+                            invalid_rows += 1
+                            continue
+                        row = {"provider": quote.get("provider", caller.provider.name),
+                               "provider_match_id": match["provider_match_id"],
+                               "league_id": league, "league_name": match.get("league_name"),
+                               "season": season, "home_team": match["home_team"],
+                               "away_team": match["away_team"], "start_time": match["start_time"],
+                               "fixture_date": day, "provider_odds_id": odds_id,
+                               "provider_market_id": quote.get("provider_market_id"),
+                               "provider_bookmaker_id": quote.get("provider_bookmaker_id"),
+                               "bookmaker": quote.get("bookmaker"), "market": quote.get("market"),
+                               "selection": quote.get("selection"),
+                               "line": float(quote["line"]) if quote.get("line") is not None else None,
+                               "raw_line": quote.get("raw_line"), "odds": float(quote["odds"]),
+                               "snapshot_type": quote["snapshot_type"], "period": "PREMATCH",
+                               "source": quote.get("source", "goaloo"), "retrieved_at": retrieved_at,
+                               "source_captured_at": quote.get("source_captured_at"),
+                               "raw_value": quote.get("raw_value")}
+                        previous = historical_odds.get(odds_id)
+                        if previous is None:
+                            historical_odds[odds_id] = row
+                        elif previous == row:
+                            duplicates += 1
+                        else:
+                            failed_ids.append(f"odds:{odds_id}:conflicting-duplicate")
+                            invalid_rows += 1
+            odds_rows = list(historical_odds.values())
+            if odds_rows:
+                object_key = f"odds/season={season}/league={league}/date={day.isoformat()}.parquet"
+                previous_status = tracker.get_status(object_key)
+                object_exists = store.object_exists(object_key)
+                # A date/league odds partition might already contain captured
+                # operational quotes. Never replace it with a different source
+                # snapshot. FAILED + missing object is safe to retry.
+                if not object_exists and previous_status in {None, ArchiveStatus.FAILED}:
+                    _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
+                    receipt = archive_rows(store, tracker, dataset="odds", season=season, league=league,
+                                           day=day, rows=odds_rows)
+                    odds_written += len(odds_rows)
+                    archive_count += len(odds_rows)
+                    r2_objects += 1
+                    r2_bytes += int(receipt.get("size_bytes", 0))
+                else:
+                    odds_skipped += len(odds_rows)
+            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
             raw_results = caller.call("get_results", day)
-            final_results = []
+            results_by_id: dict[str, dict] = {}
             match_ids = {match["provider_match_id"] for match in normalized}
             for payload in raw_results:
                 try:
@@ -260,51 +415,74 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 except (KeyError, TypeError, ValueError):
                     failed_ids.append(str(payload.get("provider_match_id", payload.get("id", "unknown")))
                                       if isinstance(payload, dict) else "unknown")
+                    invalid_rows += 1
                     continue
                 if result["status"] == "FINAL" and result["provider_match_id"] in match_ids:
-                    final_results.append(result)
-            final_results = [item for item in final_results if item["status"] == "FINAL"
-                             and item["provider_match_id"] in match_ids]
+                    if result["provider_match_id"] in results_by_id:
+                        duplicates += 1
+                    else:
+                        results_by_id[result["provider_match_id"]] = result
+            final_results = list(results_by_id.values())
             if final_results:
                 verified_at = datetime.now(timezone.utc)
                 for item in final_results:
                     item.update({"league_id": league, "season": season, "verified_at": verified_at})
-                archive_rows(store, tracker, dataset="results", season=season, league=league,
-                             day=day, rows=final_results)
+                _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
+                receipt = archive_rows(store, tracker, dataset="results", season=season, league=league,
+                                       day=day, rows=final_results)
                 archive_count += len(final_results)
+                results_written += len(final_results)
+                r2_objects += 1
+                r2_bytes += int(receipt.get("size_bytes", 0))
             archived += archive_count
-            progress.records_seen = len(raw)
-            progress.records_archived = archive_count
-            progress.records_failed = len(failed_ids)
-            progress.failed_match_ids = sorted(set(failed_ids))
-            progress.status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
-            session.commit()
+            status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
+            _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
+                "records_seen": len(raw), "records_archived": archive_count,
+                "records_failed": len(failed_ids), "failed_match_ids": sorted(set(failed_ids)),
+                "status": status,
+                "error_code": "PROVIDER_FAILURE" if provider_failures else "INVALID_PROVIDER_RECORDS" if failed_ids else None,
+            })
             records_failed += len(failed_ids)
             if failed_ids:
                 partial += 1
             else:
                 completed += 1
+        except KeyboardInterrupt:
+            session.rollback()
+            _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
+                "status": "PARTIAL", "records_failed": 0, "error_code": "JOB_INTERRUPTED",
+            })
+            raise
         except Exception as exc:
             session.rollback()
-            progress = session.scalar(select(HistoricalIngestDay).where(
-                HistoricalIngestDay.provider == caller.provider.name,
-                HistoricalIngestDay.season == season,
-                HistoricalIngestDay.league_id == league,
-                HistoricalIngestDay.ingest_date == day,
-            ))
-            if progress:
-                progress.status = "FAILED"
-                progress.records_failed = max(1, progress.records_failed or 0)
-                progress.error_code = getattr(exc, "code", "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())[:80]
-                session.commit()
+            error_texts = []
+            cause = exc
+            while cause is not None:
+                error_texts.append(str(cause).lower())
+                cause = cause.__cause__
+            if any(marker in " ".join(error_texts) for marker in
+                   ("checksum", "row count", "unexpected size", "archive object is missing")):
+                checksum_failures += 1
+            error_code = getattr(exc, "code", None) or (
+                "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())
+            _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
+                "status": "FAILED", "records_failed": 1, "error_code": error_code[:80],
+            })
             failed += 1
             records_failed += 1
         day += timedelta(days=1)
     status = "PARTIAL" if (failed or partial) and (completed or partial or archived) else "FAILED" if failed else "PARTIAL" if partial else "SUCCESS" if archived else "SKIPPED"
     return {"status": status, "records_seen": seen, "records_written": archived,
-            "records_skipped": completed if not archived else max(0, completed - 1),
+            "records_skipped": dates_skipped + (completed if not archived else max(0, completed - 1)),
             "records_failed": records_failed, "dates_completed": completed, "dates_partial": partial, "dates_failed": failed,
-            "odds_history": "UNAVAILABLE_UNLESS_PROVIDER_ADAPTER_EXPOSES_HISTORICAL_ODDS"}
+            "dates_skipped": dates_skipped,
+            "matches_written": matches_written, "results_written": results_written,
+            "odds_written": odds_written, "odds_skipped_conflict": odds_skipped,
+            "provider_failures": provider_failures,
+            "odds_history": "OPENING_LATEST_ONLY_NO_CLOSING" if odds_fetch_supported else "NOT_SUPPORTED",
+            "duplicates": duplicates, "invalid_rows": invalid_rows, "r2_objects": r2_objects,
+            "r2_bytes": r2_bytes, "checksum_failures": checksum_failures,
+            "postgres_rows_written": 0, "postgres_rows_deleted": 0}
 def ingest_results(session: Session, caller: Any, day: date) -> dict[str, Any]:
     raw = caller.call("get_results", day)
     try:
@@ -418,6 +596,7 @@ def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: da
     cutoff = (today or datetime.now(timezone.utc).date()) - timedelta(days=1)
     jobs = session.scalars(select(ArchiveJob).where(
         ArchiveJob.status == ArchiveStatus.VERIFIED.value,
+        ArchiveJob.dataset_type.in_(("odds", "results", "matches")),
         ArchiveJob.archive_date < cutoff,
         ArchiveJob.checksum.is_not(None),
         ArchiveJob.verified_at.is_not(None),
@@ -441,30 +620,50 @@ def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: da
 
         day_start = datetime.combine(job.archive_date, time.min, tzinfo=timezone.utc)
         day_end = day_start + timedelta(days=1)
+        season_segment = next((part for part in parts if part.startswith("season=")), None)
+        if season_segment is None:
+            continue
+        season_id = season_segment.removeprefix("season=")
         if job.dataset_type == "odds":
-            query = delete(ActiveOdds).where(ActiveOdds.captured_at >= day_start, ActiveOdds.captured_at < day_end)
-            if job.league:
-                query = query.where(ActiveOdds.match_id.in_(
-                    select(ActiveMatch.id).where(ActiveMatch.league_id == job.league)))
+            match_scope = select(ActiveMatch.id).where(
+                ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
+            query = delete(ActiveOdds).where(
+                ActiveOdds.captured_at >= day_start, ActiveOdds.captured_at < day_end,
+                ActiveOdds.match_id.in_(match_scope))
             session.execute(query)
         elif job.dataset_type == "results":
-            query = delete(MatchResult).where(func.coalesce(MatchResult.finished_at, MatchResult.verified_at) >= day_start, func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < day_end,
-                                               MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None))
-            session.execute(query)
-        elif job.dataset_type == "predictions":
-            query = delete(Prediction).where(Prediction.created_at >= day_start, Prediction.created_at < day_end,
-                                              Prediction.status.in_(("WON", "LOST")))
-            if session.scalar(select(func.count()).select_from(CouponItem).where(CouponItem.prediction_id.in_(
-                select(Prediction.id).where(Prediction.created_at >= day_start, Prediction.created_at < day_end)
-            ))):
-                continue
+            match_scope = select(ActiveMatch.id).where(
+                ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
+            query = delete(MatchResult).where(
+                func.coalesce(MatchResult.finished_at, MatchResult.verified_at) >= day_start,
+                func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < day_end,
+                MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None),
+                MatchResult.match_id.in_(match_scope))
             session.execute(query)
         elif job.dataset_type == "matches":
-            # ActiveMatch has cascading foreign keys. Retain it while any dependent operational
-            # record remains, so a match archive can never silently erase unarchived odds/results.
-            match_ids = select(ActiveMatch.id).where(ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end)
+            # Historical R2 fixtures are the source of truth. Re-read their IDs
+            # and retain product records before deleting the expiring active row.
+            from app.storage.r2 import parquet_rows
+            archived_ids = {str(row.get("provider_match_id")) for row in
+                            parquet_rows(store.get_object(job.r2_key))
+                            if row.get("provider_match_id") is not None}
+            eligible = session.scalars(select(ActiveMatch).where(
+                ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end,
+                ActiveMatch.expires_at <= datetime.now(timezone.utc),
+                ActiveMatch.season == season_id,
+                ActiveMatch.league_id == job.league,
+            ).with_for_update()).all()
+            if any(match.provider_match_id not in archived_ids for match in eligible):
+                continue
+            match_ids = [match.id for match in eligible]
+            if not match_ids:
+                job.status = ArchiveStatus.DELETED.value
+                job.deleted_at = datetime.now(timezone.utc)
+                session.commit()
+                count += 1
+                continue
             if job.league:
-                match_ids = match_ids.where(ActiveMatch.league_id == job.league)
+                match_ids = [match.id for match in eligible if match.league_id == job.league]
             dependent = (
                 session.scalar(select(func.count()).select_from(ActiveOdds).where(ActiveOdds.match_id.in_(match_ids))) or
                 session.scalar(select(func.count()).select_from(MatchResult).where(MatchResult.match_id.in_(match_ids))) or

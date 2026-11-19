@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from app.core.config import ENV_FILE, PROJECT_ROOT, Settings
 
 
@@ -63,3 +65,16 @@ def test_malformed_database_url_is_rejected_without_echoing_it(monkeypatch):
     settings = Settings(_env_file=None, database_url="not-a-valid-database-url")
     assert settings.database_url_valid is False
     assert settings.database_url_issues == ("DATABASE_URL",)
+
+
+def test_historical_backfill_season_window_covers_three_requested_seasons():
+    from datetime import date
+    from app.jobs.historical_backfill import season_window
+
+    today = date(2026, 11, 17)
+    assert season_window("2024-2025", today=today) == (date(2024, 7, 1), date(2025, 6, 30))
+    assert season_window("2025-2026", today=today) == (date(2025, 7, 1), date(2026, 6, 30))
+    assert season_window("2026-2027", today=today) == (date(2026, 7, 1), today)
+    assert season_window("2027-2028", today=today) is None
+    with pytest.raises(ValueError):
+        season_window("2024-25", today=today)

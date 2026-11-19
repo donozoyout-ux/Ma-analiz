@@ -5,26 +5,46 @@ import time
 from datetime import datetime, timezone
 
 from app.core.config import get_settings
-from app.jobs.ledger import MemoryLedger, SQLLedger, prune_job_history
+from app.jobs.ledger import MemoryLedger, SQLLedger, prune_job_history, run_idempotent_job
 from app.jobs.tasks import run_task
 from app.db.session import SessionLocal
 
 settings = get_settings()
 logging.basicConfig(level=settings.log_level, format="%(message)s")
 logger = logging.getLogger("sports.worker")
+_last_prune_check_slot: int | None = None
 
 
 def cycle(now: datetime | None = None) -> list[dict]:
+    global _last_prune_check_slot
     timestamp = now or datetime.now(timezone.utc)
-    bucket = timestamp.strftime("%Y-%m-%dT%H")
-    job_types = ("collect_matches", "collect_odds", "process_results")
+    job_specs = (
+        ("collect_matches", settings.worker_match_interval_seconds),
+        ("collect_odds", settings.worker_odds_interval_seconds),
+        ("process_results", settings.worker_results_interval_seconds),
+        ("scheduled_scan", settings.worker_scanner_interval_seconds),
+    )
+    scheduled = []
+    for job_type, raw_interval in job_specs:
+        interval = max(60, raw_interval)
+        slot_seconds = int(timestamp.timestamp() // interval) * interval
+        slot = datetime.fromtimestamp(slot_seconds, tz=timezone.utc)
+        scheduled.append((job_type, f"{job_type}:{slot.isoformat()}"))
     if SessionLocal is None:
         ledger = MemoryLedger()
-        return [run_task(name, f"{name}:{bucket}", ledger) for name in job_types]
+        return [run_task(name, key, ledger) for name, key in scheduled]
     with SessionLocal() as session:
         ledger = SQLLedger(session)
-        outcomes = [run_task(name, f"{name}:{bucket}", ledger) for name in job_types]
-        prune_job_history(session)
+        outcomes = [run_task(name, key, ledger) for name, key in scheduled]
+        prune_interval = max(60, settings.worker_prune_interval_seconds)
+        prune_slot = int(timestamp.timestamp() // prune_interval) * prune_interval
+        if _last_prune_check_slot != prune_slot:
+            prune_key = f"prune_job_history:{datetime.fromtimestamp(prune_slot, tz=timezone.utc).isoformat()}"
+            outcomes.append(run_idempotent_job(
+                ledger, prune_key, "prune_job_history",
+                lambda: {"status": "SUCCESS", "records_written": prune_job_history(session)},
+            ))
+            _last_prune_check_slot = prune_slot
         return outcomes
 
 

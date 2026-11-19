@@ -37,6 +37,20 @@ class StorageMonitor:
         with self.engine.connect() as connection:
             return int(connection.execute(text("SELECT pg_database_size(current_database())")).scalar_one())
 
+    def historical_ingestion_status(self) -> str:
+        """Return a PostgreSQL-only guard status without contacting R2 or providers."""
+        if self.engine is None:
+            return "DATABASE_NOT_CONFIGURED"
+        if getattr(getattr(self.engine, "dialect", None), "name", None) != "postgresql":
+            return "NOT_APPLICABLE"
+        try:
+            size = self.get_database_size()
+            if size is None:
+                return "DATABASE_NOT_CONFIGURED"
+            return postgres_status(size, self.settings)
+        except Exception:
+            return "DATABASE_STORAGE_CHECK_FAILED"
+
     def get_table_sizes(self, limit: int = 10) -> list[dict]:
         if self.engine is None:
             return []

@@ -21,6 +21,10 @@ from app.providers.base import ProviderInvalidResponse, ProviderNotConfigured, P
 BOOKMAKERS = {"3": "Crown", "8": "Bet365", "31": "Sbobet"}
 _UTC_PLUS_8 = timezone(timedelta(hours=8))
 _SCORE = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
+# Goaloo's three UEFA competition pages use the cup JSON contract (`c<ID>`),
+# while domestic leagues use the standard league contract (`s<ID>`). These IDs
+# are verified from Goaloo's live league pages and response identities.
+_CUP_LEAGUES = {"103", "113", "2187"}
 
 
 class GoalooProvider:
@@ -40,6 +44,12 @@ class GoalooProvider:
         self.last_latency_ms: float | None = None
         self.last_successful_request: datetime | None = None
         self._fixture_cache: dict[str, dict[str, Any]] = {}
+        self._season_cache: dict[str, list[str]] = {}
+        # A worker task may process multiple dates/seasons in one run. Keep the
+        # provider's season JSON stable for that provider instance and avoid
+        # downloading the same full-season schedule once per date.
+        self._schedule_cache: dict[tuple[str, str], dict[str, Any]] = {}
+        self._matches_by_day_cache: dict[tuple[str, str], dict[date, list[dict[str, Any]]]] = {}
 
     def close(self) -> None:
         if self._owns_client:
@@ -90,10 +100,13 @@ class GoalooProvider:
                 "last_successful_request": self.last_successful_request.isoformat()}
 
     def _seasons(self, league_id: str) -> list[str]:
+        if league_id in self._season_cache:
+            return self._season_cache[league_id]
         payload = self._get(f"{self.base_url}/jsData/leagueSeason/sea{league_id}.json")
         seasons = payload.get("SeasonList") if isinstance(payload, dict) else None
         if not isinstance(seasons, list) or any(not isinstance(item, str) for item in seasons):
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo SeasonList schema changed")
+        self._season_cache[league_id] = seasons
         return seasons
 
     def get_seasons(self, league_id: str) -> list[dict]:
@@ -104,18 +117,88 @@ class GoalooProvider:
     def _schedule(self, league_id: str, season: str) -> dict[str, Any]:
         if not re.fullmatch(r"\d{4}-\d{4}", season) or not str(league_id).isdigit():
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: invalid Goaloo season or league ID")
-        payload = self._get(f"{self.base_url}/jsData/matchResult/json/{season}/s{league_id}_en.json")
-        if not isinstance(payload, dict) or not all(key in payload for key in ("LeagueInfo", "TeamInfo", "ScheduleList")):
+        cache_key = (str(league_id), season)
+        if cache_key in self._schedule_cache:
+            return self._schedule_cache[cache_key]
+        is_cup = str(league_id) in _CUP_LEAGUES
+        prefix = "c" if is_cup else "s"
+        payload = self._get(f"{self.base_url}/jsData/matchResult/json/{season}/{prefix}{league_id}_en.json")
+        team_key = "TeamList" if is_cup else "TeamInfo"
+        if not isinstance(payload, dict) or not all(key in payload for key in ("LeagueInfo", team_key, "ScheduleList")):
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo schedule schema changed")
-        if not isinstance(payload["LeagueInfo"], list) or not isinstance(payload["TeamInfo"], list) or not isinstance(payload["ScheduleList"], dict):
+        if not isinstance(payload["LeagueInfo"], list) or not isinstance(payload[team_key], list) or not isinstance(payload["ScheduleList"], dict):
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo schedule sections have invalid types")
+        league_info = payload["LeagueInfo"]
+        if len(league_info) < 3 or str(league_info[0]) != str(league_id):
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo LeagueInfo identity mismatch")
+        if is_cup:
+            if len(league_info) < 4 or not str(league_info[1]).strip():
+                raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo cup LeagueInfo schema changed")
+        elif str(league_info[2]) != season:
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo LeagueInfo season mismatch")
+        # Validate every actual fixture row against the requested season. The
+        # cup response's LeagueInfo[3] describes the current page season even
+        # when an older season file is requested, so fixture dates are the
+        # authoritative guard for that contract.
+        start_year = int(season[:4])
+        season_start, season_end = date(start_year, 7, 1), date(start_year + 1, 6, 30)
+        fixture_count = 0
+        for round_rows in self._schedule_rounds(payload["ScheduleList"]):
+            for row in round_rows:
+                if self._is_schedule_metadata(row):
+                    continue
+                if not isinstance(row, list) or len(row) < 8 or not isinstance(row[3], str):
+                    raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo match row schema changed")
+                try:
+                    fixture_day = datetime.strptime(row[3], "%Y-%m-%d %H:%M").date()
+                except ValueError:
+                    raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo kickoff format is unknown") from None
+                if season_start <= fixture_day <= season_end:
+                    fixture_count += 1
+        if not fixture_count:
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo schedule contains no verified fixtures")
+        self._schedule_cache[cache_key] = payload
         return payload
+
+    @staticmethod
+    def _schedule_rounds(schedule: dict[str, Any]) -> list[list[list[Any]]]:
+        """Flatten Goaloo's nested group/round maps into fixture-row arrays."""
+        rounds: list[list[list[Any]]] = []
+
+        def visit(node: Any) -> None:
+            if isinstance(node, dict):
+                for value in node.values():
+                    visit(value)
+                return
+            if isinstance(node, list) and all(
+                isinstance(row, list) and row and not isinstance(row[0], (list, dict))
+                for row in node
+            ):
+                rounds.append(node)
+                return
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo schedule round is not an array")
+
+        visit(schedule)
+        return rounds
+
+    @staticmethod
+    def _is_schedule_metadata(row: Any) -> bool:
+        """Recognize observed Goaloo cup/group header rows, not fixtures."""
+        return (
+            isinstance(row, list)
+            and len(row) in {5, 6}
+            and all(isinstance(value, int) for value in row[:4])
+            and any(isinstance(value, list) for value in row[4:])
+        )
 
     @staticmethod
     def _league(payload: dict[str, Any], league_id: str, season: str) -> dict[str, Any]:
         row = payload["LeagueInfo"]
-        if len(row) < 3 or str(row[0]) != league_id or str(row[2]) != season:
+        is_cup = str(league_id) in _CUP_LEAGUES
+        if len(row) < (4 if is_cup else 3) or str(row[0]) != league_id:
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo LeagueInfo identity mismatch")
+        if not is_cup and str(row[2]) != season:
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo LeagueInfo season mismatch")
         return {"id": league_id, "name": str(row[1]), "season": season, "source": "goaloo"}
 
     def get_leagues(self) -> list[dict]:
@@ -144,7 +227,10 @@ class GoalooProvider:
     @staticmethod
     def _teams(payload: dict[str, Any]) -> dict[str, str]:
         teams = {}
-        for row in payload["TeamInfo"]:
+        team_rows = payload.get("TeamList", payload.get("TeamInfo"))
+        if not isinstance(team_rows, list):
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo team list schema changed")
+        for row in team_rows:
             if not isinstance(row, list) or len(row) < 2:
                 raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo TeamInfo row schema changed")
             teams[str(row[0])] = str(row[1])
@@ -160,10 +246,10 @@ class GoalooProvider:
         league = self._league(payload, league_id, season)
         teams = self._teams(payload)
         result = []
-        for round_rows in payload["ScheduleList"].values():
-            if not isinstance(round_rows, list):
-                raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo ScheduleList round is not an array")
+        for round_rows in self._schedule_rounds(payload["ScheduleList"]):
             for row in round_rows:
+                if self._is_schedule_metadata(row):
+                    continue
                 if not isinstance(row, list) or len(row) < 8:
                     raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo match row schema changed")
                 status_code = str(row[2])
@@ -173,6 +259,11 @@ class GoalooProvider:
                 except KeyError:
                     raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo fixture references unknown team") from None
                 start_time = self._kickoff(row[3])
+                fixture_day = datetime.strptime(row[3], "%Y-%m-%d %H:%M").date()
+                season_start = date(int(season[:4]), 7, 1)
+                season_end = date(int(season[:4]) + 1, 6, 30)
+                if not season_start <= fixture_day <= season_end:
+                    continue
                 score = str(row[6])
                 normalized = {"provider": self.name, "provider_match_id": str(row[0]),
                     "league_id": league_id, "league_name": league["name"], "season": season,
@@ -189,9 +280,13 @@ class GoalooProvider:
         result = []
         for league_id in self.league_ids:
             for season in self._season_choices(league_id):
-                for match in self._match_rows(league_id, season):
-                    if match["start_time"].date() != day:
-                        continue
+                cache_key = (str(league_id), season)
+                if cache_key not in self._matches_by_day_cache:
+                    by_day: dict[date, list[dict[str, Any]]] = {}
+                    for match in self._match_rows(league_id, season):
+                        by_day.setdefault(match["start_time"].date(), []).append(match)
+                    self._matches_by_day_cache[cache_key] = by_day
+                for match in self._matches_by_day_cache[cache_key].get(day, []):
                     if match["status"] == "UNKNOWN":
                         raise ProviderUnavailable("PROVIDER_UNAVAILABLE: unverified Goaloo match status code")
                     result.append(match)
