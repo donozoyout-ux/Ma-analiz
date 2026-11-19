@@ -160,9 +160,9 @@ def archive_data(day: date | None = None) -> dict[str, Any]:
             seasons, leagues = settings.enabled_season_ids, settings.enabled_league_ids
             if seasons and leagues:
                 historical_results = [historical_ingest(
-                    session, caller, store, season=seasons[0], league=league,
+                    session, caller, store, season=season, league=league,
                     start_date=target_day, end_date=target_day,
-                ) for league in leagues]
+                ) for season in seasons for league in leagues]
             else:
                 historical_results = [{"status": "SKIPPED", "error_code": "HISTORICAL_SCOPE_NOT_CONFIGURED",
                                        "records_seen": 0, "records_written": 0, "records_skipped": 0,

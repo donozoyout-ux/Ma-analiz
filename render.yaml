@@ -34,6 +34,48 @@ services:
       - key: PROVIDER_MAX_RETRIES
         value: "3"
       - key: ENABLED_LEAGUES
+        value: "36,30,31,8,11,16,7,27,103,113,2187"
+      - key: ENABLED_SEASONS
+        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+      - key: HISTORICAL_START_DATE
+        value: "2021-07-01"
+      - key: POSTGRES_NORMAL_MB
+        value: "300"
+      - key: POSTGRES_WARNING_MB
+        value: "500"
+      - key: POSTGRES_HIGH_MB
+        value: "750"
+      - key: POSTGRES_CRITICAL_MB
+        value: "750"
+      - key: ACTIVE_STATE_RETENTION_DAYS
+        value: "14"
+      - key: ODDS_RETENTION_DAYS
+        value: "30"
+      - key: JOB_HISTORY_RETENTION_DAYS
+        value: "30"
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: AI_PROVIDER
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false
+      - key: GROQ_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
         sync: false
   - type: worker
     name: mac-analiz-worker
@@ -65,9 +107,11 @@ services:
       - key: PROVIDER_MAX_RETRIES
         value: "3"
       - key: ENABLED_LEAGUES
-        sync: false
+        value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
-        sync: false
+        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+      - key: HISTORICAL_START_DATE
+        value: "2021-07-01"
       - key: WORKER_INTERVAL_SECONDS
         value: "300"
       - key: WORKER_MATCH_INTERVAL_SECONDS
@@ -86,6 +130,18 @@ services:
         value: "3600"
       - key: JOB_HISTORY_RETENTION_DAYS
         value: "30"
+      - key: ACTIVE_STATE_RETENTION_DAYS
+        value: "14"
+      - key: ODDS_RETENTION_DAYS
+        value: "30"
+      - key: POSTGRES_NORMAL_MB
+        value: "300"
+      - key: POSTGRES_WARNING_MB
+        value: "500"
+      - key: POSTGRES_HIGH_MB
+        value: "750"
+      - key: POSTGRES_CRITICAL_MB
+        value: "750"
       - key: R2_ENDPOINT
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -140,9 +196,11 @@ services:
       - key: PROVIDER_MAX_RETRIES
         value: "3"
       - key: ENABLED_LEAGUES
-        sync: false
+        value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
-        sync: false
+        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+      - key: HISTORICAL_START_DATE
+        value: "2021-07-01"
       - key: R2_ENDPOINT
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -159,3 +217,15 @@ services:
         sync: false
       - key: JOB_HISTORY_RETENTION_DAYS
         value: "30"
+      - key: ACTIVE_STATE_RETENTION_DAYS
+        value: "14"
+      - key: ODDS_RETENTION_DAYS
+        value: "30"
+      - key: POSTGRES_NORMAL_MB
+        value: "300"
+      - key: POSTGRES_WARNING_MB
+        value: "500"
+      - key: POSTGRES_HIGH_MB
+        value: "750"
+      - key: POSTGRES_CRITICAL_MB
+        value: "750"

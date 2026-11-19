@@ -35,9 +35,12 @@ ODDS_FIXTURE = {
 
 
 def test_goaloo_seasons_schedule_timezone_and_results_are_normalized():
+    request_counts = {"seasons": 0, "schedule": 0}
     def handler(request):
         if request.url.path.endswith("sea36.json"):
+            request_counts["seasons"] += 1
             return httpx.Response(200, content=b"\xef\xbb\xbf" + json.dumps({"SeasonList": ["2024-2025"]}).encode(), request=request)
+        request_counts["schedule"] += 1
         return httpx.Response(200, json=SCHEDULE_FIXTURE, request=request)
 
     client = httpx.Client(transport=httpx.MockTransport(handler))
@@ -47,7 +50,10 @@ def test_goaloo_seasons_schedule_timezone_and_results_are_normalized():
     assert matches[0]["status"] == "FINISHED"
     assert matches[0]["start_time"] == datetime(2024, 8, 16, 19, tzinfo=timezone.utc)
     assert provider.get_results(date(2024, 8, 16))[0]["home_score"] == 1
-    assert provider.get_leagues()[0]["name"] == "Example League"
+    assert provider.get_leagues()[0] == {
+        "id": "36", "name": "Example League", "season": "2024-2025", "source": "goaloo"
+    }
+    assert request_counts == {"seasons": 1, "schedule": 1}
     client.close()
 
 
@@ -122,4 +128,58 @@ def test_goaloo_latest_snapshot_is_never_inferred_to_be_closing():
     assert {row["snapshot_type"] for row in odds if row["period"] == "PREMATCH"} == {"LATEST"}
     assert all(row["snapshot_type"] != "CLOSING" for row in odds)
     assert all(row["snapshot_type"] == "LIVE" for row in odds if row["period"] == "LIVE")
+    client.close()
+
+
+def test_goaloo_uefa_cup_contract_uses_c_schedule_and_skips_round_metadata():
+    # TEST FIXTURE: reduced shape based on the live Goaloo cup contract. No
+    # fixture rows from this test are written to production storage.
+    cup_schedule = {
+        "LeagueInfo": [103, "UEFA Champions League", "UEFA CL", "2026-2027", "", "", "", ""],
+        "TeamList": [[166, "Home FC", "HOM", ""], [254, "Away FC", "AWY", ""]],
+        "ScheduleList": {
+            "sub_500": {"G1": [
+                [21328, 383, 4, 1, []],
+                [21329, 384, 4, 1, [], []],
+                [2659257, 103, -1, "2024-09-18 00:45", 166, 254, "3-1", "2-0"],
+            ]}
+        },
+    }
+
+    def handler(request):
+        if request.url.path.endswith("sea103.json"):
+            return httpx.Response(200, json={"SeasonList": ["2024-2025"]}, request=request)
+        assert request.url.path.endswith("/2024-2025/c103_en.json")
+        return httpx.Response(200, json=cup_schedule, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = GoalooProvider(
+        base_url="https://football.goaloo.test", league_ids=("103",),
+        season_ids=("2024-2025",), client=client,
+    )
+    assert provider.get_leagues() == [{
+        "id": "103", "name": "UEFA Champions League", "season": "2024-2025", "source": "goaloo"
+    }]
+    fixtures = provider._match_rows("103", "2024-2025")
+    assert len(fixtures) == 1
+    assert fixtures[0]["provider_match_id"] == "2659257"
+    assert fixtures[0]["home_team"] == "Home FC"
+    client.close()
+
+
+def test_goaloo_rejects_fixture_outside_requested_season():
+    outside = {
+        **SCHEDULE_FIXTURE,
+        "ScheduleList": {"R_1": [[1, 36, -1, "2025-08-17 03:00", 27, 29, "1-0", "0-0"]]},
+    }
+
+    def handler(request):
+        if request.url.path.endswith("sea36.json"):
+            return httpx.Response(200, json={"SeasonList": ["2024-2025"]}, request=request)
+        return httpx.Response(200, json=outside, request=request)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    provider = GoalooProvider(base_url="https://football.goaloo.test", league_ids=("36",), client=client)
+    with pytest.raises(ProviderInvalidResponse, match="no verified fixtures"):
+        provider.get_matches(date(2025, 8, 16))
     client.close()

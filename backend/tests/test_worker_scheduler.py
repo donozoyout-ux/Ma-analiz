@@ -300,3 +300,64 @@ def test_daily_archive_reports_unexpected_exception_as_json_failure(monkeypatch,
     payload = json.loads(capsys.readouterr().out)
     assert all(job["status"] == "FAILED" for job in payload["jobs"])
     assert all("error_code" in job and "credentials" not in job for job in payload["jobs"])
+
+
+def test_archive_data_processes_every_configured_season_and_league(monkeypatch):
+    from contextlib import nullcontext
+    from app.core.config import Settings
+    from app.jobs import tasks
+
+    settings = Settings(enabled_seasons="2024-2025,2025-2026,2026-2027", enabled_leagues="36")
+    calls = []
+    monkeypatch.setattr(tasks, "get_settings", lambda: settings)
+    monkeypatch.setattr(tasks, "R2ObjectStore", lambda: object())
+    monkeypatch.setattr(tasks, "SessionLocal", lambda: nullcontext(object()))
+    monkeypatch.setattr(tasks, "_caller", lambda: object())
+
+    def archive_active(_session, _store):
+        return {"odds": 0, "results": 0, "predictions": 0}
+
+    def ingest(_session, _caller, _store, *, season, league, start_date, end_date):
+        calls.append((season, league, start_date, end_date))
+        return {"status": "SUCCESS", "records_written": 1, "records_failed": 0, "records_skipped": 0}
+
+    monkeypatch.setattr("app.jobs.ingestion.archive_expired_active_state", archive_active)
+    monkeypatch.setattr("app.jobs.ingestion.historical_ingest", ingest)
+    result = tasks.archive_data(date(2026, 11, 17))
+
+    assert [row[0] for row in calls] == ["2024-2025", "2025-2026", "2026-2027"]
+    assert all(row[1] == "36" and row[2] == row[3] == date(2026, 11, 16) for row in calls)
+    assert result["records_written"] == 3
+
+
+def test_historical_backfill_dry_run_plans_only_enabled_scope(monkeypatch, capsys):
+    from app.core.config import Settings
+    from app.jobs import historical_backfill
+
+    monkeypatch.setattr(historical_backfill, "get_settings", lambda: Settings(
+        enabled_leagues="36,30", enabled_seasons="2021-2022,2024-2025",
+        historical_start_date=date(2021, 7, 1)))
+    result = historical_backfill.main([
+        "--league", "36", "--season", "2021-2022", "--start-date", "2021-08-01",
+        "--end-date", "2021-08-05", "--batch-size", "2", "--dry-run",
+    ])
+    payload = json.loads(capsys.readouterr().out)
+    assert result == 0
+    assert payload["status"] == "DRY_RUN" and payload["writes"] is False
+    assert len(payload["scopes"]) == 1
+    assert payload["scopes"][0]["league"] == "36"
+    assert payload["scopes"][0]["dates_requested"] == 5
+    assert payload["batch_size"] == 2
+
+
+def test_historical_backfill_totals_include_matches_seen():
+    from app.jobs.historical_backfill import _add_totals, empty_totals
+
+    totals = empty_totals()
+    _add_totals(totals, {"records_seen": 8, "matches_seen": 7, "dates_requested": 2,
+                         "dates_completed": 1, "dates_failed": 1, "matches_written": 4})
+    assert totals["records_seen"] == 8
+    assert totals["matches_seen"] == 7
+    assert totals["dates_requested"] == 2
+    assert totals["failed_dates"] == 1
+    assert totals["matches_written"] == 4

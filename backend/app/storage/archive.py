@@ -149,6 +149,49 @@ def archive_partition(
         # The upload is still useful without a database ledger, but callers cannot use it to authorize DB cleanup.
         pass
 
+    # Deterministic keys are immutable. A pre-existing object is reusable only
+    # if its complete bytes and verification metadata match this payload.
+    try:
+        existing = store.head_object(key)
+    except Exception as exc:
+        if tracker and tracker.get_status(key) != ArchiveStatus.FAILED:
+            tracker.set_status(key=key, day=day, dataset=dataset, league=league,
+                               status=ArchiveStatus.FAILED, rows=len(rows), size=len(payload), checksum=checksum)
+        raise RuntimeError("Archive object existence check failed; source records must be retained") from exc
+    if existing is not None:
+        try:
+            existing_payload = store.get_object(key)
+            metadata = existing.metadata or {}
+            reusable = (
+                existing.size == len(payload)
+                and hashlib.sha256(existing_payload).hexdigest() == checksum
+                and parquet_row_count(existing_payload) == len(rows)
+                and metadata.get("sha256") == checksum
+                and metadata.get("row-count") == str(len(rows))
+                and metadata.get("archive-key") == key
+            )
+        except Exception:
+            reusable = False
+        if not reusable:
+            if tracker and tracker.get_status(key) != ArchiveStatus.FAILED:
+                tracker.set_status(key=key, day=day, dataset=dataset, league=league,
+                                   status=ArchiveStatus.FAILED, rows=len(rows), size=len(payload), checksum=checksum)
+            raise RuntimeError("Conflicting archive object exists; refusing to overwrite it")
+        if tracker:
+            current = tracker.get_status(key)
+            if current == ArchiveStatus.PENDING:
+                tracker.set_status(key=key, day=day, dataset=dataset, league=league,
+                                   status=ArchiveStatus.UPLOADING, rows=len(rows))
+                current = ArchiveStatus.UPLOADING
+            if current == ArchiveStatus.UPLOADING:
+                tracker.set_status(key=key, day=day, dataset=dataset, league=league,
+                                   status=ArchiveStatus.UPLOADED, rows=len(rows), size=len(payload), checksum=checksum)
+                current = ArchiveStatus.UPLOADED
+            if current == ArchiveStatus.UPLOADED:
+                tracker.set_status(key=key, day=day, dataset=dataset, league=league,
+                                   status=ArchiveStatus.VERIFIED, rows=len(rows), size=len(payload), checksum=checksum)
+        return ArchiveReceipt(key, len(rows), len(payload), checksum)
+
     last_error: Exception | None = None
     for attempt in range(retries):
         try:
