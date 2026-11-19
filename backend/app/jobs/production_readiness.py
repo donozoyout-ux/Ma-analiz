@@ -18,10 +18,10 @@ from typing import Any, Callable
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine, make_url
 
-from app.core.config import PROJECT_ROOT, get_settings
+from app.core.config import PROJECT_ROOT, Settings, get_settings
 from app.db.session import engine as app_engine
 from app.jobs.r2_smoke_test import run_smoke
 from app.providers.base import ProviderFailure
@@ -230,7 +230,9 @@ def run_readiness(*, settings: Any | None = None, db_engine: Engine | None = Non
                   goaloo_check: Callable[..., dict[str, Any]] = _check_goaloo,
                   health_check: Callable[[], dict[str, str]] = _internal_health_snapshot) -> dict[str, Any]:
     cfg = settings or get_settings()
-    db = app_engine if db_engine is None else db_engine
+    # Only the CLI default may use the module-level engine. A caller that
+    # supplies process-only settings must not fall back to an import-time one.
+    db = app_engine if db_engine is None and settings is None else db_engine
     pg = postgres_check(cfg, db)
     pg_pass = pg["connection"] == "PASS" and pg["identity"] == "PASS" and pg["version"] == "PASS"
     alembic = alembic_check(cfg, db)
@@ -249,6 +251,22 @@ def run_readiness(*, settings: Any | None = None, db_engine: Engine | None = Non
         "goaloo_details": goaloo_result,
         "internal_health": health_check(),
     }
+
+
+def run_process_environment_readiness() -> dict[str, Any]:
+    """Run the shared readiness checks using process env only, never dotenv."""
+    cfg = Settings(_env_file=None)
+    database_url = cfg.database_url
+    db_engine: Engine | None = None
+    if cfg.database_url_valid and database_url:
+        if database_url.startswith("postgresql://"):
+            database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+        db_engine = create_engine(database_url, pool_pre_ping=True)
+    try:
+        return run_readiness(settings=cfg, db_engine=db_engine, health_check=lambda: {})
+    finally:
+        if db_engine is not None:
+            db_engine.dispose()
 
 
 def execute(*, run_backfill: bool, readiness: Callable[[], dict[str, Any]] = run_readiness,

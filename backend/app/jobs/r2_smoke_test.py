@@ -31,7 +31,7 @@ def _safe_error_code(exc: Exception) -> str:
     return type(exc).__name__.upper()
 
 
-def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
+def run_smoke(*, store_factory: Callable[[], Any] | None = None,
               settings: Any | None = None) -> dict[str, Any]:
     """Run one tiny put/get/hash/delete cycle without a database dependency."""
     cfg = settings or get_settings()
@@ -66,7 +66,8 @@ def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
     key = None
     owns_object = False
     try:
-        store = store_factory()
+        store = (store_factory() if store_factory is not None
+                 else R2ObjectStore(settings=cfg))
         # A successful HEAD (including a confirmed 404 for this unique key)
         # verifies that the endpoint/bucket can be reached before any write.
         for _ in range(5):

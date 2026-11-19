@@ -8,7 +8,7 @@ from typing import Protocol
 import boto3
 from botocore.exceptions import ClientError
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 
 
 @dataclass(frozen=True)
@@ -90,8 +90,8 @@ class ParquetObjectStoreMixin:
 
 
 class R2ObjectStore(ParquetObjectStoreMixin):
-    def __init__(self) -> None:
-        cfg = get_settings()
+    def __init__(self, settings: Settings | None = None) -> None:
+        cfg = settings or get_settings()
         if not cfg.r2_configured:
             raise R2NotConfigured("R2_NOT_CONFIGURED")
         self.bucket = cfg.r2_bucket or ""

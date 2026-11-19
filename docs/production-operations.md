@@ -11,6 +11,41 @@ cd backend
 python -m app.jobs.production_readiness
 ```
 
+### Protected Web Service endpoint
+
+If Render Shell is unavailable, the same read-only gates can be run by the
+Maçanaliz Web Service process:
+
+```http
+POST /api/v1/admin/production-readiness
+X-Production-Ops-Token: <operator-held token>
+```
+
+Set `PRODUCTION_OPS_TOKEN` only in the Maçanaliz Web Service's Render
+environment. Use a strong, unique value held by the operator; never put it in
+the repository, a URL, frontend code, or logs. The endpoint returns `503` when
+the environment token is not configured and `401` when the request token is
+missing or incorrect. Send the header from a trusted operator environment; do
+not invoke it from the public dashboard/browser.
+
+The endpoint constructs fresh settings from process environment only
+(`.env` loading is disabled), then calls the shared readiness checks. It
+returns only PostgreSQL, Alembic, R2, Goaloo, and aggregate status fields. A
+successful response still has `backfill_allowed: false`. It never runs a
+migration or backfill. The R2 connectivity check writes a uniquely owned smoke
+object, verifies it, and deletes it before returning.
+
+Example request (the token is read from the operator's environment and is not
+shown in the command):
+
+```sh
+curl --fail-with-body -X POST "https://<ma-analiz-service>/api/v1/admin/production-readiness" \
+  -H "X-Production-Ops-Token: ${PRODUCTION_OPS_TOKEN}"
+```
+
+The API process must be restarted/redeployed after adding the Render variable
+before the endpoint can authenticate requests.
+
 The default command performs read-only PostgreSQL, Alembic, Goaloo and internal
 readiness checks, plus a uniquely named R2 smoke object that it reads,
 verifies, and deletes. It never runs a migration or backfill. Output contains

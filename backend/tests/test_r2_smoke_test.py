@@ -65,3 +65,19 @@ def test_r2_smoke_cleans_up_its_object_after_checksum_failure():
     assert report["checksum"] == "FAIL"
     assert report["delete"] == "PASS"
     assert store.list_objects("_smoke_tests/") == []
+
+
+def test_r2_smoke_uses_explicit_process_settings(monkeypatch):
+    settings = configured_settings()
+    store = InMemoryObjectStore()
+    received = []
+
+    def store_factory(*, settings):
+        received.append(settings)
+        return store
+
+    monkeypatch.setattr("app.jobs.r2_smoke_test.R2ObjectStore", store_factory)
+    report = run_smoke(settings=settings)
+
+    assert report["status"] == "CONNECTED"
+    assert received == [settings]

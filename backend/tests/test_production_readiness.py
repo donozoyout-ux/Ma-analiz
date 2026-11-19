@@ -138,3 +138,23 @@ def test_legacy_database_is_rejected_before_opening_connection():
         _settings(database_url="postgresql+psycopg://user:password@host/betappv33"), NeverConnect())
     assert result["error_code"] == "LEGACY_DATABASE_REJECTED"
     assert result["connection"] == "FAIL"
+
+
+def test_explicit_settings_without_engine_never_fall_back_to_import_engine(monkeypatch):
+    sentinel = object()
+    seen = []
+    monkeypatch.setattr(ops, "app_engine", sentinel)
+
+    result = ops.run_readiness(
+        settings=_settings(database_url=None, database_url_valid=False),
+        db_engine=None,
+        postgres_check=lambda _settings, engine: seen.append(engine) or {
+            "connection": "FAIL", "identity": "FAIL", "version": "FAIL"},
+        alembic_check=lambda _settings, engine: seen.append(engine) or {"status": "FAIL"},
+        r2_runner=lambda **_: {"status": "NOT_CONFIGURED"},
+        goaloo_check=lambda _settings: {"status": "FAIL"},
+        health_check=lambda: {},
+    )
+
+    assert seen == [None, None]
+    assert result["postgres"] == result["alembic"] == "FAIL"
