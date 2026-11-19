@@ -230,7 +230,9 @@ def run_readiness(*, settings: Any | None = None, db_engine: Engine | None = Non
                   goaloo_check: Callable[..., dict[str, Any]] = _check_goaloo,
                   health_check: Callable[[], dict[str, str]] = _internal_health_snapshot) -> dict[str, Any]:
     cfg = settings or get_settings()
-    db = app_engine if db_engine is None else db_engine
+    # Only the CLI default may use the module-level engine. A caller that
+    # supplies process-only settings must not fall back to an import-time one.
+    db = app_engine if db_engine is None and settings is None else db_engine
     pg = postgres_check(cfg, db)
     pg_pass = pg["connection"] == "PASS" and pg["identity"] == "PASS" and pg["version"] == "PASS"
     alembic = alembic_check(cfg, db)
@@ -252,12 +254,7 @@ def run_readiness(*, settings: Any | None = None, db_engine: Engine | None = Non
 
 
 def run_process_environment_readiness() -> dict[str, Any]:
-    """Run the shared readiness checks using process env only, never dotenv.
-
-    The endpoint passes a fresh Settings instance and engine into the same
-    ``run_readiness`` function used by the CLI.  This prevents a workstation
-    ``.env`` file or the API's import-time engine from influencing the result.
-    """
+    """Run the shared readiness checks using process env only, never dotenv."""
     cfg = Settings(_env_file=None)
     database_url = cfg.database_url
     db_engine: Engine | None = None
@@ -266,8 +263,6 @@ def run_process_environment_readiness() -> dict[str, Any]:
             database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
         db_engine = create_engine(database_url, pool_pre_ping=True)
     try:
-        # The endpoint only returns the four explicit gates. Avoid calling the
-        # general diagnostics health path, which uses the API's global settings.
         return run_readiness(settings=cfg, db_engine=db_engine, health_check=lambda: {})
     finally:
         if db_engine is not None:
