@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, router
+from app.api.routes import admin_router, health, router
 from app.core.config import get_settings
 
 app = FastAPI(title="Maç Analiz API", version="0.1.0")
@@ -19,3 +19,4 @@ def liveness() -> dict[str, str]:
 app.get("/health")(health)
 app.include_router(router, prefix="/api/v1")
 app.include_router(router, prefix="/api")
+app.include_router(admin_router, prefix="/api/v1")

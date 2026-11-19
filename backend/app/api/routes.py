@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta, timezone
+import os
+import secrets
 from typing import Any
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -24,6 +26,7 @@ from app.storage.r2 import R2NotConfigured, R2ObjectStore
 from app.storage.monitor import StorageMonitor
 
 router = APIRouter()
+admin_router = APIRouter()
 
 
 def _serialize(model) -> dict:
@@ -135,6 +138,45 @@ def system_status() -> dict:
                      "database": readiness["database"], "worker": readiness["worker"],
                      "archive": readiness["archive"]},
     }
+
+
+@admin_router.post("/admin/production-readiness", tags=["admin"])
+def production_readiness_endpoint(
+    ops_token: str | None = Header(default=None, alias="X-Production-Ops-Token"),
+) -> dict[str, Any]:
+    """Run protected, read-only production dependency gates.
+
+    No migration or backfill is invoked. The response intentionally contains
+    only status fields, never details returned by provider/database clients.
+    """
+    configured_token = os.environ.get("PRODUCTION_OPS_TOKEN")
+    if not configured_token or not configured_token.strip():
+        raise HTTPException(status_code=503, detail="PRODUCTION_OPS_UNAVAILABLE")
+    if not ops_token or not secrets.compare_digest(ops_token, configured_token):
+        raise HTTPException(status_code=401, detail="INVALID_PRODUCTION_OPS_TOKEN")
+
+    from app.jobs.production_readiness import run_process_environment_readiness
+
+    try:
+        report = run_process_environment_readiness()
+    except Exception:
+        # Do not serialize exception text: clients/drivers may include secrets.
+        return {
+            "postgresql": "FAIL", "alembic": "FAIL", "r2": "FAIL", "goaloo": "FAIL",
+            "all_gates_pass": False, "backfill_allowed": False,
+        }
+    alembic_details = report.get("alembic_details", {})
+    alembic_status = ("NEEDS_MIGRATION"
+                      if alembic_details.get("status") == "NEEDS_MIGRATION"
+                      else report.get("alembic", "FAIL"))
+    statuses = {
+        "postgresql": report.get("postgres", "FAIL"),
+        "alembic": alembic_status,
+        "r2": report.get("r2", "FAIL"),
+        "goaloo": report.get("goaloo", "FAIL"),
+    }
+    all_pass = all(value == "PASS" for value in statuses.values())
+    return {**statuses, "all_gates_pass": all_pass, "backfill_allowed": False}
 
 
 @router.get("/storage")
