@@ -105,20 +105,29 @@ def test_scheduled_scanner_claims_one_durable_slot(monkeypatch):
         engine.dispose()
 
 
-def test_scanner_skips_a_match_already_analyzed_in_the_same_slot():
+def test_scanner_skips_a_match_already_analyzed_in_the_same_slot(monkeypatch):
     import json
     from app.analysis.scanning import scan_upcoming_matches
+    from app.core.config import Settings
     from app.models import ActiveMatch, MatchAnalysis
 
     engine = create_engine("sqlite://")
     ActiveMatch.__table__.create(engine)
     MatchAnalysis.__table__.create(engine)
+    from app.models import ActiveOdds
+    ActiveOdds.__table__.create(engine)
     now = datetime.now(timezone.utc)
     match_id = uuid4()
+    monkeypatch.setattr("app.analysis.scanning.get_settings", lambda: Settings(
+        match_provider="test", enabled_leagues="league-1", enabled_seasons="2026-2027",
+        worker_scanner_interval_seconds=300, scanner_lookahead_minutes=1440,
+        scanner_max_matches_per_run=50,
+    ))
     try:
         with Session(engine) as session:
             session.add(ActiveMatch(
                 id=match_id, provider="test", provider_match_id="test-id", home_team="Home", away_team="Away",
+                league_id="league-1", season="2026-2027",
                 start_time=now + timedelta(hours=1), status="SCHEDULED", expires_at=now + timedelta(days=1),
             ))
             session.add(MatchAnalysis(

@@ -242,9 +242,9 @@ def test_live_odds_cannot_be_closing():
     as_of = datetime(2026, 11, 13, 21, tzinfo=timezone.utc)
     rows = [
         SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
-                        odds=Decimal("2.1"), captured_at=kickoff.replace(hour=19), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+                        odds=Decimal("2.1"), captured_at=kickoff.replace(hour=19), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS", snapshot_type="OPENING"),
         SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
-                        odds=Decimal("1.95"), captured_at=kickoff.replace(hour=19, minute=59), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS"),
+                        odds=Decimal("1.95"), captured_at=kickoff.replace(hour=19, minute=59), period="PREMATCH", status="AVAILABLE", source="SPORTMONKS", snapshot_type="LATEST"),
         SimpleNamespace(bookmaker="Bet365", market="1X2", selection="HOME", line=None, line_key="",
                         odds=Decimal("1.8"), captured_at=kickoff.replace(minute=5), period="LIVE", status="AVAILABLE", source="SPORTMONKS"),
         SimpleNamespace(bookmaker="Crown", market="1X2", selection="HOME", line=None, line_key="",

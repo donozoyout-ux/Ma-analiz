@@ -1,5 +1,5 @@
 """Tests use explicitly test-only wire fixtures; no fixture data is ingested."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import json
 
@@ -129,6 +129,20 @@ def test_goaloo_latest_snapshot_is_never_inferred_to_be_closing():
     assert all(row["snapshot_type"] != "CLOSING" for row in odds)
     assert all(row["snapshot_type"] == "LIVE" for row in odds if row["period"] == "LIVE")
     client.close()
+
+
+def test_latest_only_snapshot_is_never_projected_as_opening():
+    from app.analysis.odds import project_odds_snapshots
+    captured = datetime(2026, 11, 18, 12, tzinfo=timezone.utc)
+    rows = [{"bookmaker": "Bet365", "market": "1X2", "selection": "HOME", "line_key": "",
+             "odds": Decimal("1.8"), "captured_at": captured, "period": "PREMATCH",
+             "status": "AVAILABLE", "snapshot_type": "LATEST"}]
+    projection, _live = project_odds_snapshots(rows,
+        kickoff=captured + timedelta(hours=2), match_status="SCHEDULED", as_of=captured)
+    assert len(projection) == 1
+    assert projection[0]["opening"] is None
+    assert projection[0]["latest"]["snapshot_type"] == "LATEST"
+    assert projection[0]["closing"] is None
 
 
 def test_goaloo_uefa_cup_contract_uses_c_schedule_and_skips_round_metadata():

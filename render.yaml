@@ -37,6 +37,12 @@ services:
         value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
         value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+      - key: WORKER_SCANNER_INTERVAL_SECONDS
+        value: "300"
+      - key: SCANNER_LOOKAHEAD_MINUTES
+        value: "1440"
+      - key: SCANNER_MAX_MATCHES_PER_RUN
+        value: "50"
       - key: HISTORICAL_START_DATE
         value: "2021-07-01"
       - key: POSTGRES_NORMAL_MB
@@ -121,7 +127,11 @@ services:
       - key: WORKER_RESULTS_INTERVAL_SECONDS
         value: "1800"
       - key: WORKER_SCANNER_INTERVAL_SECONDS
-        value: "1800"
+        value: "300"
+      - key: SCANNER_LOOKAHEAD_MINUTES
+        value: "1440"
+      - key: SCANNER_MAX_MATCHES_PER_RUN
+        value: "50"
       - key: WORKER_PRUNE_INTERVAL_SECONDS
         value: "86400"
       - key: JOB_RUN_STALE_AFTER_SECONDS

@@ -6,13 +6,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import Settings, get_settings
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models import ActiveMatch, ActiveOdds, JobRun, MatchAnalysis, MatchResult
 
 
-def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no_bet():
+def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no_bet(monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     for table in (ActiveMatch.__table__, ActiveOdds.__table__, MatchResult.__table__, MatchAnalysis.__table__, JobRun.__table__):
         table.create(engine)
@@ -26,10 +27,18 @@ def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no
             yield session
 
     app.dependency_overrides[get_db] = dependency
+    scanner_settings = Settings(
+        provider_name="test", enabled_leagues="L", enabled_seasons="2026-2027",
+        scanner_lookahead_minutes=1440, scanner_max_matches_per_run=50,
+    )
+    app.dependency_overrides[get_settings] = lambda: scanner_settings
+    monkeypatch.setattr("app.api.routes.get_settings", lambda: scanner_settings)
+    monkeypatch.setattr("app.jobs.tasks.get_settings", lambda: scanner_settings)
+    monkeypatch.setattr("app.analysis.scanning.get_settings", lambda: scanner_settings)
     try:
         with session_factory() as session:
             session.add(ActiveMatch(id=match_id, provider="test", provider_match_id="upcoming",
-                league_id="L", home_team="Home", away_team="Away", start_time=now + timedelta(hours=2),
+                    league_id="L", season="2026-2027", home_team="Home", away_team="Away", start_time=now + timedelta(hours=2),
                 status="SCHEDULED", expires_at=now + timedelta(days=1)))
             session.add(ActiveMatch(id=past_id, provider="test", provider_match_id="past",
                 league_id="L", home_team="Home", away_team="Other", start_time=now - timedelta(days=1),
@@ -47,7 +56,8 @@ def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no
         scan = client.get("/api/scanner/results")
         assert scan.status_code == 200
         assert scan.json()[0]["signal"] == "NO BET"
-        assert scan.json()[0]["status"] == "DATA_UNAVAILABLE"
+        assert scan.json()[0]["status"] == "NO BET"
+        assert scan.json()[0]["reason"] == ["ODDS_INSUFFICIENT"]
         run = client.post(f"/api/v1/analysis/{match_id}/run")
         assert run.status_code == 200
         assert run.json()["analysis_status"] == "ODDS_MISSING"
@@ -55,8 +65,13 @@ def test_analysis_api_uses_only_verified_past_results_and_scanner_defaults_to_no
         scanner = client.post("/api/scanner/run")
         assert scanner.status_code == 200
         assert scanner.json()["matches_scanned"] == 1
+        scanner_status = client.get("/api/v1/scanner/status")
+        assert scanner_status.status_code == 200
+        assert scanner_status.json()["enabled"] is True
+        assert scanner_status.json()["provider"] == "test"
     finally:
         app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_settings, None)
         for table in (JobRun.__table__, MatchAnalysis.__table__, MatchResult.__table__, ActiveOdds.__table__, ActiveMatch.__table__):
             table.drop(engine)
         engine.dispose()
