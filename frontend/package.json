@@ -8,7 +8,8 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "smoke:production-api": "node scripts/smoke-production-api.mjs",
-    "test:single-service": "node scripts/test-single-service.mjs"
+    "test:single-service": "node scripts/test-single-service.mjs",
+    "test": "node --test scripts/test-match-filters.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

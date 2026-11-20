@@ -1,2 +1,2 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Performance(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Outcomes</div><h1 className="title">Performance</h1></div></header><RecordsPanel endpoint="performance" columns={["date","total_matches","analyzed_matches","predictions","wins","losses","hit_rate","r2_bytes","postgres_bytes"]} empty="Performance metrics are unavailable until verified outcomes exist."/></>}
+import { PerformancePanel } from "@/components/performance-panel";
+export default function Performance(){ return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / SONUÇ TAKİBİ</div><h1 className="title">Tahmin performansı</h1><p className="page-intro">Tahminlerle gerçekleşen sonuçları ayrı değerlendirin. Günlük sonuçları dönem bazında inceleyin.</p></div></header><PerformancePanel /></>; }

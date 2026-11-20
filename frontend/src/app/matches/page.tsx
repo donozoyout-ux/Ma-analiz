@@ -1,2 +1,2 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Matches(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Data</div><h1 className="title">Matches</h1></div><div className="clock">Upcoming and active</div></header><RecordsPanel endpoint="matches" columns={["start_time","league_name","home_team","away_team","status"]} empty="No active matches are available from the configured provider."/></>}
+import { MatchExplorer } from "@/components/match-explorer";
+export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Günün maçları</h1><p className="page-intro">Fikstürü keşfedin. Takımları, ligleri ve maç analizlerini tek yerden inceleyin.</p></div><span className="today-chip">Türkiye saati · UTC+3</span></header><MatchExplorer mode="today" /></>; }
