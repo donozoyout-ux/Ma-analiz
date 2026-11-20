@@ -14,14 +14,14 @@ Odds snapshots retain provider source, bookmaker entity, market, selection, opti
 
 `GET /api/v1/provider/leagues` and `GET /api/v1/provider/leagues/{league_id}/seasons` discover provider competitions/seasons; unconfigured or unavailable providers return an explicit 503 error code. `GET /api/v1/bookmakers` returns only bookmakers actually observed and stored. No bookmaker is renamed İddaa.
 
-Historical ingestion persists date-level attempt/checkpoint state and failed provider record IDs while continuing past individual malformed match/result rows. R2 stores verified historical partitions. Prior-season odds and match statistics are not recreated by the current Goaloo backfill.
+Historical ingestion persists league/season/day checkpoints, failed record IDs and per-match field coverage. Goaloo technical statistics are read from the match's observed HTML statistics section; missing values remain missing. Historical odds collection starts at 2025-26 and requires permitted source access. Goaloo's robots policy currently blocks its AJAX odds endpoint, which produces `PROVIDER_ACCESS_RESTRICTED`; latest and closing prematch timing is never inferred. Sportmonks' published odds history retention is seven days, so a token alone does not provide a complete old-season archive. See [R2 archive operation and validation](docs/r2-historical-archive.md).
 
 ## Configuration
 
 Copy `.env.example` to `.env` and configure only accounts you have:
 
 - Provider: `PROVIDER_NAME=goaloo`, `GOALOO_BASE_URL`, `GOALOO_ODDS_BASE_URL`, `PROVIDER_REQUEST_TIMEOUT_SECONDS`, `PROVIDER_REQUESTS_PER_MINUTE`, `PROVIDER_MAX_RETRIES`.
-- Scope for scheduled ingestion: `ENABLED_LEAGUES` and `ENABLED_SEASONS`, comma-separated provider IDs. The configured archive seasons are `2024-2025`, `2025-2026`, and `2026-2027`.
+- Scope for scheduled ingestion: `ENABLED_LEAGUES` and `ENABLED_SEASONS`, comma-separated provider IDs. The example archive seasons start at `2023-2024`.
 - PostgreSQL active state and job ledgers: `DATABASE_URL` (the existing app connection setting).
 - Cloudflare R2: `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_REGION` (`auto` for Cloudflare R2).
 - Telegram: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`; optional for this phase.
@@ -31,6 +31,12 @@ Never put credentials in source control, reports, or screenshots. Provider failu
 ## One-day smoke test
 
 Install `backend/requirements.txt`, set `DATABASE_URL` and R2 credentials if you want to verify writes, then select a date from actual account coverage and run from `backend`:
+
+For the R2 archive task, first run `python -m app.jobs.r2_smoke_test --parquet`, then `python -m app.jobs.historical_probe --league 36 --season 2025-2026 --date 2025-08-15`. The probe is source-only and writes neither SQL nor R2. A persisted one-day backfill requires the same league/season enabled in the environment and an applied database migration. Complete that smoke test before starting a bulk scope.
+
+For rollout without historical odds, run `python -m app.jobs.archive_preflight` for a secret-safe configuration report, then (only with configured connections and scope) `python -m app.jobs.archive_preflight --smoke --league 36 --season 2025-2026 --date 2025-08-15`. This checks PostgreSQL read-only, R2 Parquet round-trip and the real day's archives, and never invokes cleanup or bulk ingestion. `historical_backfill --skip-odds` or `HISTORICAL_COLLECT_ODDS=false` lets matches/results/statistics complete independently; a later odds-enabled run can resume the same day.
+
+Without Render Shell, temporarily replace the existing web service's Start Command with `cd backend && python -m app.jobs.archive_diagnostic_service --mode connections`, then `--mode smoke` after connection checks pass. Clear any old automatic migration Pre-Deploy Command first. No extra service is created; the normal web UI is temporarily replaced by diagnostics. See [the complete no-Shell procedure and rollback](docs/render-free-archive-diagnostics.md). Do not apply the full paid-plan Blueprint to a Free service for this test.
 
 ```text
 python -m app.jobs.provider_smoke_test --date YYYY-MM-DD

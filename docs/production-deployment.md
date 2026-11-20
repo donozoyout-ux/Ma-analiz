@@ -9,7 +9,7 @@ The frontend and FastAPI remain together in one native Python Render Web Service
 - Root Directory: repository root (`.`).
 - Region: Frankfurt.
 - Build Command: `python -m pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build`
-- Pre-Deploy Command: `cd backend && alembic upgrade head` (requires a paid Web Service plan).
+- Pre-Deploy Command: leave empty. Migrations are explicit maintenance actions, excluded from diagnostic redeploys.
 - Start Command: `node frontend/scripts/run-single-service.mjs`
 - Health Check Path: `/health/live`.
 - `PORT` is supplied by Render and used for the public Next.js server. FastAPI binds only to `127.0.0.1:8000` (`BACKEND_PORT`). The two ports must differ.
@@ -62,7 +62,7 @@ Never put secret values in Git, the Blueprint, or logs. Missing optional R2/Groq
 
 ## Migration and database
 
-Set `DATABASE_URL` to the new Maçanaliz database before enabling deployments. The paid-service Pre-Deploy Command runs `alembic upgrade head` before the new version starts. The Start Command does not run migrations. Review migration compatibility and backup/rollback procedures before the first production migration.
+Set `DATABASE_URL` to the new Maçanaliz database before enabling deployments. Neither Pre-Deploy nor Start Command runs migrations automatically. Clear any previously configured Dashboard Pre-Deploy Command before a diagnostic deploy. Review migration compatibility and backup/rollback procedures before a separately authorized production migration.
 
 The Blueprint does not create a PostgreSQL resource. Database lifecycle, backups, and credentials are managed separately.
 

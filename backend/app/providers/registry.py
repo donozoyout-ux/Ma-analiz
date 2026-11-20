@@ -21,6 +21,7 @@ def _register_builtins() -> None:
             token=cfg.provider_api_token or "",
             base_url=cfg.provider_api_base_url or "https://api.sportmonks.com/v3/football",
             timeout_seconds=cfg.provider_timeout_seconds,
+            requests_per_minute=min(30, cfg.provider_requests_per_minute),
         ))
     if "goaloo" not in _FACTORIES:
         from app.providers.goaloo import GoalooProvider
@@ -29,6 +30,7 @@ def _register_builtins() -> None:
             odds_base_url=cfg.goaloo_odds_base_url,
             league_ids=cfg.enabled_league_ids, season_ids=cfg.enabled_season_ids,
             timeout_seconds=cfg.provider_timeout_seconds,
+            requests_per_minute=min(30, cfg.provider_requests_per_minute),
         ))
 
 

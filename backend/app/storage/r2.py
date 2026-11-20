@@ -28,6 +28,7 @@ class ParquetReceipt:
 
 
 class ObjectStore(Protocol):
+    def put_object_if_absent(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None: ...
     def put_object(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None: ...
     def get_object(self, key: str) -> bytes: ...
     def head_object(self, key: str) -> ObjectInfo | None: ...
@@ -102,8 +103,16 @@ class R2ObjectStore(ParquetObjectStoreMixin):
     def put_object(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None:
         self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=content_type, Metadata=metadata or {})
 
+    def put_object_if_absent(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None:
+        self.client.put_object(Bucket=self.bucket, Key=key, Body=body, ContentType=content_type,
+                               Metadata=metadata or {}, IfNoneMatch="*")
+
     def get_object(self, key: str) -> bytes:
-        return self.client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+        body = self.client.get_object(Bucket=self.bucket, Key=key)["Body"]
+        try:
+            return body.read()
+        finally:
+            body.close()
 
     def head_object(self, key: str) -> ObjectInfo | None:
         try:
@@ -135,6 +144,11 @@ class InMemoryObjectStore(ParquetObjectStoreMixin):
 
     def put_object(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None:
         self._objects[key] = (bytes(body), content_type, dict(metadata or {}))
+
+    def put_object_if_absent(self, key: str, body: bytes, *, content_type: str, metadata: dict[str, str] | None = None) -> None:
+        if key in self._objects:
+            raise FileExistsError(key)
+        self.put_object(key, body, content_type=content_type, metadata=metadata)
 
     def get_object(self, key: str) -> bytes:
         try:

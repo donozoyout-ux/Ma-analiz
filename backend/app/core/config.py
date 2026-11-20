@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     enabled_leagues: str = ""
     enabled_seasons: str = ""
     historical_start_date: date | None = None
+    historical_collect_odds: bool = True
 
     r2_endpoint: str | None = None
     r2_access_key_id: str | None = None

@@ -25,6 +25,9 @@ class HistoricalRepository:
             key = f"{prefix}{first.isoformat()}.parquet"
             if key in found:
                 keys.append(key)
+            keys.extend(sorted(item for item in found
+                               if item.startswith(f"{prefix}{first.isoformat()}/part=")
+                               and item.endswith(".parquet")))
             first += timedelta(days=1)
         return keys
 
@@ -39,7 +42,7 @@ class HistoricalRepository:
                     # A finalized result is not available to analysis until it has
                     # been verified; prefer that availability timestamp to match time.
                     event_time = (row.get("available_at") or row.get("verified_at")
-                                  or row.get("settled_at") or row.get("captured_at") or row.get("created_at")
+                                  or row.get("retrieved_at") or row.get("settled_at") or row.get("captured_at") or row.get("created_at")
                                   or row.get("finished_at") or row.get("start_time")
                                   or row.get("match_start"))
                     if event_time is None:

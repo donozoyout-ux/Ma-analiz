@@ -146,9 +146,12 @@ def test_upload_failure_marks_failed_and_never_deletes_database_rows():
 
 
 def test_persisted_verified_archive_allows_old_partition_cleanup_only():
-    old_job = SimpleNamespace(status="VERIFIED", checksum="sha256", verified_at=datetime.now(timezone.utc), row_count=3, archive_date=date(2020, 1, 1), deleted_at=None)
+    store = InMemoryObjectStore()
+    receipt = archive_partition(store, dataset="matches", season="2020", league="l", day=date(2020, 1, 1), rows=[{"id": 1}])
+    old_job = SimpleNamespace(status="VERIFIED", checksum=receipt.checksum, verified_at=datetime.now(timezone.utc), row_count=1,
+                              file_size_bytes=receipt.size, archive_date=date(2020, 1, 1), deleted_at=None)
     session, deleted = FakeSession(old_job), []
-    cleanup_database_rows_after_verified(session, key="matches/x", delete_rows=lambda db, job: deleted.append((db, job)))
+    cleanup_database_rows_after_verified(session, key=receipt.key, store=store, delete_rows=lambda db, job: deleted.append((db, job)))
     assert len(deleted) == 1 and old_job.status == "DELETED" and session.commits == 1
     recent = SimpleNamespace(status="VERIFIED", checksum="sha256", verified_at=datetime.now(timezone.utc), row_count=3, archive_date=date.today(), deleted_at=None)
     recent_session, recent_deleted = FakeSession(recent), []
@@ -621,8 +624,10 @@ def test_historical_backfill_checkpoints_valid_rows_and_retries_only_failed_day(
         def get_leagues(self): return [{"id": "league-1"}]
         def get_matches(self, day): return [
             {"id": "valid-1", "league_id": "league-1", "season": "2026-27",
+             "status": "CANCELLED",
              "home_team": "Home", "away_team": "Away", "start_time": "2026-11-13T18:00:00Z"},
             {"id": "valid-1", "league_id": "league-1", "season": "2026-27",
+             "status": "CANCELLED",
              "home_team": "Home", "away_team": "Away", "start_time": "2026-11-13T18:00:00Z"},
             {"id": "other-season", "league_id": "league-1", "season": "2025-26",
              "home_team": "Old Home", "away_team": "Old Away", "start_time": "2026-11-13T17:00:00Z"},
@@ -707,7 +712,7 @@ def test_historical_ingest_archives_only_goaloo_opening_and_latest_odds(monkeypa
     from app.models import ArchiveJob, HistoricalIngestDay
     from app.providers.registry import ProviderCaller
 
-    settings = Settings(enabled_leagues="league-1", enabled_seasons="2024-2025")
+    settings = Settings(enabled_leagues="league-1", enabled_seasons="2025-2026")
     monkeypatch.setattr("app.jobs.ingestion.get_settings", lambda: settings)
     engine = create_engine("sqlite://")
     ArchiveJob.__table__.create(engine)
@@ -716,9 +721,9 @@ def test_historical_ingest_archives_only_goaloo_opening_and_latest_odds(monkeypa
     class Adapter:
         name = "test-provider"
         def get_leagues(self): return [{"id": "league-1"}]
-        def get_matches(self, day): return [{"id": "m1", "league_id": "league-1", "season": "2024-2025",
+        def get_matches(self, day): return [{"id": "m1", "league_id": "league-1", "season": "2025-2026",
             "home_team": "Home", "away_team": "Away", "status": "FINISHED",
-            "start_time": "2024-08-10T18:00:00Z"}]
+            "start_time": "2025-08-10T18:00:00Z"}]
         def get_results(self, day): return []
         def get_odds(self, match_id): return [
             {"provider": "test-provider", "provider_odds_id": "opening", "market": "1X2", "selection": "HOME",
@@ -731,11 +736,11 @@ def test_historical_ingest_archives_only_goaloo_opening_and_latest_odds(monkeypa
 
     caller = ProviderCaller(Adapter(), requests_per_minute=100000, max_retries=1)
     store = InMemoryObjectStore()
-    day = date(2024, 8, 10)
+    day = date(2025, 8, 10)
     with Session(engine) as db:
-        result = historical_ingest(db, caller, store, season="2024-2025", league="league-1",
+        result = historical_ingest(db, caller, store, season="2025-2026", league="league-1",
                                    start_date=day, end_date=day)
-        rows = store.read_parquet("odds/season=2024-2025/league=league-1/date=2024-08-10.parquet")
+        rows = store.read_parquet("odds/season=2025-2026/league=league-1/date=2025-08-10.parquet")
     assert result["odds_written"] == 2
     assert {row["snapshot_type"] for row in rows} == {"OPENING", "LATEST"}
     assert all(row["source_captured_at"] is None for row in rows)
@@ -750,7 +755,7 @@ def test_historical_odds_do_not_overwrite_existing_verified_partition(monkeypatc
     from app.providers.registry import ProviderCaller
     from app.storage.archive import SQLArchiveTracker
 
-    settings = Settings(enabled_leagues="league-1", enabled_seasons="2024-2025")
+    settings = Settings(enabled_leagues="league-1", enabled_seasons="2025-2026")
     monkeypatch.setattr("app.jobs.ingestion.get_settings", lambda: settings)
     engine = create_engine("sqlite://")
     ArchiveJob.__table__.create(engine)
@@ -759,9 +764,9 @@ def test_historical_odds_do_not_overwrite_existing_verified_partition(monkeypatc
     class Adapter:
         name = "test-provider"
         def get_leagues(self): return [{"id": "league-1"}]
-        def get_matches(self, day): return [{"id": "m1", "league_id": "league-1", "season": "2024-2025",
+        def get_matches(self, day): return [{"id": "m1", "league_id": "league-1", "season": "2025-2026",
             "home_team": "Home", "away_team": "Away", "status": "FINISHED",
-            "start_time": "2024-08-10T18:00:00Z"}]
+            "start_time": "2025-08-10T18:00:00Z"}]
         def get_results(self, day): return []
         def get_odds(self, match_id): return [{"provider": "test-provider", "provider_odds_id": "opening",
             "market": "1X2", "selection": "HOME", "odds": Decimal("2.1"),
@@ -769,15 +774,15 @@ def test_historical_odds_do_not_overwrite_existing_verified_partition(monkeypatc
 
     caller = ProviderCaller(Adapter(), requests_per_minute=100000, max_retries=1)
     store = InMemoryObjectStore()
-    day = date(2024, 8, 10)
+    day = date(2025, 8, 10)
     with Session(engine) as db:
-        archive_rows(store, SQLArchiveTracker(db), dataset="odds", season="2024-2025", league="league-1",
+        archive_rows(store, SQLArchiveTracker(db), dataset="odds", season="2025-2026", league="league-1",
                      day=day, rows=[{"provider_odds_id": "existing", "snapshot_type": "OPENING", "odds": 2.5}])
-        original = store.read_parquet("odds/season=2024-2025/league=league-1/date=2024-08-10.parquet")
-        result = historical_ingest(db, caller, store, season="2024-2025", league="league-1",
+        original = store.read_parquet("odds/season=2025-2026/league=league-1/date=2025-08-10.parquet")
+        result = historical_ingest(db, caller, store, season="2025-2026", league="league-1",
                                    start_date=day, end_date=day)
-        preserved = store.read_parquet("odds/season=2024-2025/league=league-1/date=2024-08-10.parquet")
-    assert result["odds_written"] == 0 and result["odds_skipped_conflict"] == 1
+        preserved = store.read_parquet("odds/season=2025-2026/league=league-1/date=2025-08-10.parquet")
+    assert result["odds_written"] == 1 and result["odds_skipped_conflict"] == 0
     assert preserved == original
     engine.dispose()
 
@@ -803,7 +808,7 @@ def test_interrupted_historical_day_releases_lease_for_immediate_resume(monkeypa
             if self.calls == 1:
                 raise KeyboardInterrupt
             return [{"id": "m1", "league_id": "league-1", "season": "2026-27",
-                     "home_team": "Home", "away_team": "Away", "start_time": "2026-11-13T18:00:00Z"}]
+                     "home_team": "Home", "away_team": "Away", "status": "CANCELLED", "start_time": "2026-11-13T18:00:00Z"}]
         def get_results(self, day): return []
 
     adapter = Adapter()
@@ -898,8 +903,13 @@ def test_cleanup_deletes_only_after_live_object_reverification():
                           selection="HOME", odds=Decimal("2"), captured_at=captured,
                           expires_at=captured + timedelta(days=1)))
         db.commit()
+        archived_odds = db.query(ActiveOdds).filter_by(match_id=match.id).one()
+        archived_row = {column.name: getattr(archived_odds, column.name) for column in ActiveOdds.__table__.columns}
+        archived_row = {name: float(value) if isinstance(value, Decimal) else str(value) if name in {"id", "match_id", "bookmaker_entity_id"} and value is not None else value
+                        for name, value in archived_row.items()}
+        archived_row["odds_id"] = str(archived_odds.id)
         archive_rows(store, SQLArchiveTracker(db), dataset="odds", season="2026-27", league="league-1",
-                     day=day, rows=[{"captured_at": captured, "match_id": str(match.id), "odds": 2.0}])
+                     day=day, rows=[archived_row])
         assert cleanup_verified_archives(db, store, today=date(2026, 11, 13)) == 1
         assert db.query(ActiveOdds).count() == 1
         assert db.query(ActiveOdds).one().match_id == other_match.id
@@ -909,11 +919,11 @@ def test_cleanup_deletes_only_after_live_object_reverification():
 
 def test_verified_match_archive_allows_expired_active_match_cleanup():
     from app.jobs.ingestion import archive_rows, cleanup_verified_archives
-    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, Coupon, CouponItem, MatchResult, Prediction
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, Coupon, CouponItem, MatchAnalysis, MatchResult, Prediction
     from app.storage.archive import SQLArchiveTracker
 
     engine = create_engine("sqlite://")
-    for model in (ActiveMatch, Bookmaker, ActiveOdds, MatchResult, Prediction, Coupon, CouponItem, ArchiveJob):
+    for model in (ActiveMatch, Bookmaker, ActiveOdds, MatchResult, MatchAnalysis, Prediction, Coupon, CouponItem, ArchiveJob):
         model.__table__.create(engine)
     store = InMemoryObjectStore()
     day = date(2025, 1, 10)
@@ -928,8 +938,9 @@ def test_verified_match_archive_allows_expired_active_match_cleanup():
         assert cleanup_verified_archives(db, store, today=date(2025, 2, 1)) == 0
         assert db.query(ActiveMatch).count() == 1
         archive_rows(store, SQLArchiveTracker(db), dataset="matches", season="2024-2025", league="36",
-                     day=day, rows=[{"provider_match_id": "old-match", "league_id": "36",
-                                     "season": "2024-2025", "home_team": "Home", "away_team": "Away"}])
+                     day=day, rows=[{"provider": "goaloo", "provider_match_id": "old-match", "league_id": "36",
+                                     "season": "2024-2025", "home_team": "Home", "away_team": "Away",
+                                     "start_time": kickoff, "status": "FINISHED"}])
         assert cleanup_verified_archives(db, store, today=date(2025, 2, 1)) == 1
         assert db.query(ActiveMatch).count() == 0
     engine.dispose()
@@ -937,11 +948,11 @@ def test_verified_match_archive_allows_expired_active_match_cleanup():
 
 def test_verified_match_archive_preserves_prediction_and_linked_match():
     from app.jobs.ingestion import archive_rows, cleanup_verified_archives
-    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, Coupon, CouponItem, MatchResult, Prediction
+    from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, Coupon, CouponItem, MatchAnalysis, MatchResult, Prediction
     from app.storage.archive import SQLArchiveTracker
 
     engine = create_engine("sqlite://")
-    for model in (ActiveMatch, Bookmaker, ActiveOdds, MatchResult, Prediction, Coupon, CouponItem, ArchiveJob):
+    for model in (ActiveMatch, Bookmaker, ActiveOdds, MatchResult, MatchAnalysis, Prediction, Coupon, CouponItem, ArchiveJob):
         model.__table__.create(engine)
     store = InMemoryObjectStore()
     day = date(2025, 1, 10)
@@ -961,8 +972,9 @@ def test_verified_match_archive_preserves_prediction_and_linked_match():
         db.add(prediction)
         db.commit()
         archive_rows(store, SQLArchiveTracker(db), dataset="matches", season="2024-2025", league="36",
-                     day=day, rows=[{"provider_match_id": "paper-match", "league_id": "36",
-                                     "season": "2024-2025", "home_team": "Home", "away_team": "Away"}])
+                     day=day, rows=[{"provider": "goaloo", "provider_match_id": "paper-match", "league_id": "36",
+                                     "season": "2024-2025", "home_team": "Home", "away_team": "Away",
+                                     "start_time": kickoff, "status": "FINISHED"}])
         assert cleanup_verified_archives(db, store, today=date(2025, 2, 1)) == 0
         assert db.query(Prediction).count() == 1
         assert db.query(ActiveMatch).count() == 1

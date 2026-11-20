@@ -18,7 +18,7 @@ def _settings(**overrides):
         "database_url": "postgresql+psycopg://user:password@ma-db.internal:5432/macanaliz",
         "database_url_valid": True,
         "enabled_league_ids": ("36",),
-        "enabled_season_ids": ("2021-2022",),
+        "enabled_season_ids": ("2025-2026",),
         "provider_id": "goaloo",
         "provider_requests_per_minute": 100000,
         "provider_retry_count": 1,

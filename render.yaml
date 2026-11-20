@@ -5,7 +5,8 @@ services:
     region: frankfurt
     plan: 1c-2g
     buildCommand: python -m pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
-    preDeployCommand: cd backend && alembic upgrade head
+    # Migration is an explicit maintenance action. A diagnostic redeploy must
+    # never migrate automatically. Clear any old Dashboard Pre-Deploy Command.
     startCommand: node frontend/scripts/run-single-service.mjs
     healthCheckPath: /health/live
     envVars:
@@ -36,9 +37,11 @@ services:
       - key: ENABLED_LEAGUES
         value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
-        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+        value: 2023-2024,2024-2025,2025-2026,2026-2027
       - key: HISTORICAL_START_DATE
-        value: "2021-07-01"
+        value: "2023-07-01"
+      - key: HISTORICAL_COLLECT_ODDS
+        value: "false"
       - key: POSTGRES_NORMAL_MB
         value: "300"
       - key: POSTGRES_WARNING_MB
@@ -109,9 +112,11 @@ services:
       - key: ENABLED_LEAGUES
         value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
-        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+        value: 2023-2024,2024-2025,2025-2026,2026-2027
       - key: HISTORICAL_START_DATE
-        value: "2021-07-01"
+        value: "2023-07-01"
+      - key: HISTORICAL_COLLECT_ODDS
+        value: "false"
       - key: WORKER_INTERVAL_SECONDS
         value: "300"
       - key: WORKER_MATCH_INTERVAL_SECONDS
@@ -198,9 +203,11 @@ services:
       - key: ENABLED_LEAGUES
         value: "36,30,31,8,11,16,7,27,103,113,2187"
       - key: ENABLED_SEASONS
-        value: 2021-2022,2022-2023,2023-2024,2024-2025,2025-2026,2026-2027
+        value: 2023-2024,2024-2025,2025-2026,2026-2027
       - key: HISTORICAL_START_DATE
-        value: "2021-07-01"
+        value: "2023-07-01"
+      - key: HISTORICAL_COLLECT_ODDS
+        value: "false"
       - key: R2_ENDPOINT
         sync: false
       - key: R2_ACCESS_KEY_ID

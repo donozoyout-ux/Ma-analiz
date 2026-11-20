@@ -11,6 +11,12 @@ from app.providers.goaloo import GoalooProvider
 from app.providers.normalize import normalize_odds
 
 
+@pytest.fixture(autouse=True)
+def test_wire_fixtures_have_explicit_transport_permission(monkeypatch):
+    # These are offline schema fixtures. Live policy enforcement has its own tests.
+    monkeypatch.setattr(GoalooProvider, "_check_robots", lambda self, url: None)
+
+
 # TEST FIXTURE: reduced Goaloo schedule schema based on the documented row layout.
 SCHEDULE_FIXTURE = {
     "LeagueInfo": ["36", "Example League", "2024-2025"],
@@ -106,13 +112,16 @@ def test_goaloo_error_envelope_and_unknown_schedule_status_never_claim_success()
     client.close()
 
 
-def test_goaloo_bookmaker_unknown_is_ignored_not_relabelled():
+def test_goaloo_bookmaker_source_name_is_preserved_without_relabelling():
     payload = {"ErrCode": 0, "Data": {"mixodds": [{"cid": 999, "cn": "Unknown",
                 "euro": {"f": {"u": "2", "g": "3", "d": "4"}}}]}}
     client = httpx.Client(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload, request=request)))
     provider = GoalooProvider(client=client)
     provider._fixture_cache["m"] = {"status": "SCHEDULED"}
-    assert provider.get_odds("m") == []
+    rows = provider.get_odds("m")
+    assert len(rows) == 3
+    assert {row["bookmaker"] for row in rows} == {"Unknown"}
+    assert {row["provider_bookmaker_id"] for row in rows} == {"999"}
     client.close()
 
 

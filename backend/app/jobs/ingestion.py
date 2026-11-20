@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import func, select, update
@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, HistoricalIngestDay, MatchResult
 from app.providers.base import ProviderError, ProviderFailure, ProviderNotConfigured
-from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result
-from app.storage.archive import ArchiveStatus, SQLArchiveTracker, archive_partition, cleanup_database_rows_after_verified
+from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result, utc_datetime
+from app.storage.archive import ArchiveStatus, SQLArchiveTracker
 from app.storage.r2 import ObjectStore
+from app.storage.incremental import archive_incremental, row_identity
 
 
 def _expires(start_time: datetime, days: int) -> datetime:
@@ -158,13 +159,12 @@ def archive_rows(store: ObjectStore, tracker: Any, *, dataset: str, season: str,
                  rows: list[dict]) -> dict[str, Any]:
     if not rows:
         return {"status": "SKIPPED", "records_written": 0, "reason": "NO_ROWS"}
-    receipt = archive_partition(store, dataset=dataset, season=season, league=league, day=day, rows=rows, tracker=tracker)
-    return {"status": "SUCCESS", "records_written": receipt.row_count, "key": receipt.key,
-            "size_bytes": receipt.size, "checksum": receipt.checksum}
+    return {"status": "SUCCESS", **archive_incremental(store, tracker, dataset=dataset, season=season,
+                                                       league=league, day=day, rows=rows)}
 
 
 def _claim_historical_day(session: Session, *, provider: str, season: str, league: str,
-                          day: date) -> tuple[HistoricalIngestDay | None, str | None]:
+                          day: date, include_odds: bool = True) -> tuple[HistoricalIngestDay | None, str | None]:
     now = datetime.now(timezone.utc)
     lease_seconds = max(60, get_settings().historical_ingest_lease_seconds)
     lease_expiry = now + timedelta(seconds=lease_seconds)
@@ -195,7 +195,9 @@ def _claim_historical_day(session: Session, *, provider: str, season: str, leagu
         else:
             return row, token
 
-    if row.status in {"COMPLETED", "EMPTY"}:
+    coverage = row.coverage or {}
+    scope_complete = not include_odds or coverage.get("odds_requested", True)
+    if row.status in {"COMPLETED", "EMPTY"} and coverage.get("version") == 1 and scope_complete:
         session.rollback()
         return row, None
 
@@ -249,7 +251,9 @@ def _finish_historical_day(session: Session, *, progress_id: Any, token: str,
 
 
 def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, season: str, league: str,
-                      start_date: date, end_date: date) -> dict[str, Any]:
+                      start_date: date, end_date: date, include_odds: bool | None = None) -> dict[str, Any]:
+    if include_odds is None:
+        include_odds = get_settings().historical_collect_odds
     if end_date < start_date:
         raise ValueError("end_date must be on or after start_date")
     configured_start = get_settings().historical_start_date
@@ -287,14 +291,17 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                     "records_written": 0, "records_skipped": 0, "records_failed": 0, "dates_completed": 0}
     completed = failed = partial = seen = archived = records_failed = dates_skipped = 0
     matches_written = results_written = odds_written = odds_skipped = duplicates = r2_objects = r2_bytes = 0
-    provider_failures = invalid_rows = checksum_failures = 0
+    provider_failures = invalid_rows = checksum_failures = statistics_written = 0
+    coverage_report = []
     odds_fetch_supported = callable(getattr(caller.provider, "get_odds", None))
     tracker = SQLArchiveTracker(session)
     day = start_date
     while day <= end_date:
         progress, lease_token = _claim_historical_day(
-            session, provider=caller.provider.name, season=season, league=league, day=day)
+            session, provider=caller.provider.name, season=season, league=league, day=day, include_odds=include_odds)
         if progress is not None and progress.status in {"COMPLETED", "EMPTY"}:
+            coverage_report.append({"date": str(day), "status": progress.status,
+                                    "fields": progress.coverage, "failed_match_ids": progress.failed_match_ids})
             completed += 1
             day += timedelta(days=1)
             continue
@@ -303,10 +310,17 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
             day += timedelta(days=1)
             continue
         try:
-            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
-            raw = caller.call("get_matches", day)
-            normalized_by_id: dict[str, dict] = {}
+            coverage = {"version": 1, "odds_requested": include_odds,
+                        "odds_scope": "NOT_REQUESTED" if not include_odds else "FROM_2025_26" if day >= date(2025, 7, 1) else "OUTSIDE_REQUESTED_SCOPE"}
             failed_ids = []
+            archive_count = 0
+            day_provider_failures = 0
+            _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
+            raw = (caller.call("get_matches_for_scope", day, league, season)
+                   if callable(getattr(caller.provider, "get_matches_for_scope", None)) else caller.call("get_matches", day))
+            if not isinstance(raw, list):
+                raise ProviderError("PROVIDER_ERROR: matches response is not a list")
+            normalized_by_id: dict[str, dict] = {}
             for payload in raw:
                 try:
                     row = normalize_match(payload, provider=caller.provider.name)
@@ -321,6 +335,10 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 source_season = payload.get("season", payload.get("season_id"))
                 if row["league_id"] == league and (source_season is None or str(source_season) == season):
                     match_id = str(row["provider_match_id"])
+                    if row["start_time"].date() != day:
+                        failed_ids.append(f"match:{match_id}:outside-date-scope")
+                        invalid_rows += 1
+                        continue
                     previous = normalized_by_id.get(match_id)
                     if previous is None:
                         normalized_by_id[match_id] = row
@@ -330,6 +348,13 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                         failed_ids.append(match_id)
                         invalid_rows += 1
             normalized = list(normalized_by_id.values())
+            for match in normalized:
+                if match["status"] not in {"FINISHED", "CANCELLED"}:
+                    failed_ids.append(f"match:{match['provider_match_id']}:awaiting-final-status")
+                    coverage[f"match:{match['provider_match_id']}"] = "AWAITING_FINAL_STATUS"
+            # Active state owns mutable fixtures. Do not freeze an unfinished
+            # fixture into an immutable historical object or completed checkpoint.
+            normalized = [match for match in normalized if match["status"] in {"FINISHED", "CANCELLED"}]
             seen += len(raw)
             archive_count = 0
             if normalized:
@@ -337,32 +362,53 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                     match_row["season"] = season
                 _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
                 receipt = archive_rows(store, tracker, dataset="matches", season=season, league=league, day=day, rows=normalized)
-                archive_count += len(normalized)
-                matches_written += len(normalized)
-                r2_objects += 1
+                archive_count += receipt["records_written"]
+                matches_written += receipt["records_written"]
+                r2_objects += bool(receipt["records_written"])
                 r2_bytes += int(receipt.get("size_bytes", 0))
             historical_odds: dict[str, dict] = {}
-            if odds_fetch_supported:
+            conflicting_odds = set()
+            if include_odds and odds_fetch_supported and day >= date(2025, 7, 1):
                 retrieved_at = datetime.now(timezone.utc)
                 for match in normalized:
                     if match["status"] != "FINISHED":
                         continue
                     try:
+                        _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
                         quotes = caller.call("get_odds", match["provider_match_id"])
-                    except ProviderFailure:
+                    except ProviderFailure as exc:
                         provider_failures += 1
+                        day_provider_failures += 1
                         failed_ids.append(f"odds:{match['provider_match_id']}")
+                        coverage[f"odds:{match['provider_match_id']}"] = "FAILED"
+                        coverage[f"odds_error:{match['provider_match_id']}"] = exc.code
                         continue
+                    coverage[f"odds:{match['provider_match_id']}"] = "NO_VERIFIED_PREMATCH_QUOTES"
                     for quote in quotes:
                         # Goaloo exposes opening (`f`) and latest (`l`) snapshots.
                         # Ignore live (`r`) and never infer a closing snapshot.
-                        if quote.get("period") != "PREMATCH" or quote.get("snapshot_type") not in {"OPENING", "LATEST"}:
+                        kind = quote.get("snapshot_type", "OBSERVED")
+                        if quote.get("period") != "PREMATCH" or kind not in {"OPENING", "LATEST", "CLOSING", "OBSERVED"}:
+                            continue
+                        if caller.provider.name == "goaloo" and kind != "OPENING":
+                            # `l` is latest, with no verified pre-kickoff timestamp.
+                            # Preserve it in raw provider probes, not prematch history.
+                            continue
+                        source_timestamp = quote.get("source_captured_at")
+                        if caller.provider.name != "goaloo":
+                            source_timestamp = source_timestamp or quote.get("captured_at")
+                        source_timestamp = utc_datetime(source_timestamp) if source_timestamp is not None else None
+                        if source_timestamp is not None and source_timestamp > match["start_time"]:
+                            continue
+                        if kind == "OBSERVED" and source_timestamp is None:
                             continue
                         odds_id = str(quote.get("provider_odds_id", ""))
                         if not odds_id:
                             failed_ids.append(f"odds:{match['provider_match_id']}:missing-id")
                             invalid_rows += 1
                             continue
+                        normalized_quote = normalize_odds({**quote, "captured_at": quote.get("captured_at") or retrieved_at},
+                                                         match_id=match["provider_match_id"], provider=caller.provider.name)
                         row = {"provider": quote.get("provider", caller.provider.name),
                                "provider_match_id": match["provider_match_id"],
                                "league_id": league, "league_name": match.get("league_name"),
@@ -371,43 +417,85 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                                "fixture_date": day, "provider_odds_id": odds_id,
                                "provider_market_id": quote.get("provider_market_id"),
                                "provider_bookmaker_id": quote.get("provider_bookmaker_id"),
-                               "bookmaker": quote.get("bookmaker"), "market": quote.get("market"),
-                               "selection": quote.get("selection"),
-                               "line": float(quote["line"]) if quote.get("line") is not None else None,
+                               "bookmaker": normalized_quote["bookmaker"], "market": normalized_quote["market"],
+                               "selection": normalized_quote["selection"],
+                               "line": float(normalized_quote["line"]) if normalized_quote.get("line") is not None else None,
+                               "line_key": normalized_quote["line_key"],
                                "raw_line": quote.get("raw_line"), "odds": float(quote["odds"]),
-                               "snapshot_type": quote["snapshot_type"], "period": "PREMATCH",
+                               "snapshot_type": kind, "period": "PREMATCH",
                                "source": quote.get("source", "goaloo"), "retrieved_at": retrieved_at,
-                               "source_captured_at": quote.get("source_captured_at"),
+                               "source_url": quote.get("source_url"),
+                               "source_captured_at": source_timestamp,
                                "raw_value": quote.get("raw_value")}
-                        previous = historical_odds.get(odds_id)
+                        coverage[f"odds:{match['provider_match_id']}"] = "AVAILABLE_SOURCE_TIMESTAMP_MISSING" if source_timestamp is None else "AVAILABLE"
+                        identity = row_identity("odds", row)
+                        if identity in conflicting_odds:
+                            continue
+                        previous = historical_odds.get(identity)
                         if previous is None:
-                            historical_odds[odds_id] = row
+                            historical_odds[identity] = row
                         elif previous == row:
                             duplicates += 1
                         else:
                             failed_ids.append(f"odds:{odds_id}:conflicting-duplicate")
                             invalid_rows += 1
+                            historical_odds.pop(identity)
+                            conflicting_odds.add(identity)
             odds_rows = list(historical_odds.values())
             if odds_rows:
-                object_key = f"odds/season={season}/league={league}/date={day.isoformat()}.parquet"
-                previous_status = tracker.get_status(object_key)
-                object_exists = store.object_exists(object_key)
-                # A date/league odds partition might already contain captured
-                # operational quotes. Never replace it with a different source
-                # snapshot. FAILED + missing object is safe to retry.
-                if not object_exists and previous_status in {None, ArchiveStatus.FAILED}:
+                _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
+                receipt = archive_rows(store, tracker, dataset="odds", season=season, league=league,
+                                       day=day, rows=odds_rows)
+                written = receipt["records_written"]
+                odds_written += written
+                odds_skipped += len(odds_rows) - written
+                archive_count += written
+                r2_objects += bool(written)
+                r2_bytes += int(receipt.get("size_bytes", 0))
+            for match in normalized:
+                if match["status"] != "FINISHED":
+                    continue
+                match_id = match["provider_match_id"]
+                if getattr(caller.provider, "statistics_supported", None) is False or not callable(getattr(caller.provider, "get_statistics", None)):
+                    coverage[f"statistics:{match_id}"] = "NOT_SUPPORTED"
+                    continue
+                try:
                     _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
-                    receipt = archive_rows(store, tracker, dataset="odds", season=season, league=league,
-                                           day=day, rows=odds_rows)
-                    odds_written += len(odds_rows)
-                    archive_count += len(odds_rows)
-                    r2_objects += 1
-                    r2_bytes += int(receipt.get("size_bytes", 0))
-                else:
-                    odds_skipped += len(odds_rows)
+                    stats = caller.call("get_statistics", match_id)
+                    if not isinstance(stats, list) or any(not isinstance(item, dict) for item in stats):
+                        raise ValueError("Invalid statistics response")
+                    import json
+                    import hashlib
+                    stat_rows = []
+                    for item in stats:
+                        raw_stat = json.dumps(item, sort_keys=True, default=str, ensure_ascii=False)
+                        stat_rows.append({"provider": caller.provider.name, "provider_match_id": match_id,
+                                          "season": season, "league_id": league, "start_time": match["start_time"],
+                                          "statistic_id": str(item.get("id") or hashlib.sha256(raw_stat.encode()).hexdigest()),
+                                          "name": item.get("name"), "period": item.get("period"),
+                                          "home_value": item.get("home_value"), "away_value": item.get("away_value"),
+                                          "unit": item.get("unit"), "source_url": item.get("source_url"),
+                                          "raw_value": raw_stat, "retrieved_at": datetime.now(timezone.utc)})
+                    receipt = archive_rows(store, tracker, dataset="statistics", season=season, league=league,
+                                           day=day, rows=stat_rows)
+                    written = receipt["records_written"]
+                    statistics_written += written
+                    archive_count += written
+                    r2_objects += bool(written)
+                    r2_bytes += receipt.get("size_bytes", 0)
+                    coverage[f"statistics:{match_id}"] = "AVAILABLE" if stats else "SOURCE_EMPTY"
+                except (ProviderFailure, ValueError, TypeError):
+                    coverage[f"statistics:{match_id}"] = "FAILED"
+                    failed_ids.append(f"statistics:{match_id}")
+                    provider_failures += 1
+                    day_provider_failures += 1
             _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
-            raw_results = caller.call("get_results", day)
+            raw_results = (caller.call("get_results_for_scope", day, league, season)
+                           if callable(getattr(caller.provider, "get_results_for_scope", None)) else caller.call("get_results", day))
+            if not isinstance(raw_results, list):
+                raise ProviderError("PROVIDER_ERROR: results response is not a list")
             results_by_id: dict[str, dict] = {}
+            conflicting_results = set()
             match_ids = {match["provider_match_id"] for match in normalized}
             for payload in raw_results:
                 try:
@@ -418,11 +506,23 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                     invalid_rows += 1
                     continue
                 if result["status"] == "FINAL" and result["provider_match_id"] in match_ids:
+                    if result["provider_match_id"] in conflicting_results:
+                        continue
                     if result["provider_match_id"] in results_by_id:
-                        duplicates += 1
+                        if results_by_id[result["provider_match_id"]] == result:
+                            duplicates += 1
+                        else:
+                            failed_ids.append(f"result:{result['provider_match_id']}:conflicting-duplicate")
+                            invalid_rows += 1
+                            results_by_id.pop(result["provider_match_id"])
+                            conflicting_results.add(result["provider_match_id"])
                     else:
                         results_by_id[result["provider_match_id"]] = result
             final_results = list(results_by_id.values())
+            for match in normalized:
+                if match["status"] == "FINISHED" and match["provider_match_id"] not in results_by_id:
+                    failed_ids.append(f"result:{match['provider_match_id']}")
+                    coverage[f"result:{match['provider_match_id']}"] = "MISSING"
             if final_results:
                 verified_at = datetime.now(timezone.utc)
                 for item in final_results:
@@ -430,19 +530,22 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
                 _renew_historical_lease(session, progress_id=progress.id, token=lease_token)
                 receipt = archive_rows(store, tracker, dataset="results", season=season, league=league,
                                        day=day, rows=final_results)
-                archive_count += len(final_results)
-                results_written += len(final_results)
-                r2_objects += 1
+                archive_count += receipt["records_written"]
+                results_written += receipt["records_written"]
+                r2_objects += bool(receipt["records_written"])
                 r2_bytes += int(receipt.get("size_bytes", 0))
             archived += archive_count
-            status = "PARTIAL" if failed_ids else "COMPLETED" if archive_count else "EMPTY"
+            status = "PARTIAL" if failed_ids else "COMPLETED" if normalized else "EMPTY"
             _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
-                "records_seen": len(raw), "records_archived": archive_count,
+                "records_seen": len(raw), "records_archived": (progress.records_archived or 0) + archive_count,
                 "records_failed": len(failed_ids), "failed_match_ids": sorted(set(failed_ids)),
                 "status": status,
-                "error_code": "PROVIDER_FAILURE" if provider_failures else "INVALID_PROVIDER_RECORDS" if failed_ids else None,
+                "coverage": coverage,
+                "error_code": "PROVIDER_FAILURE" if day_provider_failures else "INVALID_PROVIDER_RECORDS" if failed_ids else None,
             })
             records_failed += len(failed_ids)
+            coverage_report.append({"date": str(day), "status": status, "fields": coverage,
+                                    "failed_match_ids": sorted(set(failed_ids))})
             if failed_ids:
                 partial += 1
             else:
@@ -466,20 +569,28 @@ def historical_ingest(session: Session, caller: Any, store: ObjectStore, *, seas
             error_code = getattr(exc, "code", None) or (
                 "PROVIDER_ERROR" if isinstance(exc, (KeyError, TypeError, ValueError)) else type(exc).__name__.upper())
             _finish_historical_day(session, progress_id=progress.id, token=lease_token, values={
-                "status": "FAILED", "records_failed": 1, "error_code": error_code[:80],
+                "status": "FAILED", "records_failed": max(1, len(failed_ids)),
+                "records_archived": (progress.records_archived or 0) + archive_count,
+                "failed_match_ids": sorted(set(failed_ids)),
+                "coverage": coverage, "error_code": error_code[:80],
             })
+            coverage_report.append({"date": str(day), "status": "FAILED", "fields": coverage,
+                                    "error_code": error_code[:80]})
             failed += 1
             records_failed += 1
         day += timedelta(days=1)
+    archived = matches_written + results_written + odds_written + statistics_written
     status = "PARTIAL" if (failed or partial) and (completed or partial or archived) else "FAILED" if failed else "PARTIAL" if partial else "SUCCESS" if archived else "SKIPPED"
     return {"status": status, "records_seen": seen, "records_written": archived,
+            "statistics_written": statistics_written, "coverage": coverage_report,
             "records_skipped": dates_skipped + (completed if not archived else max(0, completed - 1)),
             "records_failed": records_failed, "dates_completed": completed, "dates_partial": partial, "dates_failed": failed,
             "dates_skipped": dates_skipped,
             "matches_written": matches_written, "results_written": results_written,
             "odds_written": odds_written, "odds_skipped_conflict": odds_skipped,
             "provider_failures": provider_failures,
-            "odds_history": "OPENING_LATEST_ONLY_NO_CLOSING" if odds_fetch_supported else "NOT_SUPPORTED",
+            "odds_requested": include_odds,
+            "odds_history": "NOT_REQUESTED" if not include_odds else "OPENING_ONLY_LATEST_AND_CLOSING_UNVERIFIED" if caller.provider.name == "goaloo" else "PROVIDER_PREMATCH_ONLY" if odds_fetch_supported else "NOT_SUPPORTED",
             "duplicates": duplicates, "invalid_rows": invalid_rows, "r2_objects": r2_objects,
             "r2_bytes": r2_bytes, "checksum_failures": checksum_failures,
             "postgres_rows_written": 0, "postgres_rows_deleted": 0}
@@ -533,11 +644,20 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
         return {key: str(value) if isinstance(value, UUID) else float(value) if isinstance(value, Decimal) else value
                 for key, value in row.items()}
 
+    expired_matches = session.scalars(select(ActiveMatch).where(
+        ActiveMatch.expires_at <= current, ActiveMatch.start_time < cutoff,
+        ActiveMatch.status.in_(("FINISHED", "CANCELLED")),
+    )).all()
+    for match in expired_matches:
+        row = {column.name: getattr(match, column.name) for column in ActiveMatch.__table__.columns}
+        partitions[("matches", match.season or "unknown", match.league_id or "unknown",
+                    match.start_time.date())].append(row)
+
     odds_rows = session.execute(select(ActiveOdds, ActiveMatch).join(
         ActiveMatch, ActiveMatch.id == ActiveOdds.match_id
     ).where(ActiveOdds.expires_at <= current, ActiveOdds.captured_at < cutoff)).all()
     for odds, match in odds_rows:
-        row = {"match_id": str(match.id), "provider_match_id": match.provider_match_id,
+        row = {"odds_id": str(odds.id), "match_id": str(match.id), "provider_match_id": match.provider_match_id,
                "provider": odds.provider, "provider_odds_id": odds.provider_odds_id,
                "provider_market_id": odds.provider_market_id, "provider_bookmaker_id": odds.provider_bookmaker_id,
                "league_id": match.league_id, "league_name": match.league_name, "season": match.season,
@@ -555,7 +675,8 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
     ).where(MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None),
             func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < cutoff)).all()
     for result, match in result_rows:
-        row = {"match_id": str(match.id), "provider": result.provider, "provider_result_id": result.provider_result_id,
+        row = {"result_id": str(result.id), "match_id": str(match.id), "provider_match_id": match.provider_match_id,
+               "provider": result.provider, "provider_result_id": result.provider_result_id,
                "league_id": match.league_id, "league_name": match.league_name, "season": match.season,
                "home_team": match.home_team, "away_team": match.away_team, "start_time": match.start_time,
                "home_score": result.home_score, "away_score": result.away_score, "status": result.status,
@@ -579,19 +700,40 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
         partitions[("predictions", match.season or "unknown", match.league_id or "unknown",
                     prediction.created_at.date())].append(row)
 
-    counts = {"odds": 0, "results": 0, "predictions": 0}
+    counts = {"matches": 0, "odds": 0, "results": 0, "predictions": 0}
     tracker = SQLArchiveTracker(session)
     for (dataset, season, league, day), rows in sorted(partitions.items()):
-        archive_rows(store, tracker, dataset=dataset, season=season, league=league, day=day,
-                     rows=[canonical(row) for row in rows])
-        counts[dataset] += len(rows)
+        receipt = archive_rows(store, tracker, dataset=dataset, season=season, league=league, day=day,
+                               rows=[canonical(row) for row in rows])
+        counts[dataset] += receipt["records_written"]
     return counts
 
 def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: date | None = None) -> int:
     """Re-read and verify R2 bytes before deleting old source partitions."""
     from sqlalchemy import delete, func
-    from app.models import CouponItem, Prediction
+    from app.models import CouponItem, MatchAnalysis, Prediction
     from app.storage.archive import _verify_object
+
+    def matches_snapshot(entity, row):
+        from decimal import Decimal
+        from uuid import UUID
+        required = {
+            "active_matches": {"provider", "provider_match_id", "league_id", "season", "home_team", "away_team", "start_time", "status"},
+            "active_odds": {"provider", "match_id", "bookmaker", "market", "selection", "line", "odds", "captured_at", "snapshot_type", "period", "source"},
+            "match_results": {"provider", "match_id", "home_score", "away_score", "status", "result_source", "verified_at"},
+        }
+        if not required[entity.__tablename__].issubset(row):
+            return False
+        def value(item):
+            if isinstance(item, datetime):
+                return item.replace(tzinfo=timezone.utc) if item.tzinfo is None else item.astimezone(timezone.utc)
+            if isinstance(item, UUID):
+                return str(item)
+            if isinstance(item, Decimal):
+                return float(item)
+            return item
+        return all(value(getattr(entity, column.name)) == value(row[column.name])
+                   for column in entity.__table__.columns if column.name in row)
 
     cutoff = (today or datetime.now(timezone.utc).date()) - timedelta(days=1)
     jobs = session.scalars(select(ArchiveJob).where(
@@ -605,16 +747,22 @@ def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: da
     ).order_by(ArchiveJob.archive_date).with_for_update(skip_locked=True)).all()
     count = 0
     for job in jobs:
+        session.refresh(job, with_for_update=True)
+        if job.status != ArchiveStatus.VERIFIED.value:
+            continue
+        remaining_covered = False
         try:
             parts = job.r2_key.split("/")
-            date_segment = f"date={job.archive_date.isoformat()}.parquet"
+            date_base = f"date={job.archive_date.isoformat()}"
             league_segment = f"league={job.league}" if job.league else None
-            if (not parts or parts[0] != job.dataset_type or parts[-1] != date_segment
+            if (not parts or parts[0] != job.dataset_type or not (
+                    parts[-1] == date_base + ".parquet" or
+                    (len(parts) == 5 and parts[-2] == date_base and parts[-1].startswith("part=") and parts[-1].endswith(".parquet")))
                     or not any(part.startswith("season=") for part in parts)
                     or (league_segment and league_segment not in parts)):
                 continue
-            _verify_object(store, job.r2_key, expected_size=job.file_size_bytes,
-                           expected_rows=job.row_count, expected_checksum=job.checksum)
+            archived_rows = _verify_object(store, job.r2_key, expected_size=job.file_size_bytes,
+                                           expected_rows=job.row_count, expected_checksum=job.checksum)
         except Exception:
             continue
 
@@ -627,57 +775,69 @@ def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: da
         if job.dataset_type == "odds":
             match_scope = select(ActiveMatch.id).where(
                 ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
-            query = delete(ActiveOdds).where(
+            candidates = session.scalars(select(ActiveOdds).where(
                 ActiveOdds.captured_at >= day_start, ActiveOdds.captured_at < day_end,
-                ActiveOdds.match_id.in_(match_scope))
-            session.execute(query)
+                ActiveOdds.expires_at <= datetime.now(timezone.utc),
+                ActiveOdds.match_id.in_(match_scope)).with_for_update()).all()
+            by_id = {row["odds_id"]: row for row in archived_rows if row.get("odds_id")}
+            eligible = [row.id for row in candidates if str(row.id) in by_id and matches_snapshot(row, by_id[str(row.id)])]
+            if not eligible:
+                continue
+            session.execute(delete(ActiveOdds).where(ActiveOdds.id.in_(eligible)))
+            remaining_covered = any(str(row.id) in by_id for row in session.scalars(
+                select(ActiveOdds).where(ActiveOdds.match_id.in_(match_scope))).all())
         elif job.dataset_type == "results":
             match_scope = select(ActiveMatch.id).where(
                 ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
-            query = delete(MatchResult).where(
+            candidates = session.scalars(select(MatchResult).where(
                 func.coalesce(MatchResult.finished_at, MatchResult.verified_at) >= day_start,
                 func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < day_end,
                 MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None),
-                MatchResult.match_id.in_(match_scope))
-            session.execute(query)
+                MatchResult.match_id.in_(match_scope)).with_for_update()).all()
+            by_id = {row["result_id"]: row for row in archived_rows if row.get("result_id")}
+            eligible = [row.id for row in candidates if str(row.id) in by_id and matches_snapshot(row, by_id[str(row.id)])
+                        and (row.finished_at or row.verified_at).replace(tzinfo=timezone.utc) <
+                        datetime.now(timezone.utc) - timedelta(days=get_settings().active_state_retention_days)]
+            if not eligible:
+                continue
+            session.execute(delete(MatchResult).where(MatchResult.id.in_(eligible)))
+            remaining_covered = any(str(row.id) in by_id for row in session.scalars(
+                select(MatchResult).where(MatchResult.match_id.in_(match_scope))).all())
         elif job.dataset_type == "matches":
             # Historical R2 fixtures are the source of truth. Re-read their IDs
             # and retain product records before deleting the expiring active row.
-            from app.storage.r2 import parquet_rows
-            archived_ids = {str(row.get("provider_match_id")) for row in
-                            parquet_rows(store.get_object(job.r2_key))
-                            if row.get("provider_match_id") is not None}
+            archived_ids = {(row.get("provider"), str(row.get("provider_match_id"))): row
+                            for row in archived_rows if row.get("provider") and row.get("provider_match_id")}
             eligible = session.scalars(select(ActiveMatch).where(
                 ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end,
                 ActiveMatch.expires_at <= datetime.now(timezone.utc),
                 ActiveMatch.season == season_id,
                 ActiveMatch.league_id == job.league,
             ).with_for_update()).all()
-            if any(match.provider_match_id not in archived_ids for match in eligible):
-                continue
+            eligible = [match for match in eligible if (match.provider, match.provider_match_id) in archived_ids
+                        and matches_snapshot(match, archived_ids[(match.provider, match.provider_match_id)])]
             match_ids = [match.id for match in eligible]
             if not match_ids:
-                job.status = ArchiveStatus.DELETED.value
-                job.deleted_at = datetime.now(timezone.utc)
-                session.commit()
-                count += 1
                 continue
             if job.league:
                 match_ids = [match.id for match in eligible if match.league_id == job.league]
-            dependent = (
-                session.scalar(select(func.count()).select_from(ActiveOdds).where(ActiveOdds.match_id.in_(match_ids))) or
-                session.scalar(select(func.count()).select_from(MatchResult).where(MatchResult.match_id.in_(match_ids))) or
-                session.scalar(select(func.count()).select_from(Prediction).where(Prediction.match_id.in_(match_ids))) or
-                session.scalar(select(func.count()).select_from(CouponItem).where(CouponItem.match_id.in_(match_ids)))
-            )
-            if dependent:
+            protected = set()
+            for model in (ActiveOdds, MatchResult, Prediction, MatchAnalysis, CouponItem):
+                protected.update(session.scalars(select(model.match_id).where(model.match_id.in_(match_ids))).all())
+            match_ids = [identity for identity in match_ids if identity not in protected]
+            if not match_ids:
                 continue
             session.execute(delete(ActiveMatch).where(ActiveMatch.id.in_(match_ids)))
+            remaining_covered = any((match.provider, match.provider_match_id) in archived_ids for match in
+                                    session.scalars(select(ActiveMatch).where(
+                                        ActiveMatch.league_id == job.league, ActiveMatch.season == season_id,
+                                        ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end)).all())
         else:
             continue
 
-        job.status = ArchiveStatus.DELETED.value
-        job.deleted_at = datetime.now(timezone.utc)
+        if not remaining_covered:
+            job.status = ArchiveStatus.DELETED.value
+            job.deleted_at = datetime.now(timezone.utc)
         session.commit()
         count += 1
     return count

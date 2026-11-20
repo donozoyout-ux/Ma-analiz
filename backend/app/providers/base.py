@@ -28,6 +28,10 @@ class ProviderUnavailable(ProviderFailure):
     code = "PROVIDER_UNAVAILABLE"
 
 
+class ProviderAccessRestricted(ProviderFailure):
+    code = "PROVIDER_ACCESS_RESTRICTED"
+
+
 class ProviderAuthError(ProviderFailure):
     code = "PROVIDER_AUTH_ERROR"
 

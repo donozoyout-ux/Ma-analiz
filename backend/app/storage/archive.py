@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Callable, Protocol
 
-from app.storage.r2 import ObjectStore, parquet_bytes, parquet_row_count
+from app.storage.r2 import ObjectStore, parquet_bytes, parquet_row_count, parquet_rows
 
 
 class ArchiveStatus(StrEnum):
@@ -98,29 +98,33 @@ def _safe_partition(value: str) -> str:
     return value
 
 
-def _verify_object(store: ObjectStore, key: str, *, expected_size: int, expected_rows: int, expected_checksum: str) -> None:
+def _verify_object(store: ObjectStore, key: str, *, expected_size: int, expected_rows: int, expected_checksum: str) -> list[dict]:
     info = store.head_object(key)
     if info is None or info.size != expected_size:
         raise IOError("Archive object is missing or has an unexpected size")
     payload = store.get_object(key)
-    if parquet_row_count(payload) != expected_rows:
-        raise IOError("Archive row count verification failed")
     actual_checksum = hashlib.sha256(payload).hexdigest()
     if actual_checksum != expected_checksum:
         raise IOError("Archive checksum verification failed")
+    if parquet_row_count(payload) != expected_rows:
+        raise IOError("Archive row count verification failed")
+    rows = parquet_rows(payload)
+    if len(rows) != expected_rows:
+        raise IOError("Archive decoded row count verification failed")
     if not info.metadata or info.metadata.get("sha256") != expected_checksum:
         raise IOError("Archive metadata checksum verification failed")
     if info.metadata.get("row-count") != str(expected_rows):
         raise IOError("Archive metadata row-count verification failed")
     if info.metadata.get("archive-key") != key:
         raise IOError("Archive metadata key verification failed")
+    return rows
 
 
 def archive_partition(
     store: ObjectStore, *, dataset: str, season: str, league: str,
     day: date, rows: list[dict], retries: int = 3,
     sleep: Callable[[float], None] = time.sleep,
-    tracker: ArchiveTracker | None = None,
+    tracker: ArchiveTracker | None = None, part: str | None = None,
 ) -> ArchiveReceipt:
     """Write one deterministic Parquet partition and verify it before reporting VERIFIED."""
     if not rows:
@@ -131,6 +135,8 @@ def archive_partition(
     payload = parquet_bytes(rows)
     checksum = hashlib.sha256(payload).hexdigest()
     key = f"{dataset}/season={season}/league={league}/date={day.isoformat()}.parquet"
+    if part is not None:
+        key = f"{dataset}/season={season}/league={league}/date={day.isoformat()}/part={_safe_partition(part)}.parquet"
     if tracker:
         previous = tracker.get_status(key)
         if previous == ArchiveStatus.DELETED:
@@ -197,8 +203,9 @@ def archive_partition(
         try:
             if tracker:
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.UPLOADING, rows=len(rows))
-            store.put_object(key, payload, content_type="application/vnd.apache.parquet",
-                             metadata={"sha256": checksum, "row-count": str(len(rows)), "archive-key": key})
+            if store.head_object(key) is None:
+                store.put_object_if_absent(key, payload, content_type="application/vnd.apache.parquet",
+                                          metadata={"sha256": checksum, "row-count": str(len(rows)), "archive-key": key})
             if tracker:
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.UPLOADED,
                                    rows=len(rows), size=len(payload), checksum=checksum)
@@ -217,7 +224,8 @@ def archive_partition(
     raise RuntimeError(f"Archive failed after {retries} attempts; source records must be retained") from last_error
 
 
-def cleanup_database_rows_after_verified(session, *, key: str, delete_rows: Callable) -> None:
+def cleanup_database_rows_after_verified(session, *, key: str, delete_rows: Callable,
+                                         store: ObjectStore | None = None) -> None:
     """Delete only rows covered by a persisted VERIFIED job and older than a 1-day buffer.
 
     delete_rows(session, archive_job) must scope its deletion to this job's partition and
@@ -231,6 +239,10 @@ def cleanup_database_rows_after_verified(session, *, key: str, delete_rows: Call
         session.rollback()
         raise RuntimeError("Archive is not verified and outside the safety buffer; refusing database cleanup")
     try:
+        if store is None or not getattr(job, "file_size_bytes", None):
+            raise RuntimeError("Live object verification is required; refusing database cleanup")
+        _verify_object(store, key, expected_size=job.file_size_bytes,
+                       expected_rows=job.row_count, expected_checksum=job.checksum)
         delete_rows(session, job)
         job.status = ArchiveStatus.DELETED.value
         job.deleted_at = datetime.now(timezone.utc)

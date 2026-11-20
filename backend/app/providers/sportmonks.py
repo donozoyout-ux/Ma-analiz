@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
 
 import httpx
@@ -83,7 +83,7 @@ class SportmonksProvider:
 
     def __init__(self, *, token: str, base_url: str = "https://api.sportmonks.com/v3/football",
                  timeout_seconds: float = 15, max_pages: int = 100,
-                 client: httpx.Client | None = None):
+                 client: httpx.Client | None = None, requests_per_minute: int = 60):
         if not token or not token.strip():
             raise ValueError("Sportmonks token is required")
         if timeout_seconds <= 0 or max_pages < 1:
@@ -96,6 +96,10 @@ class SportmonksProvider:
         # Apply auth per request so injected clients and the production client
         # follow the same documented contract without putting the token in a URL.
         self._owns_client = client is None
+        if requests_per_minute < 1:
+            raise ValueError("Request rate must be positive")
+        self._request_interval = 60 / requests_per_minute
+        self._last_request: float | None = None
         self.last_latency_ms: float | None = None
         self.last_successful_request: datetime | None = _LAST_SUCCESSFUL_REQUEST
         self.last_records_received = 0
@@ -112,6 +116,9 @@ class SportmonksProvider:
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict:
         started = perf_counter()
+        if self._last_request is not None:
+            sleep(max(0, self._request_interval - (perf_counter() - self._last_request)))
+        self._last_request = perf_counter()
         try:
             response = self._client.get(f"{self.base_url}/{path.lstrip('/')}", params=params or {},
                                         headers={"Authorization": self._token})
@@ -163,8 +170,10 @@ class SportmonksProvider:
                 raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: expected a list of provider records")
             collected.extend(data)
             meta = payload.get("meta") or {}
-            pagination = meta.get("pagination") if isinstance(meta, dict) else None
+            pagination = payload.get("pagination") or (meta.get("pagination") if isinstance(meta, dict) else None)
             has_more = pagination.get("has_more", False) if isinstance(pagination, dict) else False
+            if not isinstance(has_more, bool):
+                raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: pagination has_more is not boolean")
             if not has_more:
                 return collected
         raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: pagination exceeded the configured safety limit")
@@ -302,10 +311,10 @@ class SportmonksProvider:
 
     def get_odds(self, match_id: str) -> list[dict]:
         fixture_id = _identifier(match_id, "fixture id")
-        payload = self._get(f"odds/premium/fixtures/{fixture_id}", {
+        rows = self._pages(f"odds/premium/fixtures/{fixture_id}", {
             "include": "market;bookmaker;history",
+            "per_page": 50,
         })
-        rows = payload["data"]
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: premium odds data is not a list")
         normalized: list[dict] = []

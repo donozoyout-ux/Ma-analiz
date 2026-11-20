@@ -10,12 +10,14 @@ import re
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
-from time import perf_counter
+from time import perf_counter, sleep
 from typing import Any
+from urllib.parse import urlsplit
+from urllib.robotparser import RobotFileParser
 
 import httpx
 
-from app.providers.base import ProviderInvalidResponse, ProviderNotConfigured, ProviderUnavailable
+from app.providers.base import ProviderAccessRestricted, ProviderInvalidResponse, ProviderNotConfigured, ProviderUnavailable
 
 
 BOOKMAKERS = {"3": "Crown", "8": "Bet365", "31": "Sbobet"}
@@ -29,18 +31,24 @@ _CUP_LEAGUES = {"103", "113", "2187"}
 
 class GoalooProvider:
     name = "goaloo"
+    statistics_supported = True
     provider_label = "GOOLOO"
 
     def __init__(self, *, base_url: str = "https://football.goaloo.com",
                  odds_base_url: str = "https://www.goaloo.com", league_ids: tuple[str, ...] = (),
                  season_ids: tuple[str, ...] = (), timeout_seconds: float = 15,
-                 client: httpx.Client | None = None):
+                 client: httpx.Client | None = None, requests_per_minute: int = 60):
         if timeout_seconds <= 0:
             raise ValueError("Timeout must be positive")
         self.base_url, self.odds_base_url = base_url.rstrip("/"), odds_base_url.rstrip("/")
         self.league_ids, self.season_ids = tuple(league_ids), tuple(season_ids)
         self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=True)
         self._owns_client = client is None
+        if requests_per_minute < 1:
+            raise ValueError("Request rate must be positive")
+        self._request_interval = 60 / requests_per_minute
+        self._last_request: float | None = None
+        self._robots_cache: dict[str, RobotFileParser] = {}
         self.last_latency_ms: float | None = None
         self.last_successful_request: datetime | None = None
         self._fixture_cache: dict[str, dict[str, Any]] = {}
@@ -55,11 +63,43 @@ class GoalooProvider:
         if self._owns_client:
             self._client.close()
 
+    def _wait_request(self):
+        if self._last_request is not None:
+            sleep(max(0, self._request_interval - (perf_counter() - self._last_request)))
+        self._last_request = perf_counter()
+
+    def _check_robots(self, url: str):
+        parsed = urlsplit(url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        policy = self._robots_cache.get(origin)
+        if policy is None:
+            self._wait_request()
+            try:
+                response = self._client.get(origin + "/robots.txt", headers={"User-Agent": "MacAnaliz/2.0"})
+            except httpx.HTTPError:
+                raise ProviderUnavailable("PROVIDER_UNAVAILABLE: robots policy could not be checked") from None
+            if response.status_code in {404, 410}:
+                lines = []
+            elif response.status_code == 200 and not response.text.lstrip().startswith("<"):
+                lines = response.text.splitlines()
+            else:
+                raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED: robots policy unavailable")
+            policy = RobotFileParser()
+            policy.parse(lines)
+            self._robots_cache[origin] = policy
+            delay = policy.crawl_delay("MacAnaliz")
+            if delay:
+                self._request_interval = max(self._request_interval, delay)
+        if not policy.can_fetch("MacAnaliz", url):
+            raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED: source robots policy disallows this endpoint")
+
     def _get(self, url: str, *, referer: str | None = None, params: dict[str, Any] | None = None) -> Any:
+        self._check_robots(url)
         headers = {"User-Agent": "Mozilla/5.0 (compatible; MacAnaliz/2.0)", "Accept": "application/json,text/html"}
         if referer:
             headers.update({"Referer": referer, "X-Requested-With": "XMLHttpRequest"})
         started = perf_counter()
+        self._wait_request()
         try:
             response = self._client.get(url, params=params, headers=headers)
         except httpx.TimeoutException:
@@ -87,6 +127,8 @@ class GoalooProvider:
 
     def health_check(self) -> dict[str, Any]:
         started = perf_counter()
+        self._check_robots(self.base_url + "/")
+        self._wait_request()
         try:
             response = self._client.get(self.base_url + "/", headers={"User-Agent": "Mozilla/5.0"})
         except httpx.HTTPError:
@@ -292,6 +334,23 @@ class GoalooProvider:
                     result.append(match)
         return result
 
+    def get_matches_for_scope(self, day: date, league: str, season: str) -> list[dict]:
+        if league not in self.league_ids or season not in self.season_ids:
+            raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: historical scope is not enabled")
+        key = (league, season)
+        if key not in self._matches_by_day_cache:
+            by_day = {}
+            for match in self._match_rows(league, season):
+                by_day.setdefault(match["start_time"].date(), []).append(match)
+            self._matches_by_day_cache[key] = by_day
+        matches = self._matches_by_day_cache[key].get(day, [])
+        if any(match["status"] == "UNKNOWN" for match in matches):
+            raise ProviderUnavailable("PROVIDER_UNAVAILABLE: unverified Goaloo match status code")
+        return matches
+
+    def get_results_for_scope(self, day: date, league: str, season: str) -> list[dict]:
+        return self._results(self.get_matches_for_scope(day, league, season))
+
     def get_match(self, match_id: str) -> dict | None:
         cached = self._fixture_cache.get(str(match_id))
         if cached:
@@ -335,8 +394,8 @@ class GoalooProvider:
             if not isinstance(bookmaker, dict):
                 raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo bookmaker row is not an object")
             cid = str(bookmaker.get("cid", ""))
-            name = BOOKMAKERS.get(cid)
-            if name is None:
+            name = BOOKMAKERS.get(cid) or str(bookmaker.get("cn") or "").strip()
+            if not name:
                 continue
             for market, field, sides, hk in (
                 ("1X2", "euro", (("u", "HOME"), ("g", "DRAW"), ("d", "AWAY")), False),
@@ -382,16 +441,36 @@ class GoalooProvider:
                             "bookmaker": name, "market": market, "selection": selection,
                             "line": canonical_line, "raw_line": str(line) if line is not None else None,
                             "odds": price, "captured_at": capture, "source": "goaloo",
+                            "source_url": page,
                             "period": period, "snapshot_type": actual_type,
                             "status": "AVAILABLE", "raw_value": json.dumps(quote, ensure_ascii=False, separators=(",", ":"))})
         return output
 
     def get_results(self, day: date) -> list[dict]:
+        return self._results(self.get_matches(day))
+
+    @staticmethod
+    def _results(matches: list[dict]) -> list[dict]:
         return [{"provider_match_id": row["provider_match_id"], "status": "FINISHED",
                  "home_score": int(match.group(1)), "away_score": int(match.group(2)),
                  "result_source": "goaloo"}
-                for row in self.get_matches(day) if row["status"] == "FINISHED"
+                for row in matches if row["status"] == "FINISHED"
                 if (match := _SCORE.match(str(row.get("source_score", ""))))]
 
     def get_statistics(self, match_id: str) -> list[dict]:
-        raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo statistics endpoint has not been verified")
+        if not str(match_id).isdigit():
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo match ID must be numeric")
+        from app.providers.goaloo_statistics import parse_statistics
+        url = f"{self.odds_base_url}/football/match/live-{match_id}"
+        self._check_robots(url)
+        self._wait_request()
+        try:
+            response = self._client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; MacAnaliz/2.0)"})
+        except httpx.HTTPError:
+            raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo statistics request failed") from None
+        if not response.is_success:
+            raise ProviderUnavailable(f"PROVIDER_UNAVAILABLE: Goaloo statistics HTTP {response.status_code}")
+        if response.url.path.rstrip("/") != f"/football/match/live-{match_id}":
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: Goaloo statistics page redirected")
+        return [{**row, "provider_match_id": str(match_id), "source": self.name, "source_url": url}
+                for row in parse_statistics(response.text)]

@@ -32,7 +32,7 @@ def _safe_error_code(exc: Exception) -> str:
 
 
 def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
-              settings: Any | None = None) -> dict[str, Any]:
+              settings: Any | None = None, parquet: bool = False) -> dict[str, Any]:
     """Run one tiny put/get/hash/delete cycle without a database dependency."""
     cfg = settings or get_settings()
     env_status = {
@@ -65,12 +65,16 @@ def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
     run_id = uuid4().hex
     key = None
     owns_object = False
+    payload = _PAYLOAD
+    if parquet:
+        from app.storage.r2 import parquet_bytes
+        payload = parquet_bytes([{"probe": "r2-zstd", "value": 1}])
     try:
         store = store_factory()
         # A successful HEAD (including a confirmed 404 for this unique key)
         # verifies that the endpoint/bucket can be reached before any write.
         for _ in range(5):
-            candidate = f"_smoke_tests/{run_id}/health.txt"
+            candidate = f"_smoke_tests/{run_id}/health." + ("parquet" if parquet else "txt")
             if store.head_object(candidate) is None:
                 key = candidate
                 report["object_key"] = key
@@ -79,10 +83,10 @@ def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
         if key is None:
             raise RuntimeError("UNIQUE_SMOKE_KEY_UNAVAILABLE")
 
-        digest = hashlib.sha256(_PAYLOAD).hexdigest()
+        digest = hashlib.sha256(payload).hexdigest()
         metadata = {"macanaliz-smoke-id": run_id, "sha256": digest}
         try:
-            store.put_object(key, _PAYLOAD, content_type="text/plain; charset=utf-8", metadata=metadata)
+            store.put_object(key, payload, content_type="application/vnd.apache.parquet" if parquet else "text/plain; charset=utf-8", metadata=metadata)
             owns_object = True
             report["r2_connected"] = "PASS"
             report["write"] = "PASS"
@@ -104,7 +108,12 @@ def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
             report["read"] = "PASS"
         except Exception:
             raise
-        report["size"] = "PASS" if info.size == len(_PAYLOAD) and len(actual) == len(_PAYLOAD) else "FAIL"
+        report["size"] = "PASS" if info.size == len(payload) and len(actual) == len(payload) else "FAIL"
+        if parquet:
+            from app.storage.r2 import parquet_rows
+            report["parquet_rows"] = "PASS" if parquet_rows(actual) == [{"probe": "r2-zstd", "value": 1}] else "FAIL"
+            if report["parquet_rows"] != "PASS":
+                raise RuntimeError("PARQUET_READBACK_FAILED")
         report["checksum"] = (
             "PASS"
             if hashlib.sha256(actual).hexdigest() == digest
@@ -139,7 +148,11 @@ def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
 
 
 def main() -> int:
-    report = run_smoke()
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--parquet", action="store_true", help="verify a Zstandard Parquet row round-trip")
+    args = parser.parse_args()
+    report = run_smoke(parquet=args.parquet)
     for name, status in report["environment"].items():
         print(f"{name}={status}")
     if report["status"] == "NOT_CONFIGURED":
@@ -163,6 +176,8 @@ def main() -> int:
         print("OBJECT_KEY=" + report["object_key"])
     if report.get("error_code"):
         print("ERROR_CODE=" + report["error_code"])
+    if "parquet_rows" in report:
+        print("PARQUET_ROWS=" + report["parquet_rows"])
     return 0 if report["status"] == "CONNECTED" else 1
 
 

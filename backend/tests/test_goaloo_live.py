@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from app.core.config import get_settings
-from app.providers.base import ProviderUnavailable
+from app.providers.base import ProviderAccessRestricted, ProviderUnavailable
 from app.providers.normalize import normalize_matches
 from app.providers.registry import create_provider
 
@@ -44,7 +44,7 @@ def test_goaloo_live_league_match_and_odds_smoke():
                        and row.get("period") in {"PREMATCH", "LIVE"}
                        and row.get("snapshot_type") in {"OPENING", "LATEST", "CLOSING", "LIVE"}
                        for row in odds)
-        except ProviderUnavailable as exc:
+        except (ProviderUnavailable, ProviderAccessRestricted) as exc:
             pytest.skip(f"NOT_TESTED: Goaloo was unavailable during live smoke check ({exc.code})")
     finally:
         close = getattr(provider, "close", None)

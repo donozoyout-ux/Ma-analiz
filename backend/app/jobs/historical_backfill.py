@@ -18,7 +18,7 @@ from app.storage.r2 import R2ObjectStore
 
 _TOTAL_FIELDS = (
     "records_seen", "matches_seen", "dates_requested", "dates_completed", "dates_skipped", "failed_dates",
-    "matches_written", "results_written", "odds_written", "duplicates", "invalid_rows", "r2_objects",
+    "matches_written", "results_written", "odds_written", "statistics_written", "duplicates", "invalid_rows", "r2_objects",
     "r2_bytes", "checksum_failures", "postgres_rows_written", "postgres_rows_deleted",
 )
 
@@ -57,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--end-date", type=date.fromisoformat)
     parser.add_argument("--dry-run", action="store_true", help="show planned scopes without DB/R2 writes")
     parser.add_argument("--batch-size", type=int, default=90, help="maximum dates processed per DB batch")
+    parser.add_argument("--skip-odds", action="store_true", help="archive matches/results/statistics independently of odds")
     return parser
 
 
@@ -75,7 +76,7 @@ def _scope_dates(season: str, settings: Any, start: date | None, end: date | Non
 
 
 def _add_totals(total: dict[str, int], outcome: dict[str, Any]) -> None:
-    for field in ("records_seen", "matches_seen", "matches_written", "results_written", "odds_written", "duplicates",
+    for field in ("records_seen", "matches_seen", "matches_written", "results_written", "odds_written", "statistics_written", "duplicates",
                   "invalid_rows", "r2_objects", "r2_bytes", "checksum_failures",
                   "postgres_rows_written", "postgres_rows_deleted", "dates_requested", "dates_skipped"):
         total[field] += int(outcome.get(field, 0) or 0)
@@ -86,6 +87,7 @@ def _add_totals(total: dict[str, int], outcome: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     settings = get_settings()
+    include_odds = settings.historical_collect_odds and not args.skip_odds
     if args.batch_size < 1:
         print(json.dumps({"status": "FAILED", "error_code": "INVALID_BATCH_SIZE"}), flush=True)
         return 2
@@ -120,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
                          "end_date": end_day, "dates_requested": (end_day - start_day).days + 1})
     if args.dry_run:
         print(json.dumps({"status": "DRY_RUN", "batch_size": args.batch_size,
-                          "scopes": plan, "writes": False}, default=str), flush=True)
+                          "scopes": plan, "writes": False, "odds_requested": include_odds,
+                          "datasets": ["matches", "results", "statistics"] + (["odds"] if include_odds else [])}, default=str), flush=True)
         return 0
     if SessionLocal is None or engine is None:
         print(json.dumps({"status": "BLOCKED", "error_code": "DATABASE_NOT_CONFIGURED"}), flush=True)
@@ -139,7 +142,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        provider = create_provider(settings)
+        provider = create_provider(settings.model_copy(update={"enabled_leagues": ",".join(leagues),
+                                                                "enabled_seasons": ",".join(seasons)}))
         caller = ProviderCaller(provider, requests_per_minute=settings.provider_requests_per_minute,
                                 max_retries=settings.provider_retry_count)
         store = R2ObjectStore()
@@ -169,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
                 chunk_end = min(scope["end_date"], cursor + timedelta(days=args.batch_size - 1))
                 with SessionLocal() as session:
                     result = historical_ingest(session, caller, store, season=season, league=league,
-                                               start_date=cursor, end_date=chunk_end)
+                                               start_date=cursor, end_date=chunk_end, include_odds=include_odds)
                 metrics = {**result, "dates_requested": (chunk_end - cursor).days + 1,
                            "matches_seen": result.get("records_seen", 0),
                            "failed_dates": int(result.get("dates_failed", 0) or 0)
@@ -199,11 +203,14 @@ def main(argv: list[str] | None = None) -> int:
         if callable(close):
             close()
 
-    failed = any(item.get("status") in {"FAILED", "PARTIAL", "BLOCKED"} for item in outcomes)
-    total_written = totals["matches_written"] + totals["results_written"] + totals["odds_written"]
-    status = "FAILED" if failed else "SUCCESS" if total_written else "NO_DATA"
+    failed = any(item.get("status") in {"FAILED", "PARTIAL", "BLOCKED"}
+                 or item.get("reason") == "SEASON_NOT_AVAILABLE"
+                 or item.get("error_code") in {"SEASON_NOT_AVAILABLE", "LEAGUE_NOT_AVAILABLE"}
+                 for item in outcomes)
+    total_written = totals["matches_written"] + totals["results_written"] + totals["statistics_written"] + totals["odds_written"]
+    status = "FAILED" if failed else "SUCCESS" if total_written or totals["dates_completed"] else "NO_DATA"
     print(json.dumps({"status": status, "scopes": outcomes, **totals}, default=str), flush=True)
-    return 1 if failed or not total_written else 0
+    return 1 if failed or status == "NO_DATA" else 0
 
 
 if __name__ == "__main__":

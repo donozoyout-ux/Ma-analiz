@@ -29,13 +29,13 @@ from app.providers.registry import ProviderCaller, create_provider
 from app.api.routes import health as internal_health
 
 
-EXPECTED_ALEMBIC_HEAD = "0008_historical_ingest_leases"
+EXPECTED_ALEMBIC_HEAD = "0009_historical_coverage"
 LEGACY_DATABASE_NAMES = {
     "betappv33", "betappv33333", "kuponanaliziivv7", "kuponanaliziivv755",
 }
 FIRST_BACKFILL_ARGS = (
-    "--league", "36", "--season", "2021-2022",
-    "--start-date", "2021-08-13", "--end-date", "2021-08-13", "--batch-size", "1",
+    "--league", "36", "--season", "2025-2026",
+    "--start-date", "2025-08-15", "--end-date", "2025-08-15", "--batch-size", "1",
 )
 
 
@@ -121,7 +121,7 @@ def _check_goaloo(settings: Any, *, provider_factory: Callable[[Any], Any] = cre
               "snapshots": [], "closing_rows": 0, "error_code": None}
     if (str(settings.provider_id or "").lower() != "goaloo"
             or "36" not in settings.enabled_league_ids
-            or "2021-2022" not in settings.enabled_season_ids):
+            or "2025-2026" not in settings.enabled_season_ids):
         result.update(status="NOT_CONFIGURED", error_code="GOALOO_SCOPE_NOT_CONFIGURED")
         return result
     provider = None
@@ -134,13 +134,13 @@ def _check_goaloo(settings: Any, *, provider_factory: Callable[[Any], Any] = cre
                    and "premier" in str(row.get("name", "")).casefold() for row in leagues):
             raise RuntimeError("GOALOO_LEAGUE_IDENTITY_MISMATCH")
         seasons = caller.call("get_seasons", "36")
-        if not any(str(row.get("id", row.get("season_id", ""))) == "2021-2022" for row in seasons):
+        if not any(str(row.get("id", row.get("season_id", ""))) == "2025-2026" for row in seasons):
             raise RuntimeError("GOALOO_SEASON_UNAVAILABLE")
         from datetime import date
-        day = date(2021, 8, 13)
+        day = date(2025, 8, 15)
         matches = caller.call("get_matches", day)
         matches = [row for row in matches if str(row.get("league_id")) == "36"
-                   and str(row.get("season")) == "2021-2022"]
+                   and str(row.get("season")) == "2025-2026"]
         if len(matches) != 1:
             raise RuntimeError("GOALOO_EXPECTED_MATCH_COUNT_MISMATCH")
         match_id = str(matches[0].get("provider_match_id", ""))
@@ -206,7 +206,7 @@ def _verify_backfill_objects(db_engine: Engine, *, store_factory: Callable[[], A
     verified = []
     with Session(db_engine) as session:
         for dataset in datasets:
-            key = f"{dataset}/season=2021-2022/league=36/date=2021-08-13.parquet"
+            key = f"{dataset}/season=2025-2026/league=36/date=2025-08-15.parquet"
             job = session.query(ArchiveJob).filter_by(r2_key=key).one_or_none()
             if job is None or job.status != ArchiveStatus.VERIFIED.value:
                 raise RuntimeError("ARCHIVE_JOB_NOT_VERIFIED")
