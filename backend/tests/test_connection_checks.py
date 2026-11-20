@@ -84,6 +84,9 @@ def test_postgres_read_only_and_schema(monkeypatch, settings):
     connection=engine.connect.return_value.__enter__.return_value
     monkeypatch.setattr(module, 'create_engine', MagicMock(return_value=engine))
     inspector=MagicMock()
+    inspector.default_schema_name="public"
+    inspector.get_schema_names.return_value=["public"]
+    monkeypatch.setattr(module.MigrationContext, "configure", lambda conn: MagicMock(get_current_heads=lambda: ("0009_historical_coverage",)))
     inspector.get_table_names.return_value=list(module.Base.metadata.tables)
     inspector.get_columns.side_effect=lambda name: [{'name': c.name} for c in module.Base.metadata.tables[name].columns]
     monkeypatch.setattr(module, 'inspect', lambda conn: inspector)
@@ -104,3 +107,87 @@ def test_postgres_failure_redacted(monkeypatch, settings):
     result=module.postgres_check(settings)
     assert result['status'] == 'FAILED'
     assert 'private-' not in json.dumps(result)
+
+@pytest.mark.parametrize('code,status,category', [
+    ('InvalidAccessKeyId',403,'AUTHENTICATION'),
+    ('SignatureDoesNotMatch',403,'AUTHENTICATION'),
+    ('AccessDenied',403,'AUTHORIZATION'),
+    ('403',403,'AUTHENTICATION_OR_AUTHORIZATION'),
+    ('NoSuchBucket',404,'ENDPOINT_OR_BUCKET'),
+    ('RequestTimeout',408,'TIMEOUT'),
+    ('private-secret',500,'UNKNOWN'),
+])
+def test_safe_r2_categories(code,status,category):
+    exc=module.aws_errors.ClientError({'Error':{'Code':code,'Message':'private-secret'},
+        'ResponseMetadata':{'HTTPStatusCode':status}}, 'HeadBucket')
+    assert module.r2_error_category(exc)==category
+
+@pytest.mark.parametrize('error,category', [
+    (module.aws_errors.ConnectTimeoutError(endpoint_url='private-host'), 'TIMEOUT'),
+    (module.aws_errors.ReadTimeoutError(endpoint_url='private-host'), 'TIMEOUT'),
+    (module.aws_errors.EndpointConnectionError(endpoint_url='private-host'), 'NETWORK'),
+    (module.aws_errors.SSLError(endpoint_url='private-host',error='secret'), 'NETWORK'),
+    (ValueError('private-host'), 'ENDPOINT_CONFIGURATION'),
+])
+def test_transport_error_categories(error,category):
+    assert module.r2_error_category(error)==category
+
+
+def test_schema_revision_and_other_schemas(monkeypatch):
+    inspector=MagicMock(default_schema_name='public')
+    inspector.get_schema_names.return_value=['public','legacy','pg_catalog','information_schema']
+    inspector.get_table_names.side_effect=lambda schema=None: ['active_matches','alembic_version'] if schema=='legacy' else []
+    monkeypatch.setattr(module,'inspect',lambda conn:inspector)
+    context=MagicMock()
+    monkeypatch.setattr(module.MigrationContext,'configure',lambda conn:context)
+    for current, issue in [((), 'ALEMBIC_REVISION_MISSING'),
+                            (('0001_initial',),'ALEMBIC_REVISION_BEHIND_OR_DIVERGED'),
+                            (('private-secret',),'ALEMBIC_REVISION_UNKNOWN'),
+                            (('0009_historical_coverage',),'REVISION_SCHEMA_MISMATCH')]:
+        context.get_current_heads.return_value=current
+        result=module.schema_report(MagicMock())
+        assert issue in result['schema_issues']
+        assert result['other_schemas']=={'legacy':['active_matches']}
+        assert result['alembic_version_other_schemas']==['legacy']
+        assert 'private-secret' not in json.dumps(result)
+        assert result['schema']=='INCOMPLETE'
+
+
+def test_health_preserves_connection_when_job_tables_missing(monkeypatch):
+    from app.api import routes
+    settings=Settings(_env_file=None,database_url='postgresql://test:test@localhost/test',
+                      r2_endpoint=None,r2_bucket=None,r2_access_key_id=None,r2_secret_access_key=None,
+                      ai_provider=None)
+    monkeypatch.setattr(routes,'get_settings',lambda:settings)
+    engine=MagicMock()
+    connection=engine.connect.return_value.__enter__.return_value
+    def execute(statement):
+        if 'job_runs' in str(statement): raise RuntimeError('missing table')
+        return MagicMock()
+    connection.execute.side_effect=execute
+    monkeypatch.setattr(routes,'engine',engine)
+    monkeypatch.setattr(routes,'schema_report',lambda conn:{'schema':'INCOMPLETE'})
+    monkeypatch.setattr(routes,'provider_health',lambda:{'status':'PROVIDER_NOT_CONFIGURED'})
+    result=routes.health()
+    assert result['database']=='CONNECTED'
+    assert result['database_schema']=='INCOMPLETE'
+    assert result['status']=='degraded'
+
+@pytest.mark.parametrize('url', ['postgresql://user:pass%25@localhost/db','postgresql+psycopg://user:pass%25@localhost/db'])
+def test_alembic_env_normalizes_driver_without_connecting(monkeypatch,url):
+    import runpy
+    import sqlalchemy
+    import logging.config
+    from alembic import context
+    from app.core import config as app_config
+    cfg=module.Config()
+    monkeypatch.setattr(context,'config',cfg,raising=False)
+    monkeypatch.setattr(context,'is_offline_mode',lambda:False)
+    monkeypatch.setattr(context,'configure',MagicMock())
+    monkeypatch.setattr(context,'begin_transaction',MagicMock())
+    monkeypatch.setattr(context,'run_migrations',MagicMock())
+    monkeypatch.setattr(app_config,'get_settings',lambda:Settings(_env_file=None,database_url=url))
+    factory=MagicMock(return_value=MagicMock())
+    monkeypatch.setattr(sqlalchemy,'engine_from_config',factory)
+    runpy.run_path(str(module.PROJECT_ROOT/'backend/migrations/env.py'))
+    assert factory.call_args.args[0]['sqlalchemy.url']=='postgresql+psycopg://user:pass%25@localhost/db'

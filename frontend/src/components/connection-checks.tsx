@@ -1,7 +1,7 @@
 "use client";
 import { FormEvent, useState } from "react";
 
-type Check = {status:string; missing_env:string[]; invalid_env:string[]; schema?:string; missing_tables?:string[]; missing_columns?:string[]};
+type Check = {status:string; missing_env:string[]; invalid_env:string[]; schema?:string; current_revisions?:string[]; expected_revisions?:string[]; unknown_revision?:boolean; default_schema?:string; other_schemas?:Record<string,string[]>; alembic_version_other_schemas?:string[]; schema_issues?:string[]; error_category?:string; missing_tables?:string[]; missing_columns?:string[]};
 type Report = {checked_at:string; postgres:Check; r2:Check};
 const labels:Record<string,string> = {CONNECTED:"Bağlantı başarılı", ACCESSIBLE:"Bucket erişimi başarılı", NOT_CONFIGURED:"Yapılandırma eksik", INVALID_CONFIGURATION:"Yapılandırma geçersiz", FAILED:"Kontrol başarısız", READY:"Hazır", INCOMPLETE:"Tablo veya sütun eksik", NOT_VERIFIED:"Doğrulanmadı"};
 
@@ -38,6 +38,12 @@ export function ConnectionChecks(){
         {([['PostgreSQL',report.postgres],['Cloudflare R2',report.r2]] as const).map(([name,result])=><div key={name}>
           <h3>{name}: {labels[result.status]??"Doğrulanmadı"}</h3>
           {result.schema&&<p>Tablolar ve sütunlar: {labels[result.schema]??"Doğrulanmadı"}</p>}
+          {result.error_category&&<p>Hata kategorisi: {result.error_category}</p>}
+          {result.current_revisions&&<p>Alembic revision: {result.current_revisions.join(", ")||"Yok"}{result.unknown_revision?" · Bilinmeyen revision mevcut":""} · Beklenen: {result.expected_revisions?.join(", ")}</p>}
+          {result.default_schema&&<p>Varsayılan şema: {result.default_schema}</p>}
+          {Object.entries(result.other_schemas??{}).map(([schema,tables])=><p key={schema}>Diğer şema ({schema}): {tables.join(", ")}</p>)}
+          {!!result.alembic_version_other_schemas?.length&&<p>Diğer şemalarda Alembic tablosu: {result.alembic_version_other_schemas.join(", ")}</p>}
+          {!!result.schema_issues?.length&&<p>Şema uyarıları: {result.schema_issues.join(", ")}</p>}
           {!!result.missing_env.length&&<p>Eksik değişkenler: {result.missing_env.join(", ")}</p>}
           {!!result.invalid_env.length&&<p>Geçersiz değişkenler: {result.invalid_env.join(", ")}</p>}
           {!!result.missing_tables?.length&&<p>Eksik tablolar: {result.missing_tables.join(", ")}</p>}

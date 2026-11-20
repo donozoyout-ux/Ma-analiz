@@ -7,12 +7,16 @@ import time
 
 import boto3
 from botocore.config import Config as S3Config
+from botocore import exceptions as aws_errors
+from alembic.config import Config
+from alembic.script import ScriptDirectory
+from alembic.runtime.migration import MigrationContext
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.pool import NullPool
 
-from app.core.config import get_settings
+from app.core.config import PROJECT_ROOT, get_settings
 from app.db.base import Base
 from app import models  # noqa: F401: register required tables
 
@@ -36,6 +40,81 @@ def authorize(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)
     return settings
 
 
+
+def schema_report(connection):
+    """Inspect only; never creates or stamps an Alembic version table."""
+    inspector = inspect(connection)
+    default_schema = inspector.default_schema_name
+    existing = set(inspector.get_table_names())
+    missing_tables, missing_columns = [], []
+    for name, table in sorted(Base.metadata.tables.items()):
+        if name not in existing:
+            missing_tables.append(name)
+            continue
+        columns = {column["name"] for column in inspector.get_columns(name)}
+        missing_columns.extend(f"{name}.{column.name}" for column in table.columns if column.name not in columns)
+    other_schemas = {}
+    version_schemas = []
+    for schema in inspector.get_schema_names():
+        if schema == default_schema or schema == "information_schema" or schema.startswith("pg_"):
+            continue
+        tables = set(inspector.get_table_names(schema=schema))
+        matches = sorted(tables.intersection(Base.metadata.tables))
+        if matches:
+            other_schemas[schema] = matches
+        if "alembic_version" in tables:
+            version_schemas.append(schema)
+    cfg = Config(str(PROJECT_ROOT / "backend" / "alembic.ini"))
+    cfg.set_main_option("script_location", str(PROJECT_ROOT / "backend" / "migrations"))
+    script = ScriptDirectory.from_config(cfg)
+    expected = sorted(script.get_heads())
+    known = {revision.revision for revision in script.walk_revisions()}
+    current = set(MigrationContext.configure(connection).get_current_heads())
+    # Unknown DB strings are not echoed: version rows can contain arbitrary content.
+    safe_current = sorted(current.intersection(known))
+    unknown = bool(current - known)
+    issues = []
+    if missing_tables: issues.append("MISSING_TABLES")
+    if missing_columns: issues.append("MISSING_COLUMNS")
+    if other_schemas: issues.append("EXPECTED_TABLES_IN_OTHER_SCHEMAS")
+    if version_schemas: issues.append("ALEMBIC_VERSION_IN_OTHER_SCHEMAS")
+    if not current: issues.append("ALEMBIC_REVISION_MISSING")
+    elif unknown: issues.append("ALEMBIC_REVISION_UNKNOWN")
+    elif current != set(expected): issues.append("ALEMBIC_REVISION_BEHIND_OR_DIVERGED")
+    if current == set(expected) and (missing_tables or missing_columns):
+        issues.append("REVISION_SCHEMA_MISMATCH")
+    return {"schema": "INCOMPLETE" if issues else "READY", "default_schema": default_schema,
+            "missing_tables": missing_tables, "missing_columns": missing_columns,
+            "other_schemas": other_schemas, "alembic_version_other_schemas": version_schemas,
+            "current_revisions": safe_current, "unknown_revision": unknown,
+            "expected_revisions": expected, "schema_issues": issues}
+
+
+def r2_error_category(exc):
+    # Only fixed categories leave this function. HeadBucket can omit detailed codes.
+    if isinstance(exc, (aws_errors.ConnectTimeoutError, aws_errors.ReadTimeoutError)):
+        return "TIMEOUT"
+    if isinstance(exc, (aws_errors.NoCredentialsError, aws_errors.PartialCredentialsError)):
+        return "AUTHENTICATION"
+    if isinstance(exc, aws_errors.EndpointConnectionError):
+        return "NETWORK"  # DNS/unreachable host; does not prove a bad endpoint.
+    if isinstance(exc, (aws_errors.ConnectionClosedError, aws_errors.SSLError, aws_errors.ProxyConnectionError)):
+        return "NETWORK"
+    if isinstance(exc, aws_errors.ClientError):
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        if code in {"InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidToken", "ExpiredToken", "AuthFailure"} or status == 401:
+            return "AUTHENTICATION"
+        if code == "AccessDenied": return "AUTHORIZATION"
+        if status == 403: return "AUTHENTICATION_OR_AUTHORIZATION"
+        if code in {"NoSuchBucket", "PermanentRedirect", "AuthorizationHeaderMalformed", "InvalidEndpoint"} or status in {301, 307, 404}:
+            return "ENDPOINT_OR_BUCKET"
+        if code in {"RequestTimeout", "RequestTimeoutException"} or status in {408, 504}:
+            return "TIMEOUT"
+    if isinstance(exc, ValueError): return "ENDPOINT_CONFIGURATION"
+    return "UNKNOWN"
+
+
 def postgres_check(settings):
     result = {"status": "NOT_CONFIGURED", "missing_env": [], "invalid_env": [],
               "schema": "NOT_VERIFIED", "missing_tables": [], "missing_columns": []}
@@ -55,16 +134,7 @@ def postgres_check(settings):
             connection.execute(text("SET LOCAL statement_timeout = '5s'"))
             connection.execute(text("SELECT 1")).scalar_one()
             result["status"] = "CONNECTED"
-            inspector = inspect(connection)
-            existing = set(inspector.get_table_names())
-            for name, table in sorted(Base.metadata.tables.items()):
-                if name not in existing:
-                    result["missing_tables"].append(name)
-                    continue
-                columns = {column["name"] for column in inspector.get_columns(name)}
-                result["missing_columns"].extend(f"{name}.{column.name}" for column in table.columns
-                                                  if column.name not in columns)
-            result["schema"] = "INCOMPLETE" if result["missing_tables"] or result["missing_columns"] else "READY"
+            result.update(schema_report(connection))
     except Exception:
         result["status"] = "FAILED" if result["status"] != "CONNECTED" else "CONNECTED"
         result["schema"] = "NOT_VERIFIED"
@@ -91,8 +161,8 @@ def r2_check(settings):
                                           retries={"total_max_attempts": 1})) as client:
             client.head_bucket(Bucket=settings.r2_bucket)
         result["status"] = "ACCESSIBLE"
-    except Exception:
-        result.update(status="FAILED", error_code="R2_ACCESS_CHECK_FAILED")
+    except Exception as exc:
+        result.update(status="FAILED", error_code="R2_ACCESS_CHECK_FAILED", error_category=r2_error_category(exc))
     return result
 
 

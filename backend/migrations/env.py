@@ -12,7 +12,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 settings = get_settings()
 if settings.database_url:
-    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+    config.set_main_option("sqlalchemy.url", settings.database_url.replace("postgresql://", "postgresql+psycopg://", 1).replace("%", "%%"))
 target_metadata = Base.metadata
 
 

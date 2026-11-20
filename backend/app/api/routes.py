@@ -8,6 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.api.connections import schema_report
 from app.db.session import engine, get_db
 from app.analysis.odds import project_odds_snapshots
 from app.analysis.scanning import (_r2_history, _run_analysis, _statistics_for_match, _verified_history, scan_upcoming_matches)
@@ -44,18 +45,25 @@ def health() -> dict[str, Any]:
     settings = get_settings()
     database = ("NOT_CONFIGURED" if settings.database_url_missing else
                 "ERROR" if not settings.database_url_valid else "UNAVAILABLE")
+    database_schema = "NOT_VERIFIED"
     worker, archive = "UNKNOWN", "NO_VERIFIED_ARCHIVES"
     if engine is not None and settings.database_url_valid:
         try:
             with engine.connect() as connection:
+                connection.execute(text("SET TRANSACTION READ ONLY"))
+                connection.execute(text("SET LOCAL statement_timeout = '5s'"))
                 connection.execute(text("SELECT 1"))
+                database = "CONNECTED"
+                database_schema = schema_report(connection)["schema"]
                 latest_job = connection.execute(select(JobRun.status).order_by(JobRun.started_at.desc()).limit(1)).scalar_one_or_none()
                 latest_archive = connection.execute(select(ArchiveJob.status).order_by(ArchiveJob.created_at.desc()).limit(1)).scalar_one_or_none()
             database = "CONNECTED"
             worker = latest_job or "NO_JOB_RUNS"
             archive = latest_archive or "NO_ARCHIVES"
         except Exception:
-            database = "UNAVAILABLE"
+            # A missing table must not overwrite a successful SELECT 1.
+            if database != "CONNECTED":
+                database = "UNAVAILABLE"
             worker = "UNKNOWN"
             archive = "UNKNOWN"
     provider_info = provider_health()
@@ -96,12 +104,13 @@ def health() -> dict[str, Any]:
 
     telegram_configured = bool(settings.telegram_bot_token and settings.telegram_chat_id)
     return {
-        "status": "ok" if database == "CONNECTED" else "degraded",
+        "status": "ok" if database == "CONNECTED" and database_schema == "READY" else "degraded",
         "provider": provider_info["status"],
         "provider_status": provider_component,
         "provider_health": provider_info,
         "odds_provider": provider_info["status"],
         "database": database,
+        "database_schema": database_schema,
         "r2": r2_status,
         "worker": worker,
         "archive": archive,
