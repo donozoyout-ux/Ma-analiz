@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from app.analysis.technical import technical_summary
 from app.analysis.ai import AIProvider, analyze_with_ai
 from app.analysis.combined import ScoreWeights, combine_scores
 from app.analysis.engine import (SimilarityThresholds, form_analyzer, goals_analyzer,
@@ -35,6 +36,8 @@ def analyze_match(match: dict[str, Any], *, statistics_history: Iterable[dict[st
     history = [row for row in statistics_history if row.get("verified_at") is not None]
     home, away = match["home_team"], match["away_team"]
     stats = {
+        "home_technical": technical_summary(home, history, as_of=timestamp),
+        "away_technical": technical_summary(away, history, as_of=timestamp),
         "home_form_5": form_analyzer(home, history, as_of=timestamp, limit=5).to_dict(),
         "away_form_5": form_analyzer(away, history, as_of=timestamp, limit=5).to_dict(),
         "home_at_home_5": form_analyzer(home, history, as_of=timestamp, limit=5, venue="home").to_dict(),

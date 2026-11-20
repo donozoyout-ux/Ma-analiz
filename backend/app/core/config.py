@@ -70,7 +70,7 @@ class Settings(BaseSettings):
 
     @property
     def provider_id(self) -> str | None:
-        return self.provider_name or self.match_provider or ("sportmonks" if self.sportmonks_api_token else None)
+        return self.provider_name or self.match_provider  # Never select a paid vendor from credentials.
 
     @property
     def provider_api_token(self) -> str | None:

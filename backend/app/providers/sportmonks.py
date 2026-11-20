@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from app.providers.base import (
+    ProviderNotConfigured,
     ProviderAuthError,
     ProviderInvalidResponse,
     ProviderNotFound,
@@ -84,6 +85,9 @@ class SportmonksProvider:
     def __init__(self, *, token: str, base_url: str = "https://api.sportmonks.com/v3/football",
                  timeout_seconds: float = 15, max_pages: int = 100,
                  client: httpx.Client | None = None, requests_per_minute: int = 60):
+        # Retain legacy wire decoders for offline regression fixtures only.
+        if client is None or not isinstance(getattr(client, "_transport", None), httpx.MockTransport):
+            raise ProviderNotConfigured("PAID_PROVIDER_DISABLED: Sportmonks network access is retired")
         if not token or not token.strip():
             raise ValueError("Sportmonks token is required")
         if timeout_seconds <= 0 or max_pages < 1:

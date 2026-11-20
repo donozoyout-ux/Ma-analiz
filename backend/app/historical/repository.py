@@ -105,7 +105,7 @@ class HistoricalRepository:
             start=start, end=end), before=before)
         results = self._read(self.partition_keys(dataset="results", season=season, league=league,
             start=start, end=end), before=before)
-        outcomes = {str(row.get("provider_match_id")): row for row in results
+        outcomes = {(str(row.get("provider") or ""), str(row.get("provider_match_id"))): row for row in results
                     if row.get("provider_match_id") is not None and row.get("verified_at") is not None
                     and row.get("home_score") is not None and row.get("away_score") is not None
                     and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}}
@@ -117,7 +117,7 @@ class HistoricalRepository:
                 continue
             match_key = row.get("provider_match_id")
             if match_key is not None:
-                odds_by_match.setdefault(str(match_key), []).append(row)
+                odds_by_match.setdefault((str(row.get("provider") or ""), str(match_key)), []).append(row)
 
         # Partition retries or overlapping source exports can contain a fixture
         # more than once. Keep one stable row per provider match identity.
@@ -125,7 +125,13 @@ class HistoricalRepository:
         for match in matches:
             identity = match.get("provider_match_id")
             if identity is not None:
-                matches_by_id.setdefault(str(identity), match)
+                matches_by_id.setdefault((str(match.get("provider") or ""), str(identity)), match)
+        technical = self._read(self.partition_keys(dataset="statistics", season=season, league=league,
+            start=start, end=end), before=before)
+        technical_by_match = {}
+        for observation in technical:
+            identity = (str(observation.get("provider") or ""), str(observation.get("provider_match_id")))
+            technical_by_match.setdefault(identity, []).append(observation)
         output = []
         for match_key, match in sorted(matches_by_id.items()):
             result = outcomes.get(match_key)
@@ -133,6 +139,7 @@ class HistoricalRepository:
                 continue
             row = {**match, "home_score": result["home_score"], "away_score": result["away_score"],
                    "status": "FINISHED", "verified_at": result["verified_at"]}
+            row["technical_statistics"] = technical_by_match.get(match_key, [])
             snapshots = odds_by_match.get(match_key, [])
             if snapshots:
                 row["historical_odds"] = snapshots
@@ -196,7 +203,7 @@ class HistoricalRepository:
             row["away_form"] = form(away_only, row["away_team"], 5)
             if row["home_strength"] is not None and row["away_strength"] is not None:
                 row["form"] = (row["home_strength"] + row["away_strength"]) / 2
-            team_prior_by_id = {str(item.get("provider_match_id")): item for item in prior_home + prior_away}
+            team_prior_by_id = {(str(item.get("provider") or ""), str(item.get("provider_match_id"))): item for item in prior_home + prior_away}
             team_prior = list(team_prior_by_id.values())
             if len(team_prior) >= 5:
                 team_prior = team_prior[-20:]

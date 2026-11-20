@@ -20,6 +20,8 @@ import httpx
 from app.providers.base import ProviderAccessRestricted, ProviderInvalidResponse, ProviderNotConfigured, ProviderUnavailable
 
 
+USER_AGENT = "MacAnaliz/3.0 (+https://github.com/donozoyout-ux/Ma-analiz)"
+
 BOOKMAKERS = {"3": "Crown", "8": "Bet365", "31": "Sbobet"}
 _UTC_PLUS_8 = timezone(timedelta(hours=8))
 _SCORE = re.compile(r"^(\d+)\s*[-:]\s*(\d+)$")
@@ -42,7 +44,7 @@ class GoalooProvider:
             raise ValueError("Timeout must be positive")
         self.base_url, self.odds_base_url = base_url.rstrip("/"), odds_base_url.rstrip("/")
         self.league_ids, self.season_ids = tuple(league_ids), tuple(season_ids)
-        self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=True)
+        self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=False)
         self._owns_client = client is None
         if requests_per_minute < 1:
             raise ValueError("Request rate must be positive")
@@ -75,7 +77,7 @@ class GoalooProvider:
         if policy is None:
             self._wait_request()
             try:
-                response = self._client.get(origin + "/robots.txt", headers={"User-Agent": "MacAnaliz/2.0"})
+                response = self._client.get(origin + "/robots.txt", headers={"User-Agent": USER_AGENT}, follow_redirects=False)
             except httpx.HTTPError:
                 raise ProviderUnavailable("PROVIDER_UNAVAILABLE: robots policy could not be checked") from None
             if response.status_code in {404, 410}:
@@ -87,6 +89,9 @@ class GoalooProvider:
             policy = RobotFileParser()
             policy.parse(lines)
             self._robots_cache[origin] = policy
+            rate = policy.request_rate("MacAnaliz")
+            if rate and rate.requests > 0:
+                self._request_interval = max(self._request_interval, rate.seconds / rate.requests)
             delay = policy.crawl_delay("MacAnaliz")
             if delay:
                 self._request_interval = max(self._request_interval, delay)
@@ -95,13 +100,13 @@ class GoalooProvider:
 
     def _get(self, url: str, *, referer: str | None = None, params: dict[str, Any] | None = None) -> Any:
         self._check_robots(url)
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; MacAnaliz/2.0)", "Accept": "application/json,text/html"}
+        headers = {"User-Agent": USER_AGENT, "Accept": "application/json,text/html"}
         if referer:
             headers.update({"Referer": referer, "X-Requested-With": "XMLHttpRequest"})
         started = perf_counter()
         self._wait_request()
         try:
-            response = self._client.get(url, params=params, headers=headers)
+            response = self._client.get(url, params=params, headers=headers, follow_redirects=False)
         except httpx.TimeoutException:
             self.last_latency_ms = (perf_counter() - started) * 1000
             raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo request timed out") from None
@@ -109,7 +114,9 @@ class GoalooProvider:
             self.last_latency_ms = (perf_counter() - started) * 1000
             raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo network request failed") from None
         self.last_latency_ms = (perf_counter() - started) * 1000
-        if response.status_code in {403, 404, 429} or response.status_code >= 500:
+        if response.status_code in {401, 403, 429} or response.is_redirect:
+            raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED: no retry or redirect after source restriction")
+        if response.status_code == 404 or response.status_code >= 500:
             raise ProviderUnavailable(f"PROVIDER_UNAVAILABLE: Goaloo returned HTTP {response.status_code}")
         if not response.is_success:
             raise ProviderInvalidResponse(f"PROVIDER_INVALID_RESPONSE: Goaloo returned HTTP {response.status_code}")
@@ -130,11 +137,13 @@ class GoalooProvider:
         self._check_robots(self.base_url + "/")
         self._wait_request()
         try:
-            response = self._client.get(self.base_url + "/", headers={"User-Agent": "Mozilla/5.0"})
+            response = self._client.get(self.base_url + "/", headers={"User-Agent": USER_AGENT}, follow_redirects=False)
         except httpx.HTTPError:
             self.last_latency_ms = (perf_counter() - started) * 1000
             raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo health request failed") from None
         self.last_latency_ms = (perf_counter() - started) * 1000
+        if response.status_code in {401, 403, 429} or response.is_redirect:
+            raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED: source health access restricted")
         if not response.is_success or "html" not in response.headers.get("Content-Type", "").lower():
             raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo web source is unavailable")
         self.last_successful_request = datetime.now(timezone.utc)
@@ -334,6 +343,17 @@ class GoalooProvider:
                     result.append(match)
         return result
 
+    def get_matches_on_day(self, day: date, league: str, season: str, *, timezone_name: str = "Europe/Istanbul") -> list[dict]:
+        """One explicit league/day; no season discovery or fallback to other dates."""
+        from zoneinfo import ZoneInfo
+        if league not in self.league_ids or season not in self.season_ids:
+            raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: requested daily scope is not enabled")
+        zone = ZoneInfo(timezone_name)
+        rows = [row for row in self._match_rows(league, season) if row["start_time"].astimezone(zone).date() == day]
+        if any(row["status"] == "UNKNOWN" for row in rows):
+            raise ProviderInvalidResponse("PROVIDER_INVALID_RESPONSE: unsupported source status in selected day")
+        return rows
+
     def get_matches_for_scope(self, day: date, league: str, season: str) -> list[dict]:
         if league not in self.league_ids or season not in self.season_ids:
             raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: historical scope is not enabled")
@@ -465,9 +485,11 @@ class GoalooProvider:
         self._check_robots(url)
         self._wait_request()
         try:
-            response = self._client.get(url, headers={"User-Agent": "Mozilla/5.0 (compatible; MacAnaliz/2.0)"})
+            response = self._client.get(url, headers={"User-Agent": USER_AGENT}, follow_redirects=False)
         except httpx.HTTPError:
             raise ProviderUnavailable("PROVIDER_UNAVAILABLE: Goaloo statistics request failed") from None
+        if response.status_code in {401, 403, 429} or response.is_redirect:
+            raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED: statistics access restricted")
         if not response.is_success:
             raise ProviderUnavailable(f"PROVIDER_UNAVAILABLE: Goaloo statistics HTTP {response.status_code}")
         if response.url.path.rstrip("/") != f"/football/match/live-{match_id}":

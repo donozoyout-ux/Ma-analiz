@@ -1,3 +1,7 @@
+## Güncel veri stratejisi: WEB SCRAPING FIRST
+
+Sportmonks ve ücretli sağlayıcı fallback'i devre dışıdır. Önce yalnız tek lig/tek gün için `backend` klasöründe `python -m app.jobs.scraping_probe --league 8 --date 2026-11-20 --max-matches 1` çalıştırın. Bu komut SQL/R2 yazmaz, migration veya toplu tarama başlatmaz. [Güncel kaynak kapsamı, izin kararları, canlı örnek ve çalıştırma talimatı](docs/scraping-first.md). Eski Sportmonks probe/smoke komutları artık yazma veya ağ isteği yapmadan DISABLED döner; aşağıdaki eski operasyon notları bu kararı geçersiz kılmaz.
+
 # Maç Analiz
 
 R2-first football analytics and paper simulation. It does not place bets or move real money.

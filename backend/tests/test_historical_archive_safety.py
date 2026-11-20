@@ -232,26 +232,22 @@ def test_pre_2025_seasons_never_request_odds_and_failed_statistics_are_not_empty
     engine.dispose()
 
 
-def test_sportmonks_probe_reports_old_fixture_retention_without_requesting_odds(monkeypatch, capsys):
+def test_retired_sportmonks_probe_never_contacts_provider_even_with_fixture_argument(monkeypatch, capsys):
     from app.jobs import sportmonks_probe
-    class Provider:
-        def __init__(self, **kwargs): pass
-        def health_check(self): return {"status": "OK"}
-        def get_match(self, identity): return {"start_time": AT}
-        def get_odds(self, identity): raise AssertionError("Published retention has expired")
-        def close(self): pass
-    monkeypatch.setattr(sportmonks_probe, "get_settings", lambda: Settings(_env_file=None, sportmonks_api_token="test-only-token"))
-    monkeypatch.setattr(sportmonks_probe, "SportmonksProvider", Provider)
-    assert sportmonks_probe.main(["--fixture-id", "sportmonks-id"]) == 1
-    output = capsys.readouterr().out
-    assert "OUTSIDE_PROVIDER_RETENTION" in output and "test-only-token" not in output
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Paid provider must never be constructed")
+    monkeypatch.setattr("app.providers.sportmonks.SportmonksProvider", forbidden)
+    assert sportmonks_probe.main(["--fixture-id", "sportmonks-id"]) == 2
+    assert "PAID_PROVIDER_DISABLED" in capsys.readouterr().out
 
 
-def test_sportmonks_probe_missing_token_does_not_make_requests(monkeypatch, capsys):
+def test_retired_sportmonks_probe_does_not_require_or_read_a_token(monkeypatch, capsys):
     from app.jobs import sportmonks_probe
-    monkeypatch.setattr(sportmonks_probe, "get_settings", lambda: Settings(_env_file=None))
+    def forbidden():
+        raise AssertionError("Retired probe must not read credentials")
+    monkeypatch.setattr("app.core.config.get_settings", forbidden)
     assert sportmonks_probe.main([]) == 2
-    assert "NOT_CONFIGURED" in capsys.readouterr().out
+    assert "PAID_PROVIDER_DISABLED" in capsys.readouterr().out
 
 
 def test_match_cleanup_handles_supplements_and_preserves_stored_analysis():

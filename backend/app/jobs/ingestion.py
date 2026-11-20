@@ -5,13 +5,14 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, or_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.models import ActiveMatch, ActiveOdds, ArchiveJob, Bookmaker, HistoricalIngestDay, MatchResult
+from app.providers.identity import fixture_key, lock_id
 from app.providers.base import ProviderError, ProviderFailure, ProviderNotConfigured
 from app.providers.normalize import normalize_match, normalize_matches, normalize_odds, normalize_result, utc_datetime
 from app.storage.archive import ArchiveStatus, SQLArchiveTracker
@@ -32,10 +33,37 @@ def upsert_matches(session: Session, matches: list[dict], *, now: datetime | Non
     current = now or datetime.now(timezone.utc)
     retention = get_settings().active_state_retention_days
     written = skipped = 0
+    if matches and session.get_bind().dialect.name == "postgresql":
+        # Acquire a deterministic order across a batch to avoid reciprocal lock waits.
+        keys = {lock_id(key) for match in matches if (key := fixture_key(match)) is not None}
+        for key in sorted(keys):
+            session.execute(select(func.pg_advisory_xact_lock(key)))
     for match in matches:
         if match["start_time"] < current - timedelta(days=retention):
             skipped += 1
             continue
+        identity = fixture_key(match)
+        if identity:
+            # Cooperating PostgreSQL writers hold the ordered batch locks above.
+            candidates = session.scalars(select(ActiveMatch).where(
+                ActiveMatch.start_time == match["start_time"],
+                or_(ActiveMatch.provider != match["provider"],
+                    ActiveMatch.provider_match_id != match["provider_match_id"]),
+            )).all()
+            duplicate = False
+            for candidate in candidates:
+                kickoff = candidate.start_time
+                if kickoff.tzinfo is None:  # SQL timestamps are UTC; SQLite test adapter drops tzinfo.
+                    kickoff = kickoff.replace(tzinfo=timezone.utc)
+                other = {"provider": candidate.provider, "league_id": candidate.league_id,
+                         "home_team": candidate.home_team, "away_team": candidate.away_team, "start_time": kickoff}
+                if fixture_key(other) == identity:
+                    duplicate = True
+                    break
+            if duplicate:
+                # Do not silently attach another source's odds/results to an unpersisted alias.
+                skipped += 1
+                continue
         # Provider adapters may attach useful discovery metadata (for example,
         # a provider season ID) which is not part of the active SQL schema.
         # Keep only mapped columns at this persistence boundary.
