@@ -73,3 +73,7 @@ Historical matches and finalized results use R2 Parquet partitions with Zstandar
 - Migration SQL: `alembic upgrade head --sql` from `backend`
 - Compose config: `docker compose config -q`
 - Render Blueprint: validate `render.yaml` against Render's schema; this does not deploy.
+
+## Güvenli R2 bağlantı testi
+
+Mevcut R2 istemcisiyle benzersiz test nesnesi üzerinde yazma, okuma, SHA-256 ve yalnız o nesneyi temizleme kontrolü için [yerel çalıştırma talimatını](docs/r2-connection-verification.md) izleyin. Önce `backend` klasöründe `python -m app.jobs.r2_smoke_test --check-config`, ardından gerçek test için `python -m app.jobs.r2_smoke_test` çalıştırın. Yapılandırma kontrolü veya birim testleri gerçek R2 başarısı sayılmaz. Bu araç PostgreSQL migration veya arşiv temizleme çalıştırmaz.
