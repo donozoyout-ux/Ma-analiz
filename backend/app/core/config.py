@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -11,6 +12,7 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
+    system_diagnostics_token: SecretStr | None = None
     app_env: str = "development"
     log_level: str = "INFO"
     database_url: str | None = None
