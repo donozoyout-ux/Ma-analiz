@@ -8,7 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.api.connections import schema_report
+from app.api.connections import schema_report, r2_check
 from app.db.session import engine, get_db
 from app.analysis.odds import project_odds_snapshots
 from app.analysis.scanning import (_r2_history, _run_analysis, _statistics_for_match, _verified_history, scan_upcoming_matches)
@@ -79,16 +79,9 @@ def health() -> dict[str, Any]:
                      else _component_status(goaloo_configured))
     sportmonks_status = provider_component if selected_provider == "sportmonks" else _component_status(sportmonks_configured)
 
-    r2_configured = settings.r2_configured
-    r2_status = ("NOT_CONFIGURED" if settings.r2_missing_env else
-                 "ERROR" if settings.r2_invalid_env else "CONFIGURED")
-    if r2_configured:
-        try:
-            store = R2ObjectStore()
-            store.client.list_objects_v2(Bucket=store.bucket, Prefix="", MaxKeys=1)
-            r2_status = "CONNECTED"
-        except Exception:
-            r2_status = "UNAVAILABLE"
+    # Public response exposes only an allowlisted status, never diagnostic details.
+    r2_status = {"ACCESSIBLE": "CONNECTED", "NOT_CONFIGURED": "NOT_CONFIGURED",
+                 "INVALID_CONFIGURATION": "ERROR"}.get(r2_check(settings)["status"], "UNAVAILABLE")
 
     groq_configured = settings.groq_configured
     groq_status = ("NOT_CONFIGURED" if settings.groq_missing_env else

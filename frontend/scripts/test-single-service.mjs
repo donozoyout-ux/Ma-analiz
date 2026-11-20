@@ -66,6 +66,7 @@ delete safeEnv.API_INTERNAL_URL;
 delete safeEnv.SINGLE_SERVICE_MODE;
 Object.assign(safeEnv, {
   APP_ENV: "production",
+  SYSTEM_DIAGNOSTICS_TOKEN: "local-test-only-diagnostics-token-32-characters",
   CORS_ORIGINS: "",
   DATABASE_URL: "",
   MATCH_PROVIDER: "",
@@ -131,6 +132,16 @@ try {
   }
   if (diagnostics.database !== "NOT_CONFIGURED") {
     throw new Error("Smoke test did not isolate the database configuration as intended.");
+  }
+  const systemResponse = await fetch(new URL("/system", origin));
+  const systemHtml = await systemResponse.text();
+  if (!systemResponse.ok || /type=["']password["']|diagnostics-token|SYSTEM_DIAGNOSTICS_TOKEN/.test(systemHtml)) {
+    throw new Error("System page must be public and contain no diagnostics password form.");
+  }
+  const adminResponse = await fetch(new URL("/api/v1/system/connections", origin), {method:"POST"});
+  if (adminResponse.status !== 401) throw new Error("Detailed diagnostics must require authorization.");
+  for (const key of ["inventory", "current_revisions", "expected_revisions", "target_fingerprint", "error_family", "error_category"]) {
+    if (JSON.stringify(diagnostics).includes(`"${key}"`)) throw new Error("Public health leaked diagnostic details.");
   }
   const shutdownNote = process.platform === "win32"
     ? "Windows signal-handler semantics NOT_TESTED"

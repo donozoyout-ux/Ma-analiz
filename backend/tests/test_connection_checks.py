@@ -270,3 +270,23 @@ def test_real_boto_client_without_network(monkeypatch, settings):
         assert result['status']=='FAILED'
         assert result['error_category']=='AUTHORIZATION'
         stub.assert_no_pending_responses()
+
+
+def test_public_health_omits_administrative_details(monkeypatch, settings):
+    from app.api import routes
+    app=FastAPI()
+    app.include_router(routes.router)
+    monkeypatch.setattr(routes,'get_settings',lambda:settings)
+    monkeypatch.setattr(routes,'engine',None)
+    monkeypatch.setattr(routes,'provider_health',lambda:{'status':'PROVIDER_NOT_CONFIGURED'})
+    def forbidden(*args): pytest.fail('Public health must not run database inventory')
+    monkeypatch.setattr(module,'database_inventory',forbidden)
+    for status, expected in [('ACCESSIBLE','CONNECTED'),('FAILED','UNAVAILABLE'),('unexpected-secret','UNAVAILABLE')]:
+        monkeypatch.setattr(routes,'r2_check',lambda cfg:{'status':status,'inventory':'private-secret',
+            'error_category':'AUTHENTICATION','error_family':'TYPE_ERROR','target_fingerprint':'secret'})
+        response=TestClient(app).get('/health')
+        assert response.status_code==200
+        assert response.json()['r2']==expected
+        assert 'private-secret' not in response.text
+        for key in ['inventory','current_revisions','expected_revisions','target_fingerprint','error_category','error_family']:
+            assert key not in response.json()

@@ -1,9 +1,10 @@
 # Normal servis üzerinden bağlantı kontrolü
 
-Render web servisinde Environment → `SYSTEM_DIAGNOSTICS_TOKEN` alanına parola yöneticisiyle oluşturulmuş en az 32 karakterlik rastgele bir anahtar tanımlayın. Anahtarı Git'e, loglara veya NEXT_PUBLIC_ değişkenlerine koymayın. Bu anahtar yalnızca bağlantı kontrolüne erişim sağlar; mevcut diğer API yollarının yetkilendirme davranışını değiştirmez.
+`/system` günlük kullanımda şifresiz açılır. Sayfa yalnızca genel `/api/v1/health` sonucunu kullanır; PostgreSQL bağlantı/şema ve R2 erişim durumlarını gösterir. Şifre alanı, tarayıcıda yönetim anahtarı veya otomatik ayrıntılı tanılama isteği bulunmaz. R2 genel durum kontrolü HeadBucket kullanır; gerçek erişim başarısı olmadan CONNECTED göstermez. Genel yanıt envanter, Alembic revision, hedef parmak izi veya ayrıntılı hata kategorilerini içermez.
 
 Normal Start Command aynı kalır: `node frontend/scripts/run-single-service.mjs`.
-`/system` sayfasında anahtarı girip **Bağlantıları kontrol et** düğmesine basın. HTTPS kullanın. Anahtar yalnızca isteğin Authorization başlığında taşınır; URL'ye, localStorage'a veya cookie'ye yazılmaz ve giriş alanı gönderimde temizlenir. Anahtarı değiştirmek erişimi iptal eder.
+
+Yönetim kontrolleri için Render web servisinde en az 32 karakterlik `SYSTEM_DIAGNOSTICS_TOKEN` korunur. Yetkili yönetici güvenilir API istemcisinden HTTPS üzerinden `POST /api/v1/system/connections` çağrısına `Authorization: Bearer <anahtar>` başlığı ekler. Anahtarı URL, Git, log veya NEXT_PUBLIC_ değişkenlerine koymayın; uygulama bunu genel istemciye aktaran bir proxy sunmaz. Anahtar döndürülerek erişim iptal edilebilir.
 
 `POST /api/v1/system/connections` kimlik doğrulaması olmadan kontrol çalıştırmaz. Anahtar tanımlı değilse veya 32 karakterden kısaysa kapalı kalır (503); yanlış anahtarda 401 döner. İşlem başına eşzamanlı bir kontrol ve 30 saniye aralık uygulanır (429). Sonuç önbelleğe alınmaz. Sayfa açıldığında bu yeni kontrol otomatik başlamaz.
 
