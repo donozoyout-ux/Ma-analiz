@@ -82,3 +82,7 @@ python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_
 ```
 
 Otomatik testlerde geniş lig/sezon dolaşan eski canlı testler ve gerçek servis testleri hariç tutulur. Canlı doğrulama yalnız yukarıdaki sabit tek günlük probe ile yapıldı. Test fixture'ları canlı veri yerine kullanılmaz. Robots engeli, yönlendirme/403/429 sonrası durma, hız kuralları, ücretli sağlayıcı yasağı, dar kapsam, güvenli eşleştirme, skor/istatistik eksikleri ve zamanında erişilebilir teknik veri regresyonları test edilir.
+
+## İkinci aşama
+
+İlk final sonuç zinciri, kaynak lisanslarının yeniden değerlendirilmesi ve yeni salt-okunur komut için [ikinci aşama raporuna](scraping-first-stage2.md) bakın. Buradaki ilk gözlem raporu geçmiş bir snapshot olarak korunur; sonradan final olmuş gibi yeniden yazılmaz.

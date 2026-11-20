@@ -1,3 +1,7 @@
+## İkinci aşama: ilk doğrulanmış final sonuç
+
+Bundesliga'da tek gün için salt-okunur çapraz doğrulama: `backend` klasöründe `python -m app.jobs.result_probe --date 2026-11-20 --matchday 10 --goaloo-match-id 3018869`. [Kanıt, lisans/erişim değerlendirmesi ve test sonuçları](docs/scraping-first-stage2.md). Komut PostgreSQL/R2 yazmaz; oran verisi üretmez.
+
 ## Güncel veri stratejisi: WEB SCRAPING FIRST
 
 Sportmonks ve ücretli sağlayıcı fallback'i devre dışıdır. Önce yalnız tek lig/tek gün için `backend` klasöründe `python -m app.jobs.scraping_probe --league 8 --date 2026-11-20 --max-matches 1` çalıştırın. Bu komut SQL/R2 yazmaz, migration veya toplu tarama başlatmaz. [Güncel kaynak kapsamı, izin kararları, canlı örnek ve çalıştırma talimatı](docs/scraping-first.md). Eski Sportmonks probe/smoke komutları artık yazma veya ağ isteği yapmadan DISABLED döner; aşağıdaki eski operasyon notları bu kararı geçersiz kılmaz.
