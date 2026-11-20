@@ -43,14 +43,14 @@ export default function Dashboard() {
           <DashboardCharts />
         </div>
         <div className="card health-card">
-          <div className="section-head"><div><div className="section-kicker">BAĞLANTI DURUMU</div><div className="section-title">Altyapı sağlığı</div></div><Link className="icon-link" href="/system" aria-label="Sistem ayrıntıları"><ChevronRight size={16} /></Link></div>
+          <div className="section-head"><div><div className="section-kicker">BAĞLANTI DURUMU</div><div className="section-title">Altyapı sağlığı</div></div><Link className="icon-link" href="/management" aria-label="Sistem ayrıntıları"><ChevronRight size={16} /></Link></div>
           <HealthPanel compact />
         </div>
       </section>
 
       <section className="grid dashboard-lower-grid">
         <div className="card storage-card">
-          <div className="section-head"><div><div className="section-kicker">AKTİF + TARİHSEL</div><div className="section-title">Veri depolama</div></div><Link className="text-link compact-link" href="/storage">Ayrıntılar <ChevronRight size={15} /></Link></div>
+          <div className="section-head"><div><div className="section-kicker">AKTİF + TARİHSEL</div><div className="section-title">Veri depolama</div></div><Link className="text-link compact-link" href="/archive?tab=storage">Ayrıntılar <ChevronRight size={15} /></Link></div>
           <StoragePanel />
         </div>
         <div className="matches-preview">

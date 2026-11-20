@@ -1,2 +1,8 @@
-import { MatchExplorer } from "@/components/match-explorer";
-export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Geçmiş maç arşivi</h1><p className="page-intro">Erişilebilir tamamlanmış maçları tarih, lig ve takıma göre araştırın.</p></div><span className="today-chip">Türkiye saati · UTC+3</span></header><MatchExplorer mode="archive" /></>; }
+import { selectedTab } from "@/lib/navigation";
+import { SectionTabs } from "@/components/section-tabs";
+import View0 from "@/components/section-views/archive";
+import View1 from "@/components/section-views/storage";
+export default async function Page({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+ const active = selectedTab("archive", (await searchParams).tab);
+ return <><SectionTabs section="archive" active={active} />{active === "storage" ? <View1 /> : <View0 />}</>;
+}

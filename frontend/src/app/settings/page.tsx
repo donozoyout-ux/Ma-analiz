@@ -1,1 +1,3 @@
-export default function Settings(){return <><header className="topbar"><div><div className="eyebrow">MAÇANALİZ / YAPILANDIRMA</div><h1 className="title">Ayarlar</h1><p className="page-intro">Servis ayarları sunucu ortamında tutulur; gizli değerler panelde gösterilmez.</p></div></header><div className="card empty">Goaloo, PostgreSQL, R2, Groq ve lig kapsamı Render environment değişkenleriyle yönetilir. Değişiklikler yalnızca sunucu yapılandırmasından yapılır.</div></>}
+import { permanentRedirect } from "next/navigation";
+import { legacyDestinations } from "@/lib/navigation";
+export default function Page() { permanentRedirect(legacyDestinations.settings); }

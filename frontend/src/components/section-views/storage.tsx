@@ -1,0 +1,2 @@
+import {StoragePanel} from "@/components/storage-panel";
+export default function Storage(){return <><header className="topbar"><div><div className="eyebrow">POSTGRESQL = AKTİF DURUM / R2 = TARİHSEL ARŞİV</div><h1 className="title">Veri deposu</h1><p className="page-intro">Güncel maç kayıtları ve arşivlenmiş sezon verilerinin kapasitesi.</p></div></header><div className="grid page-grid"><div className="card page-card"><div className="section-title">Depolama kullanımı</div><div style={{marginTop:24}}><StoragePanel/></div></div></div></>}

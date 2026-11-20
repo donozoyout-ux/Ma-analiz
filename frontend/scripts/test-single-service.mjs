@@ -143,6 +143,34 @@ try {
   for (const key of ["inventory", "current_revisions", "expected_revisions", "target_fingerprint", "error_family", "error_category"]) {
     if (JSON.stringify(diagnostics).includes(`"${key}"`)) throw new Error("Public health leaked diagnostic details.");
   }
+  // Exercise real production route rendering and permanent legacy redirects.
+  for (const [source, destination] of Object.entries({
+    odds: "/matches?tab=odds", coupons: "/predictions?tab=coupons", performance: "/analysis",
+    lessons: "/analysis?tab=lessons", storage: "/archive?tab=storage", system: "/management", settings: "/management?tab=settings",
+  })) {
+    const response = await fetch(new URL(`/${source}`, origin), { redirect: "manual" });
+    if (response.status !== 308 || response.headers.get("location") !== destination) {
+      throw new Error(`Legacy /${source} did not redirect permanently to ${destination}.`);
+    }
+  }
+  for (const [route, heading] of [
+    ["/matches", "Günün maçları"], ["/matches?tab=odds", "Oran analizi"],
+    ["/matches/test-only-id", "Maç ve oran geçmişi"],
+    ["/predictions", "Yapay zekâ tahminleri"], ["/predictions?tab=coupons", "Kuponlar"],
+    ["/analysis", "Tahmin performansı"], ["/analysis?tab=lessons", "Eğitim merkezi"],
+    ["/archive", "Geçmiş maç arşivi"], ["/archive?tab=storage", "Veri deposu"],
+    ["/management", "Sistem durumu"], ["/management?tab=settings", "Ayarlar"],
+    ["/analysis?tab=unknown", "Tahmin performansı"],
+  ]) {
+    const response = await fetch(new URL(route, origin));
+    const content = await response.text();
+    if (!response.ok || !content.includes(`>${heading}</h1>`) || !content.includes('class="section-tabs"')) {
+      throw new Error(`Section ${route} did not render its original feature and tabs.`);
+    }
+    const navigation = content.split('aria-label="Ana menü"')[1]?.split("</nav>")[0];
+    if ((navigation?.match(/<a /g) ?? []).length !== 5) throw new Error("Primary menu must contain exactly five destinations.");
+  }
+  console.log("PASS: Seven legacy redirects, twelve section views, and five primary navigation entries.");
   const shutdownNote = process.platform === "win32"
     ? "Windows signal-handler semantics NOT_TESTED"
     : "SIGTERM graceful shutdown verified";
