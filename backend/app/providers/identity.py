@@ -8,9 +8,13 @@ from datetime import datetime, timezone
 LEAGUES = {("goaloo", "8"): "de.bl1", ("openfootball", "de.1"): "de.bl1",
            ("openligadb", "bl1"): "de.bl1", ("goaloo", "36"): "en.pl",
            ("openfootball", "en.1"): "en.pl"}
+REVIEWED_IMPORT_KEY = "verified-import:de.bl1:2026-11-20:openligadb:83237"
 
 
 def fixture_key(row: dict) -> str | None:
+    reviewed = reviewed_fixture_key(row)
+    if reviewed:
+        return reviewed
     league = LEAGUES.get((str(row.get("provider", "")).lower(), str(row.get("league_id", ""))))
     if not league:
         return None
@@ -28,6 +32,29 @@ def fixture_key(row: dict) -> str | None:
     if not home or not away or home == away:
         return None
     return json.dumps([league, start.astimezone(timezone.utc).isoformat(), home, away], ensure_ascii=False)
+
+
+def reviewed_fixture_key(row: dict) -> str | None:
+    """One evidence-reviewed alias only; never a general name/league substitution.
+
+    Both native source IDs, league, kickoff and ordered names must match the review
+    in docs/reports/result-alias-review-2026-11-20.json. Used by the normal daily
+    writer too, so it cannot insert a second Goaloo copy after the stage-3 import.
+    """
+    from app.analysis.result_verification import team_key
+    from app.providers.result_sources import utc
+    provider, identity = row.get("provider"), str(row.get("provider_match_id"))
+    allowed = {("goaloo", "3018869"): {"8", "de.bl1"},
+               ("openligadb", "83237"): {"bl1", "de.bl1"}}
+    if str(row.get("league_id")) not in allowed.get((provider, identity), set()):
+        return None
+    start = utc(row.get("start_time"))
+    if start != utc("2026-11-20T19:30:00Z"):
+        return None
+    pair = [team_key(provider, row.get(field), reviewed=True) for field in ("home_team", "away_team")]
+    if pair != ["de.bayern-muenchen", "de.1-fc-koeln"]:
+        return None
+    return json.dumps(["de.bl1", start.isoformat(), *pair], ensure_ascii=False)
 
 
 def lock_id(key: str) -> int:

@@ -1,3 +1,7 @@
+## Üçüncü aşama: tek doğrulanmış maçın kontrollü SQL/R2 importu
+
+`backend` klasöründe `python -m app.jobs.verified_import --dry-run`; açık yazma için `python -m app.jobs.verified_import --persist`. Yalnız incelenmiş Bundesliga maçı, her çalışmada yeni canlı doğrulama, SQL retry journal'ı ve değişmez R2 Parquet parçaları. Bu bilgisayarda eksik PostgreSQL/R2 değişkenleri nedeniyle canlı yazma **NOT_RUN**. [Komutlar, gerçek çıktılar, güvenlik ve test raporu](docs/scraping-first-stage3.md).
+
 ## İkinci aşama: ilk doğrulanmış final sonuç
 
 Bundesliga'da tek gün için salt-okunur çapraz doğrulama: `backend` klasöründe `python -m app.jobs.result_probe --date 2026-11-20 --matchday 10 --goaloo-match-id 3018869`. [Kanıt, lisans/erişim değerlendirmesi ve test sonuçları](docs/scraping-first-stage2.md). Komut PostgreSQL/R2 yazmaz; oran verisi üretmez.

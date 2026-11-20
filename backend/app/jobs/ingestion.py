@@ -55,7 +55,7 @@ def upsert_matches(session: Session, matches: list[dict], *, now: datetime | Non
                 kickoff = candidate.start_time
                 if kickoff.tzinfo is None:  # SQL timestamps are UTC; SQLite test adapter drops tzinfo.
                     kickoff = kickoff.replace(tzinfo=timezone.utc)
-                other = {"provider": candidate.provider, "league_id": candidate.league_id,
+                other = {"provider": candidate.provider, "provider_match_id": candidate.provider_match_id, "league_id": candidate.league_id,
                          "home_team": candidate.home_team, "away_team": candidate.away_team, "start_time": kickoff}
                 if fixture_key(other) == identity:
                     duplicate = True
@@ -668,6 +668,24 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
     cutoff = current - timedelta(days=1)
     partitions: dict[tuple[str, str, str, date], list[dict]] = defaultdict(list)
 
+    def controlled_import(match):
+        # The one reviewed import owns its licensed snapshot and partition date.
+        # A generic snapshot of the operational alias (or verification-day partition)
+        # would create a second historical copy and could lose the ODbL attribution.
+        # Pending controlled imports must be resumed with fresh verification, never
+        # silently completed by this background job.
+        from app.models import SystemSetting
+        from app.providers.identity import REVIEWED_IMPORT_KEY, reviewed_fixture_key
+        row = {"provider": match.provider, "provider_match_id": match.provider_match_id,
+               "league_id": match.league_id, "home_team": match.home_team,
+               "away_team": match.away_team, "start_time": match.start_time}
+        if isinstance(row["start_time"], datetime) and row["start_time"].tzinfo is None:
+            row["start_time"] = row["start_time"].replace(tzinfo=timezone.utc)
+        if reviewed_fixture_key(row) is None:
+            return False
+        journal = session.get(SystemSetting, REVIEWED_IMPORT_KEY)
+        return bool(journal and journal.value.get("match_id") == str(match.id))
+
     def canonical(row: dict) -> dict:
         return {key: str(value) if isinstance(value, UUID) else float(value) if isinstance(value, Decimal) else value
                 for key, value in row.items()}
@@ -677,6 +695,8 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
         ActiveMatch.status.in_(("FINISHED", "CANCELLED")),
     )).all()
     for match in expired_matches:
+        if controlled_import(match):
+            continue
         row = {column.name: getattr(match, column.name) for column in ActiveMatch.__table__.columns}
         partitions[("matches", match.season or "unknown", match.league_id or "unknown",
                     match.start_time.date())].append(row)
@@ -703,6 +723,8 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
     ).where(MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None),
             func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < cutoff)).all()
     for result, match in result_rows:
+        if controlled_import(match):
+            continue
         row = {"result_id": str(result.id), "match_id": str(match.id), "provider_match_id": match.provider_match_id,
                "provider": result.provider, "provider_result_id": result.provider_result_id,
                "league_id": match.league_id, "league_name": match.league_name, "season": match.season,

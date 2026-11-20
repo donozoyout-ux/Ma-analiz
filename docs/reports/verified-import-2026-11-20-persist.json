@@ -1,0 +1,616 @@
+{
+  "stage": 3,
+  "mode": "PERSIST",
+  "status": "BLOCKED",
+  "postgres": {
+    "status": "NOT_RUN"
+  },
+  "r2": {
+    "status": "NOT_RUN"
+  },
+  "cleanup": "NOT_RUN",
+  "scope": {
+    "league": "de.bl1",
+    "date": "2026-11-20",
+    "openligadb_id": "83237",
+    "goaloo_id": "3018869"
+  },
+  "source_verification": {
+    "strategy": "WEB_SCRAPING_FIRST",
+    "stage": 2,
+    "writes": false,
+    "sql": "NOT_USED",
+    "r2": "NOT_USED",
+    "scope": {
+      "league": "de.bl1",
+      "date": "2026-11-20",
+      "timezone": "Europe/Istanbul",
+      "matchday": 10,
+      "goaloo_target_id": "3018869"
+    },
+    "live_test": true,
+    "observed_at": "2026-11-20T21:53:30.782932+00:00",
+    "source_policies": {
+      "openfootball": {
+        "licence": "CC0-1.0",
+        "reviewed_on": "2026-11-21",
+        "licence_url": "https://raw.githubusercontent.com/openfootball/football.json/master/LICENSE.md",
+        "freshness": "Daily generation is not guaranteed daily upstream maintenance; no finished flag assumed"
+      },
+      "openligadb": {
+        "licence": "ODbL-1.0",
+        "reviewed_on": "2026-11-21",
+        "licence_url": "https://www.openligadb.de/lizenz",
+        "terms_url": "https://www.openligadb.de/nutzungsbedingungen",
+        "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+        "reuse": "Attribution; share-alike for public modified databases; no third-party image rights",
+        "freshness": "Community maintained; no editorial accuracy guarantee or immutable public history",
+        "access": "Free community access, no key; centrally cached and maximum one data request per league per 60s"
+      }
+    },
+    "odds": {
+      "status": "NO_APPROVED_OPEN_SOURCE",
+      "quotes": [],
+      "sources": [
+        {
+          "source": "Goaloo",
+          "decision": "NOT_REQUESTED_ROBOTS_AJAX_DISALLOWED",
+          "evidence": "https://www.goaloo.com/robots.txt"
+        },
+        {
+          "source": "football-data.co.uk",
+          "decision": "NOT_REQUESTED_PRODUCT_USE_RESTRICTED",
+          "evidence": "https://football-data.co.uk/data.php"
+        },
+        {
+          "source": "OpenFootball/OpenLigaDB",
+          "decision": "ODDS_NOT_PROVIDED"
+        },
+        {
+          "source": "The Odds API",
+          "decision": "NOT_ENABLED_KEY_AND_SUBSCRIPTION_SERVICE_NOT_OPEN_WEB_DATA",
+          "evidence": "https://the-odds-api.com/terms-and-conditions.html",
+          "pricing": "https://the-odds-api.com/#get-access"
+        }
+      ]
+    },
+    "sources": {
+      "goaloo": {
+        "status": "OBSERVED",
+        "matches": 1,
+        "source_url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json"
+      },
+      "openfootball": {
+        "status": "OBSERVED",
+        "matches": 1,
+        "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json"
+      },
+      "openligadb": {
+        "status": "OBSERVED",
+        "matches": 1,
+        "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10"
+      }
+    },
+    "observations": [
+      {
+        "provider": "goaloo",
+        "source_match_id": "3018869",
+        "league": "de.bl1",
+        "home_team": "Bayern Munchen",
+        "away_team": "FC Koln",
+        "start_time": "2026-11-20T19:30:00+00:00",
+        "source_status": "FINISHED",
+        "reported_score": [
+          1,
+          1
+        ],
+        "final_confirmed": true,
+        "issues": [],
+        "source_url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+        "observed_at": "2026-11-20T21:53:41.655899+00:00",
+        "licence": "REDISTRIBUTION_NOT_VERIFIED"
+      },
+      {
+        "provider": "openfootball",
+        "source_match_id": null,
+        "record_fingerprint": "a8761a88290622fcda8641dcac49116888f6cf6ae184ed5bebabd8460fa4dac4",
+        "identity_kind": "CONTENT_FINGERPRINT_NOT_SOURCE_ID",
+        "league": "de.bl1",
+        "home_team": "FC Bayern M\u00fcnchen",
+        "away_team": "1. FC K\u00f6ln",
+        "start_time": null,
+        "source_date": "2026-11-20",
+        "source_time_raw": "20:30",
+        "source_status": "FIXTURE_ONLY",
+        "reported_score": null,
+        "final_confirmed": false,
+        "issues": [
+          "NO_EXPLICIT_FINISHED_FLAG",
+          "KICKOFF_TIMEZONE_NOT_DECLARED"
+        ],
+        "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+        "observed_at": "2026-11-20T21:53:43.108570+00:00",
+        "licence": "CC0-1.0"
+      },
+      {
+        "provider": "openligadb",
+        "source_match_id": "83237",
+        "league": "de.bl1",
+        "home_team": "FC Bayern M\u00fcnchen",
+        "away_team": "1. FC K\u00f6ln",
+        "home_source_id": 40,
+        "away_source_id": 65,
+        "start_time": "2026-11-20T19:30:00+00:00",
+        "source_status": "FINISHED",
+        "reported_score": [
+          1,
+          1
+        ],
+        "final_confirmed": true,
+        "issues": [],
+        "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+        "observed_at": "2026-11-20T21:53:44.164061+00:00",
+        "source_updated_at_raw": "2026-11-20T22:23:56.397",
+        "licence": "ODbL-1.0",
+        "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0"
+      }
+    ],
+    "requests": [
+      {
+        "url": "https://football.goaloo.com/robots.txt",
+        "observed_at": "2026-11-20T21:53:30.782932+00:00",
+        "http_status": 200,
+        "bytes": 13,
+        "sha256": "d9066d29c1dfed62e1bbde2c102079a5ccc0c1e9f669644fd89fd652cdc156bb",
+        "robots_text": "User-agent: *"
+      },
+      {
+        "url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+        "observed_at": "2026-11-20T21:53:40.779840+00:00",
+        "http_status": 200,
+        "bytes": 60465,
+        "sha256": "ea155dd1d7948deee9ba80d81035041859c94d2a5911b0a1de14446f79ec7314"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/robots.txt",
+        "observed_at": "2026-11-20T21:53:41.888922+00:00",
+        "http_status": 404,
+        "bytes": 14,
+        "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
+      },
+      {
+        "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+        "observed_at": "2026-11-20T21:53:42.892541+00:00",
+        "http_status": 200,
+        "bytes": 40409,
+        "sha256": "07fab65d4a1de8ce4c8472da9ccf4d1d2b145ecd5abdc5b6d4250a5c119d7681"
+      },
+      {
+        "url": "https://api.openligadb.de/robots.txt",
+        "observed_at": "2026-11-20T21:53:43.108570+00:00",
+        "http_status": 404,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+        "observed_at": "2026-11-20T21:53:44.113544+00:00",
+        "http_status": 200,
+        "bytes": 9339,
+        "sha256": "7c46e596508694ca4d00b5eb5ae1a6a24350f756d2a8188a758e9afc67c076ac"
+      }
+    ],
+    "resource_granularity": "One OpenFootball/Goaloo league-season file and one explicit OpenLigaDB matchday resource; only the selected day is analysed. No date/league/season traversal.",
+    "decision": {
+      "status": "RESULT_VERIFIED",
+      "final_result": {
+        "status": "FINAL",
+        "home_team": "FC Bayern M\u00fcnchen",
+        "away_team": "1. FC K\u00f6ln",
+        "primary_provider": "openligadb",
+        "primary_source_match_id": "83237",
+        "licence": "ODbL-1.0",
+        "verified_at": "2026-11-20T21:53:44.164061+00:00",
+        "start_time": "2026-11-20T19:30:00+00:00",
+        "home_score": 1,
+        "away_score": 1,
+        "source_identities": [
+          {
+            "provider": "goaloo",
+            "source_match_id": "3018869"
+          },
+          {
+            "provider": "openligadb",
+            "source_match_id": "83237"
+          }
+        ]
+      },
+      "conflicts": [],
+      "issues": [],
+      "matched_sources": [
+        "goaloo",
+        "openligadb"
+      ],
+      "warnings": [
+        "INCOMPLETE_CORROBORATOR_KICKOFF:openfootball"
+      ],
+      "persistence_ready": false,
+      "writes_allowed": false,
+      "identity_review": "result-alias-review-2026-11-20"
+    },
+    "status": "RESULT_VERIFIED",
+    "technical_statistics": {
+      "status": "PRIOR_SNAPSHOT_REVIEWED_NOT_REFETCHED",
+      "prior_evidence": "scraping-2026-11-20-bundesliga.json",
+      "observed_rows": 29,
+      "usable_rows": 0,
+      "checks": [
+        {
+          "statistic_id": "ftstat:Corner Kicks",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Corner Kicks(HT)",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Shots",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Shots On Goal",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Attack",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Dangerous attack",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Off Target",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Blocked",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Free Kicks",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Possession",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Possession(HT)",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Pass",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Pass Success",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Fouls",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Offsides",
+          "usable": false,
+          "reasons": [
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Heads",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Head Success",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Tackles",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Dribbles",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Throw ins",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Tackle Success",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Intercept",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Assists",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Long Passes",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Expected Goals (xG)",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Open\u2011play xG",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Non\u2011penalty xG (NP-xG)",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:xG on target (xGOT)",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED"
+          ]
+        },
+        {
+          "statistic_id": "ftstat:Kick-off",
+          "usable": false,
+          "reasons": [
+            "METRIC_NOT_REVIEWED",
+            "OBSERVED_BEFORE_FINAL_CONFIRMATION",
+            "REUSE_PERMISSION_NOT_CONFIRMED",
+            "UNIT_UNVERIFIED",
+            "VALUE_MISSING_OR_INVALID"
+          ]
+        }
+      ]
+    },
+    "pipeline_preparation": {
+      "status": "CANDIDATE_ONLY_NOT_PERSISTED",
+      "provider": "openligadb",
+      "provider_match_id": "83237",
+      "canonical_league": "de.bl1",
+      "result": {
+        "status": "FINAL",
+        "home_team": "FC Bayern M\u00fcnchen",
+        "away_team": "1. FC K\u00f6ln",
+        "primary_provider": "openligadb",
+        "primary_source_match_id": "83237",
+        "licence": "ODbL-1.0",
+        "verified_at": "2026-11-20T21:53:44.164061+00:00",
+        "start_time": "2026-11-20T19:30:00+00:00",
+        "home_score": 1,
+        "away_score": 1,
+        "source_identities": [
+          {
+            "provider": "goaloo",
+            "source_match_id": "3018869"
+          },
+          {
+            "provider": "openligadb",
+            "source_match_id": "83237"
+          }
+        ]
+      },
+      "sql_write": false,
+      "r2_write": false,
+      "import_blockers": [
+        "No persistence enabled in this read-only command",
+        "Source attribution and canonical league/alias mapping must be retained in a separate controlled import"
+      ]
+    }
+  },
+  "candidate": {
+    "event": {
+      "provider": "openligadb",
+      "provider_match_id": "83237",
+      "league_id": "de.bl1",
+      "league_name": "Bundesliga",
+      "season": "2026-2027",
+      "home_team": "FC Bayern M\u00fcnchen",
+      "away_team": "1. FC K\u00f6ln",
+      "home_source_id": 40,
+      "away_source_id": 65,
+      "start_time": "2026-11-20T19:30:00+00:00",
+      "status": "FINAL",
+      "home_score": 1,
+      "away_score": 1
+    },
+    "verified_at": "2026-11-20T21:53:44.164061+00:00",
+    "licence": "ODbL-1.0",
+    "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+    "licence_url": "https://www.openligadb.de/lizenz",
+    "provenance": [
+      {
+        "provider": "openligadb",
+        "source_match_id": "83237",
+        "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+        "observed_at": "2026-11-20T21:53:44.164061+00:00",
+        "response_sha256": "7c46e596508694ca4d00b5eb5ae1a6a24350f756d2a8188a758e9afc67c076ac"
+      },
+      {
+        "provider": "goaloo",
+        "source_match_id": "3018869",
+        "source_url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+        "observed_at": "2026-11-20T21:53:41.655899+00:00",
+        "response_sha256": "ea155dd1d7948deee9ba80d81035041859c94d2a5911b0a1de14446f79ec7314"
+      }
+    ]
+  },
+  "archive_plan": {
+    "matches": "matches/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+    "results": "results/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet"
+  },
+  "missing_env": [
+    "DATABASE_URL",
+    "R2_ENDPOINT",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY"
+  ],
+  "invalid_env": [],
+  "error_code": "STORAGE_NOT_CONFIGURED"
+}
