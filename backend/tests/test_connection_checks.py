@@ -67,12 +67,11 @@ def test_missing_config_no_clients(monkeypatch):
 
 def test_r2_only_head_and_redacted_error(monkeypatch, settings):
     client=MagicMock()
-    client.__enter__.return_value=client
     factory=MagicMock(return_value=client)
     monkeypatch.setattr(module.boto3, 'client', factory)
     assert module.r2_check(settings)['status'] == 'ACCESSIBLE'
     client.head_bucket.assert_called_once_with(Bucket=settings.r2_bucket)
-    assert [call[0] for call in client.method_calls] == ['head_bucket']
+    assert [call[0] for call in client.method_calls] == ['head_bucket', 'close']
     client.head_bucket.side_effect=RuntimeError('private-password private-host private-secret')
     result=module.r2_check(settings)
     assert result['status'] == 'FAILED'
@@ -248,3 +247,26 @@ def test_inventory_failure_is_not_empty(monkeypatch,settings):
     assert result['status']=='CONNECTED'
     assert result['inventory']['emptiness']=='NOT_VERIFIED'
     assert 'private-endpoint' not in json.dumps(result)
+
+
+def test_real_boto_client_without_network(monkeypatch, settings):
+    from botocore.stub import Stubber
+    # Real SDK client, fake credentials; Stubber prevents every network request.
+    client=module.boto3.client('s3',endpoint_url='https://example.invalid',
+        aws_access_key_id='test',aws_secret_access_key='test',region_name='auto')
+    assert not hasattr(client,'__enter__')
+    with pytest.raises(TypeError):
+        with client:
+            pytest.fail('Boto clients must not be used as context managers')
+    monkeypatch.setattr(module.boto3,'client',lambda *args,**kwargs:client)
+    with Stubber(client) as stub:
+        stub.add_response('head_bucket',{}, {'Bucket':settings.r2_bucket})
+        assert module.r2_check(settings)['status']=='ACCESSIBLE'
+        stub.assert_no_pending_responses()
+    with Stubber(client) as stub:
+        stub.add_client_error('head_bucket',service_error_code='AccessDenied',http_status_code=403,
+                              expected_params={'Bucket':settings.r2_bucket})
+        result=module.r2_check(settings)
+        assert result['status']=='FAILED'
+        assert result['error_category']=='AUTHORIZATION'
+        stub.assert_no_pending_responses()

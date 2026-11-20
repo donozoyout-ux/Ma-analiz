@@ -1,5 +1,6 @@
 """Authenticated, bounded, read-only dependency checks. Never returns exception text."""
 from datetime import datetime, timezone
+from contextlib import closing
 import hashlib
 import hmac
 import json
@@ -227,12 +228,12 @@ def r2_check(settings):
             result["status"] = "INVALID_CONFIGURATION"
         return result
     try:
-        with boto3.client("s3", endpoint_url=settings.r2_endpoint,
+        with closing(boto3.client("s3", endpoint_url=settings.r2_endpoint,
                           aws_access_key_id=settings.r2_access_key_id,
                           aws_secret_access_key=settings.r2_secret_access_key,
                           region_name=settings.r2_region,
                           config=S3Config(connect_timeout=5, read_timeout=5,
-                                          retries={"total_max_attempts": 1})) as client:
+                                          retries={"total_max_attempts": 1}))) as client:
             client.head_bucket(Bucket=settings.r2_bucket)
         result["status"] = "ACCESSIBLE"
     except Exception as exc:
