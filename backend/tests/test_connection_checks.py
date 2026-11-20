@@ -80,6 +80,7 @@ def test_r2_only_head_and_redacted_error(monkeypatch, settings):
 
 
 def test_postgres_read_only_and_schema(monkeypatch, settings):
+    monkeypatch.setattr(module, "database_inventory", lambda conn, cfg: {"status": "COMPLETE"})
     engine=MagicMock()
     connection=engine.connect.return_value.__enter__.return_value
     monkeypatch.setattr(module, 'create_engine', MagicMock(return_value=engine))
@@ -115,7 +116,7 @@ def test_postgres_failure_redacted(monkeypatch, settings):
     ('403',403,'AUTHENTICATION_OR_AUTHORIZATION'),
     ('NoSuchBucket',404,'ENDPOINT_OR_BUCKET'),
     ('RequestTimeout',408,'TIMEOUT'),
-    ('private-secret',500,'UNKNOWN'),
+    ('private-secret',500,'SERVICE_ERROR'),
 ])
 def test_safe_r2_categories(code,status,category):
     exc=module.aws_errors.ClientError({'Error':{'Code':code,'Message':'private-secret'},
@@ -191,3 +192,59 @@ def test_alembic_env_normalizes_driver_without_connecting(monkeypatch,url):
     monkeypatch.setattr(sqlalchemy,'engine_from_config',factory)
     runpy.run_path(str(module.PROJECT_ROOT/'backend/migrations/env.py'))
     assert factory.call_args.args[0]['sqlalchemy.url']=='postgresql+psycopg://user:pass%25@localhost/db'
+
+@pytest.mark.parametrize('count,expected', [(0,'NO_USER_RELATIONS'),(1,'NOT_EMPTY'),(501,'NOT_EMPTY')])
+def test_inventory_conservative_empty_and_identity(settings,count,expected):
+    connection=MagicMock()
+    schema_result=MagicMock()
+    schema_result.scalars.return_value=['public','legacy']
+    relation_result=MagicMock()
+    relation_result.mappings.return_value.all.return_value=[{'schema':'legacy','name':f'table_{i}','kind':'r','estimated_rows':0} for i in range(count)]
+    identity_result=MagicMock()
+    identity_result.mappings.return_value.one.return_value={'database_name':'db','database_oid':'123', 'server_version_num':'170000','is_replica':False}
+    connection.execute.side_effect=[schema_result,relation_result,identity_result]*3
+    result=module.database_inventory(connection,settings)
+    assert result['emptiness']==expected
+    assert result['status']==('TRUNCATED' if count>500 else 'COMPLETE')
+    assert len(result['relations'])==min(count,500)
+    assert result['target_confirmation']=='NOT_VERIFIED'
+    assert result['configured_database_name_matches'] is True
+    assert 'private-' not in json.dumps(result)
+    settings.system_expected_database_fingerprint=result['target_fingerprint']
+    assert module.database_inventory(connection,settings)['target_confirmation']=='MATCH'
+    settings.system_expected_database_fingerprint='wrong'
+    assert module.database_inventory(connection,settings)['target_confirmation']=='MISMATCH'
+    assert all(str(call.args[0]).strip().startswith('SELECT') for call in connection.execute.call_args_list)
+
+
+def test_unknown_r2_diagnostics_never_echo_error():
+    error=module.aws_errors.ClientError({'Error':{'Code':'secret-endpoint','Message':'private-key'},'ResponseMetadata':{'HTTPStatusCode':502,'HTTPHeaders':{'secret':'key'}}},'HeadBucket')
+    assert module.r2_error_details(error)=={'error_family':'SERVICE_RESPONSE','http_status':502,'service_code':'UNRECOGNIZED'}
+    assert module.r2_error_category(error)=='SERVICE_ERROR'
+    assert module.r2_error_details(RuntimeError('private-key'))['error_family']=='UNCLASSIFIED'
+    assert module.r2_error_category(module.aws_errors.ParamValidationError(report='secret'))=='REQUEST_CONFIGURATION'
+
+
+def test_alembic_absent_vs_empty(monkeypatch):
+    inspector=MagicMock(default_schema_name='public')
+    inspector.get_schema_names.return_value=['public']
+    monkeypatch.setattr(module,'inspect',lambda conn:inspector)
+    monkeypatch.setattr(module.MigrationContext,'configure',lambda conn:MagicMock(get_current_heads=lambda:()))
+    inspector.get_table_names.return_value=[]
+    assert module.schema_report(MagicMock())['alembic_version_state']=='ABSENT'
+    inspector.get_table_names.return_value=['alembic_version']
+    result=module.schema_report(MagicMock())
+    assert result['alembic_version_exists'] is True
+    assert result['alembic_version_state']=='EMPTY'
+
+
+def test_inventory_failure_is_not_empty(monkeypatch,settings):
+    engine=MagicMock()
+    monkeypatch.setattr(module,'create_engine',lambda *a,**kw:engine)
+    monkeypatch.setattr(module,'schema_report',lambda conn:{'schema':'INCOMPLETE'})
+    def fail(*args): raise RuntimeError('private-endpoint')
+    monkeypatch.setattr(module,'database_inventory',fail)
+    result=module.postgres_check(settings)
+    assert result['status']=='CONNECTED'
+    assert result['inventory']['emptiness']=='NOT_VERIFIED'
+    assert 'private-endpoint' not in json.dumps(result)

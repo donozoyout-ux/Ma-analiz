@@ -12,6 +12,7 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
+    system_expected_database_fingerprint: str | None = None
     system_diagnostics_token: SecretStr | None = None
     app_env: str = "development"
     log_level: str = "INFO"

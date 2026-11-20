@@ -1,7 +1,8 @@
 "use client";
 import { FormEvent, useState } from "react";
 
-type Check = {status:string; missing_env:string[]; invalid_env:string[]; schema?:string; current_revisions?:string[]; expected_revisions?:string[]; unknown_revision?:boolean; default_schema?:string; other_schemas?:Record<string,string[]>; alembic_version_other_schemas?:string[]; schema_issues?:string[]; error_category?:string; missing_tables?:string[]; missing_columns?:string[]};
+type Inventory = {status:string; emptiness:string; schemas?:string[]; relations?:{schema:string; name:string; kind:string; estimated_rows:number|null}[]; target_fingerprint?:string; target_confirmation?:string; configured_database_name_matches?:boolean; server_version_num?:string; is_replica?:boolean};
+type Check = {status:string; inventory?:Inventory; alembic_version_exists?:boolean; alembic_version_state?:string; error_family?:string; http_status?:number; service_code?:string; missing_env:string[]; invalid_env:string[]; schema?:string; current_revisions?:string[]; expected_revisions?:string[]; unknown_revision?:boolean; default_schema?:string; other_schemas?:Record<string,string[]>; alembic_version_other_schemas?:string[]; schema_issues?:string[]; error_category?:string; missing_tables?:string[]; missing_columns?:string[]};
 type Report = {checked_at:string; postgres:Check; r2:Check};
 const labels:Record<string,string> = {CONNECTED:"Bağlantı başarılı", ACCESSIBLE:"Bucket erişimi başarılı", NOT_CONFIGURED:"Yapılandırma eksik", INVALID_CONFIGURATION:"Yapılandırma geçersiz", FAILED:"Kontrol başarısız", READY:"Hazır", INCOMPLETE:"Tablo veya sütun eksik", NOT_VERIFIED:"Doğrulanmadı"};
 
@@ -39,6 +40,16 @@ export function ConnectionChecks(){
           <h3>{name}: {labels[result.status]??"Doğrulanmadı"}</h3>
           {result.schema&&<p>Tablolar ve sütunlar: {labels[result.schema]??"Doğrulanmadı"}</p>}
           {result.error_category&&<p>Hata kategorisi: {result.error_category}</p>}
+          {result.error_family&&<p>Tanılama: {result.error_family} · HTTP: {result.http_status??"Yok"} · Servis kodu: {result.service_code??"Yok"}</p>}
+          {result.alembic_version_state&&<p>alembic_version tablosu: {result.alembic_version_exists?"Var":"Yok"} · Durum: {result.alembic_version_state}</p>}
+          {result.inventory&&<div>
+            <h4>Veritabanı envanteri: {result.inventory.status}</h4>
+            <p>Boşluk kontrolü: {result.inventory.emptiness}. Kapsam: kullanıcı tabloları, görünümler ve sequence nesneleri. Satır tahmini sıfır olması boşluk kanıtı değildir.</p>
+            <p>Hedef parmak izi: {result.inventory.target_fingerprint??"Doğrulanmadı"} · Hedef eşleşmesi: {result.inventory.target_confirmation??"NOT_VERIFIED"}</p>
+            <p>Yapılandırılan veritabanı adı eşleşiyor: {result.inventory.configured_database_name_matches===undefined?"Doğrulanmadı":result.inventory.configured_database_name_matches?"Evet":"Hayır"} · PostgreSQL sürüm numarası: {result.inventory.server_version_num??"Yok"} · Replika: {result.inventory.is_replica===undefined?"Doğrulanmadı":result.inventory.is_replica?"Evet":"Hayır"}</p>
+            <p>Şemalar: {result.inventory.schemas?.join(", ")??"Doğrulanmadı"}</p>
+            {!!result.inventory.relations?.length&&<table><thead><tr><th>Şema</th><th>Nesne</th><th>Tür</th><th>Tahmini satır</th></tr></thead><tbody>{result.inventory.relations.map(row=><tr key={`${row.schema}.${row.name}`}><td>{row.schema}</td><td>{row.name}</td><td>{row.kind}</td><td>{row.estimated_rows??"Bilinmiyor"}</td></tr>)}</tbody></table>}
+          </div>}
           {result.current_revisions&&<p>Alembic revision: {result.current_revisions.join(", ")||"Yok"}{result.unknown_revision?" · Bilinmeyen revision mevcut":""} · Beklenen: {result.expected_revisions?.join(", ")}</p>}
           {result.default_schema&&<p>Varsayılan şema: {result.default_schema}</p>}
           {Object.entries(result.other_schemas??{}).map(([schema,tables])=><p key={schema}>Diğer şema ({schema}): {tables.join(", ")}</p>)}
