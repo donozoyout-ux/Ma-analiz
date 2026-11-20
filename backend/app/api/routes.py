@@ -163,7 +163,31 @@ def storage() -> dict:
 def list_matches(db: Session = Depends(get_db), limit: int = 100) -> list[dict]:
     now = datetime.now(timezone.utc)
     rows = db.scalars(select(ActiveMatch).where(ActiveMatch.expires_at > now).order_by(ActiveMatch.start_time).limit(max(1, min(limit, 500)))).all()
-    return [_serialize(row) for row in rows]
+    ids = [row.id for row in rows]
+    results = {row.match_id: row for row in db.scalars(select(MatchResult).where(
+        MatchResult.match_id.in_(ids),
+        (MatchResult.verified_at.is_(None) | (MatchResult.verified_at <= now)),
+    )).all()} if ids else {}
+    ranked = select(MatchAnalysis.id.label("id"), func.row_number().over(
+        partition_by=MatchAnalysis.match_id,
+        order_by=(MatchAnalysis.analysis_timestamp.desc(), MatchAnalysis.id.desc()),
+    ).label("position")).where(MatchAnalysis.match_id.in_(ids),
+        MatchAnalysis.analysis_timestamp <= now).subquery()
+    analyses = {row.match_id: row for row in db.scalars(select(MatchAnalysis).join(
+        ranked, ranked.c.id == MatchAnalysis.id).where(ranked.c.position == 1)).all()} if ids else {}
+    output = []
+    for row in rows:
+        item = _serialize(row)
+        result, analysis = results.get(row.id), analyses.get(row.id)
+        item["result"] = ({"home_score": result.home_score, "away_score": result.away_score,
+                           "status": result.status, "verified_at": result.verified_at,
+                           "result_source": result.result_source} if result else None)
+        item["analysis_summary"] = ({"analysis_status": analysis.analysis_status,
+                                     "signal": analysis.final_decision,
+                                     "analysis_timestamp": analysis.analysis_timestamp,
+                                     "model_version": analysis.model_version} if analysis else None)
+        output.append(item)
+    return output
 
 
 @router.get("/matches/{match_id}")

@@ -113,6 +113,12 @@ try {
   if (!home.ok) throw new Error(`Next.js root returned HTTP ${home.status}.`);
   const html = await home.text();
   if (!html.toLowerCase().includes("<!doctype html")) throw new Error("Next.js root did not return an HTML document.");
+  for (const text of ["Futbol Analiz Merkezi", "Günün Maçları", "Doğrulanmış tahmin isabeti", "AI Tahminleri", "Tahmin performansı"]) {
+    if (!html.includes(text)) throw new Error(`Home is missing football content: ${text}`);
+  }
+  for (const text of ["Altyapı sağlığı", "Aktivite ve veri büyümesi", "System Health", "PostgreSQL kullanımı"]) {
+    if (html.includes(text)) throw new Error(`Technical panel remains on the football home: ${text}`);
+  }
   const staticAsset = [...html.matchAll(/(?:src|href)="([^"]*\/_next\/static\/[^"]+)"/g)]
     .map((match) => match[1])[0];
   if (!staticAsset) throw new Error("Next.js root did not reference a standalone static asset.");

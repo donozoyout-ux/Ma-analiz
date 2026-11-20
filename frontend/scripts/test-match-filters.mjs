@@ -4,7 +4,7 @@ import { test } from "node:test";
 import ts from "typescript";
 const source = await readFile(new URL("../src/lib/matches.ts", import.meta.url), "utf8");
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext } }).outputText;
-const { filterMatches, istanbulDay } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
+const { filterMatches, istanbulDay, summarizeTodaysMatches } = await import(`data:text/javascript;base64,${Buffer.from(js).toString("base64")}`);
 // Synthetic fixtures are test-only and never reach the application.
 const rows = [
  { id: "a", start_time: "2026-11-19T22:30:00Z", home_team: "İstanbul Test", away_team: "Test B", league_name: "Test Lig", status: "SCHEDULED" },
@@ -16,3 +16,12 @@ test("date filter never includes yesterday's matches", () => assert.deepEqual(fi
 test("Turkish search and combined filters", () => { assert.equal(filterMatches(rows, {...base, query:"istanbul", league:"Test Lig", status:"SCHEDULED"}).length, 1); assert.equal(filterMatches(rows, {...base, query:"istanbul", status:"FINISHED"}).length, 0); });
 test("archive excludes unfinished matches", () => assert.deepEqual(filterMatches(rows, {...base, archive:true}).map(r=>r.id), ["b"]));
 test("empty response stays empty", () => assert.deepEqual(filterMatches([], base), []));
+
+test("today analysis count uses the same match date and excludes failed runs", () => {
+ const analyzed={analysis_status:"ANALYZED"};
+ const failed={analysis_status:"HISTORY_INSUFFICIENT"};
+ const matches=[{...rows[0],analysis_summary:analyzed},{...rows[0],id:"c",analysis_summary:failed},{...rows[1],analysis_summary:analyzed}];
+ assert.deepEqual(summarizeTodaysMatches(matches,"2026-11-20"),{total:2,analyzed:1});
+ assert.equal(summarizeTodaysMatches([rows[0]],"2026-11-20").analyzed,null);
+ assert.deepEqual(summarizeTodaysMatches([],"2026-11-20"),{total:0,analyzed:0});
+});

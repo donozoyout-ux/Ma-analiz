@@ -278,3 +278,59 @@ button { cursor:pointer; }.quiet-button { border:1px solid var(--line-strong); b
  .section-tabs { width: 100%; margin-bottom: 20px; }
  .section-tab { flex: 1; padding: 10px 12px; }
 }
+/* Football-first home and real match cards */
+.football-heading { margin-bottom:24px; }
+.football-heading .heading-actions { flex-wrap:wrap; justify-content:flex-end; }
+.home-refresh { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:40px; }
+.football-kpis { grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.football-kpi { padding:22px; border-radius:14px; }
+.football-kpi-top { min-height:42px; display:flex; align-items:center; justify-content:space-between; gap:12px; color:#b7c7d9; font-size:14px; }
+.football-kpi-top svg { flex-shrink:0; color:var(--turquoise); }
+.football-kpi-value { display:block; margin:18px 0 12px; font-size:38px; letter-spacing:-.04em; font-weight:620; font-variant-numeric:tabular-nums; }
+.football-kpi small { color:var(--muted); font-size:12px; line-height:1.6; }
+.home-match-section { margin:30px 0 26px; }
+.home-match-section .section-heading { font-size:23px; margin-top:7px; }
+.home-match-section .section-heading-row { margin-bottom:18px; }
+.home-match-section .filter-panel { background:#0e1827; box-shadow:none; }
+.home-scope { margin-top:14px; }
+.football-match-card { min-width:0; border:1px solid var(--line); border-radius:12px; padding:20px; background:linear-gradient(140deg,#102132,#0c1726); }
+.football-match-card .tile-meta { gap:8px; align-items:flex-start; }
+.football-match-card .tile-meta > span:first-child { max-width:65%; line-height:1.6; }
+.football-teams { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); align-items:center; gap:16px; min-height:110px; margin-top:10px; }
+.football-teams > a { font-size:17px; font-weight:600; line-height:1.5; overflow-wrap:anywhere; }
+.football-teams > a:last-child { text-align:right; }
+.football-teams > a:hover { color:var(--turquoise); }
+.football-score { display:grid; gap:8px; text-align:center; }
+.football-score strong { font-size:25px; letter-spacing:.02em; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.football-score small { color:var(--muted); font-size:11px; }
+.kickoff-time { display:flex; justify-content:center; align-items:center; gap:7px; margin:0 0 18px; color:#9eb3c7; font-size:13px; }
+.kickoff-time > span { color:var(--muted); font-size:11px; }
+.match-analysis-line { display:flex; align-items:center; gap:8px; padding:13px 0; border-top:1px solid var(--line); color:#aac1ce; font-size:13px; flex-wrap:wrap; }
+.match-analysis-line svg { color:var(--turquoise); flex-shrink:0; }
+.analysis-decision { color:var(--mint); margin-left:auto; font-size:12px; }
+.match-card-bottom { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding-top:5px; }
+.match-card-bottom small { color:var(--muted); font-size:12px; max-width:65%; overflow-wrap:anywhere; }
+.football-insights { grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.insight-card { padding:24px; display:flex; flex-direction:column; }
+.insight-heading { display:flex; align-items:center; gap:14px; }
+.insight-heading h2 { margin:5px 0 0; font-size:21px; font-weight:600; letter-spacing:-.02em; }
+.insight-icon { display:grid; place-items:center; width:46px; height:46px; background:#43ddd010; color:var(--turquoise); border:1px solid #43ddd022; border-radius:12px; flex-shrink:0; }
+.insight-description { color:var(--muted); font-size:14px; line-height:1.7; margin:18px 0; }
+.insight-empty { background:#09121f66; border:1px dashed var(--line-strong); border-radius:9px; padding:20px; color:#a4b6c9; font-size:14px; line-height:1.7; margin:0 0 20px; min-height:90px; }
+.insight-empty button { display:block; margin-top:12px; }
+.insight-stat-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:20px; }
+.insight-stat-grid > div { display:grid; gap:8px; }
+.insight-stat-grid strong { font-size:28px; font-weight:600; font-variant-numeric:tabular-nums; }
+.insight-stat-grid span { font-size:12px; color:var(--muted); }
+.insight-footer { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; margin-top:auto; border-top:1px solid var(--line); padding-top:17px; }
+.insight-footer small { color:var(--muted); font-size:12px; line-height:1.7; max-width:65%; }
+.insight-footer .text-link { flex-shrink:0; line-height:1.7; }
+.outcome-track { height:6px; margin-bottom:20px; border-radius:10px; overflow:hidden; background:var(--blue); }
+.outcome-track > span { display:block; height:100%; background:var(--mint); }
+.home-data-note { color:var(--muted); font-size:12px; line-height:1.8; margin-top:22px; border-top:1px solid var(--line); padding-top:18px; }
+@media(max-width:1180px) { .football-heading { flex-direction:column; }.football-heading .heading-actions { padding:0; }.football-teams { gap:10px; }.football-teams > a { font-size:16px; }.football-score strong { font-size:22px; }.insight-footer { flex-direction:column; gap:10px; }.insight-footer small { max-width:100%; } }
+@media(max-width:700px) { .football-kpis { grid-template-columns:1fr; gap:10px; }.football-kpi { padding:18px; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; }.football-kpi-top { justify-content:flex-start; grid-column:1; grid-row:1; }.football-kpi-top svg { order:-1; }.football-kpi-value { margin:0; font-size:32px; grid-column:2; grid-row:1 / 3; align-self:center; }.football-kpi small { grid-column:1; }.football-insights { grid-template-columns:1fr; }.football-match-card { padding:16px; }.insight-card { padding:20px; }.home-match-section .match-cards { grid-template-columns:1fr; }.football-heading .heading-actions { justify-content:flex-start; }.insight-heading h2 { font-size:20px; } }
+
+.match-pagination { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
+.match-pagination span { color:var(--muted); font-size:13px; }
+.quiet-button:disabled { opacity:.45; cursor:default; }

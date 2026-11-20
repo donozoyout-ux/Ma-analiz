@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { displayStatus, marketLabel, apiErrorMessage } from "@/lib/turkish";
 
 type Row = Record<string, unknown>;
 const columnLabels: Record<string, string> = {
@@ -30,12 +31,9 @@ function formatValue(column: string, value: unknown): string {
   if (typeof value === "number") return Number.isInteger(value) ? value.toLocaleString("tr-TR") : value.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
   if (typeof value === "object") return "Ayrıntılar için kaydı açın";
   const raw = String(value);
-  const localStatus: Record<string, string> = {
-    SCHEDULED: "PLANLANDI", LIVE: "CANLI", FINISHED: "TAMAMLANDI", SUCCESS: "BAŞARILI",
-    SKIPPED: "ATLANDI", PENDING: "BEKLİYOR", WON: "KAZANDI", LOST: "KAYBETTİ",
-    NO_BET: "BAHİS YOK", "NO BET": "BAHİS YOK",
-  };
-  return localStatus[raw.toUpperCase()] ?? raw;
+  if (["status", "evidence_status", "type", "category"].includes(column)) return displayStatus(raw);
+  if (["market", "selection"].includes(column)) return marketLabel(raw);
+  return raw;
 }
 
 export function RecordsPanel({ endpoint, columns, empty }: { endpoint: string; columns: string[]; empty: string }) {
@@ -63,7 +61,7 @@ export function RecordsPanel({ endpoint, columns, empty }: { endpoint: string; c
     return () => controller.abort();
   }, [endpoint]);
 
-  if (error) return <div className="card empty">Veriye ulaşılamadı: {error.replaceAll("_", " ")}</div>;
+  if (error) return <div className="card empty">{apiErrorMessage(error)}</div>;
   if (rows === null) return <div className="card empty" aria-live="polite">Doğrulanmış kayıtlar yükleniyor…</div>;
   if (rows.length === 0) return <div className="card empty">{empty}</div>;
 
