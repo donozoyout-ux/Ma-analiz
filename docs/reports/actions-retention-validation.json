@@ -15,13 +15,22 @@
       "R2_SECRET_ACCESS_KEY",
       "R2_BUCKET"
     ],
-    "LIVE_DELETE": "NOT_RUN"
+    "LIVE_DELETE": "NOT_RUN",
+    "latest_run_id": 44891049207,
+    "latest_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891049207",
+    "latest_validation_job": "PASS: 316 passed, 14 warnings in 12.41s"
   },
   "LIVE_DELETE": "NOT_RUN",
   "scope": "Local adapters only; no live SQL deletion, R2 write, migration or VACUUM",
   "watchdog": {
     "first_run_id": 44890806470,
-    "status": "ROOT_URL_404_FIXED_AND_REGRESSION_TESTED",
-    "rerun": "PENDING"
+    "first_result": "ROOT_URL_404_FIXED",
+    "rerun_id": 44891067934,
+    "rerun_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891067934",
+    "status": "PASS",
+    "bootstrap_warnings": [
+      "NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE",
+      "NO_RECENT_SUCCESSFUL_AUTO_SCHEDULE"
+    ]
   }
 }
