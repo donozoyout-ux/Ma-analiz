@@ -168,6 +168,8 @@ def emit(report, code):
     report = scrub(report)
     print(json.dumps(report, ensure_ascii=True, sort_keys=True))
     if os.environ.get("GITHUB_ACTIONS") == "true":
+        if report.get("capacity_status") in {"WARNING", "HIGH", "CRITICAL"}:
+            print("::warning::POSTGRES_CAPACITY_" + report["capacity_status"] + "; archive and review blockers, never force-delete unverified data.")
         if code:
             print("::error::Retention failed or is partial. Inspect safe summary; no unsafe cleanup fallback is used.")
         elif report.get("retained", 0):

@@ -3,6 +3,12 @@ run-name: Stage 7D storage preflight (no writes)
 
 on:
   workflow_dispatch:
+    inputs:
+      check:
+        description: 'Read-only inspection only; neither choice writes SQL/R2'
+        type: choice
+        default: storage
+        options: [storage, retention-validation]
 
 permissions:
   contents: read
@@ -41,7 +47,13 @@ jobs:
           R2_REGION: auto
           AUTO_RETENTION_DELETE_ENABLED: 'false'
           OPERATIONAL_DELETE_ENABLED: 'false'
-        run: python -m app.jobs.live_import --preflight --output stage7d-preflight.json
+          PREFLIGHT_CHECK: ${{ inputs.check || 'storage' }}
+        run: |
+          if [ "$PREFLIGHT_CHECK" = retention-validation ]; then
+            python -m app.jobs.retention_validation --output stage7d-preflight.json
+          else
+            python -m app.jobs.live_import --preflight --output stage7d-preflight.json
+          fi
       - name: Safe preflight evidence
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

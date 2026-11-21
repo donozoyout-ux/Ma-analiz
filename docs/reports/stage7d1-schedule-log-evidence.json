@@ -1,0 +1,79 @@
+[
+  {
+    "job_id": 136920573660,
+    "safe_log_summaries": [
+      {
+        "status": "SKIPPED",
+        "mode": "auto",
+        "error_code": "NONE",
+        "failure_stage": "NONE",
+        "sql_audit": "RECORDED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0,
+        "auto_delete_enabled": false,
+        "storage_status": "DRY_RUN",
+        "policy_hours": 48,
+        "scanned": 2,
+        "eligible": 0,
+        "retained": 2,
+        "retention_reasons": {
+          "WITHIN_RETENTION_WINDOW": 2
+        },
+        "capacity_status": "HEALTHY",
+        "capacity_bytes": 8910527,
+        "archive_failures": 0,
+        "reason": "DRY_RUN_COMPLETED_GHA_44928703385"
+      }
+    ]
+  },
+  {
+    "job_id": 136916700977,
+    "safe_log_summaries": [
+      {
+        "status": "SKIPPED",
+        "mode": "archive",
+        "error_code": "NONE",
+        "failure_stage": "NONE",
+        "sql_audit": "RECORDED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0,
+        "auto_delete_enabled": false,
+        "storage_status": "SKIPPED",
+        "policy_hours": null,
+        "scanned": 0,
+        "eligible": 0,
+        "retained": 0,
+        "retention_reasons": {},
+        "capacity_status": "HEALTHY",
+        "capacity_bytes": 8910527,
+        "archive_failures": 0,
+        "reason": "RETENTION_CHECK_COMPLETED_GHA_44927449780"
+      }
+    ]
+  },
+  {
+    "job_id": 136915974868,
+    "safe_log_summaries": [
+      {
+        "status": "FAILED",
+        "errors": [
+          "NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE",
+          "NO_RECENT_SUCCESSFUL_AUTO_SCHEDULE"
+        ],
+        "warnings": [],
+        "checks": {
+          "archive": {
+            "last_success_age_seconds": null,
+            "latest_run_id": null,
+            "threshold_minutes": 45
+          },
+          "auto": {
+            "last_success_age_seconds": null,
+            "latest_run_id": null,
+            "threshold_minutes": 120
+          }
+        }
+      }
+    ]
+  }
+]
