@@ -1,0 +1,119 @@
+/* Stage 7E Motion UI — visual-only layer. No data or API behavior changes. */
+:root {
+  --motion-lime: #b8ff47;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+  --motion-glow: rgba(184, 255, 71, .16);
+}
+body { font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif; }
+.title,.section-title,.section-heading,.brand-copy strong,.insight-heading h2 { font-family:var(--font-space),var(--font-inter),sans-serif; }
+.football-score strong,.center-score > strong,.football-kpi-value,.kpi-value { font-family:var(--font-bebas),var(--font-space),sans-serif; font-weight:400; letter-spacing:.035em; }
+.football-score strong { font-size:32px; line-height:1.05; }
+.center-score > strong { font-size:clamp(48px,7vw,76px); line-height:1.05; }
+.workspace-navigation { position:relative; }
+.nav-motion-indicator { position:absolute; top:0; left:0; width:3px; border-radius:8px; background:var(--turquoise); box-shadow:0 0 12px #43ddd052; pointer-events:none; transition:transform .24s var(--motion-ease),height .24s var(--motion-ease),opacity .16s ease; }
+.streamlined-sidebar .nav-link.active::before { display:none; }
+@media (prefers-reduced-motion: no-preference) {
+  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack) {
+    animation: motion-enter .3s var(--motion-ease);
+  }
+  @keyframes motion-enter {
+    from { opacity: 0; transform: translateY(9px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .football-match-card, .match-tile, .football-kpi, .insight-card,
+  .kpi-card, .page-card, .match-hero, .filter-panel {
+    transition: transform .24s var(--motion-ease),
+      box-shadow .24s var(--motion-ease), border-color .24s ease,
+      background-color .24s ease;
+  }
+  .football-score strong, .center-score > strong,
+  .football-kpi-value, .kpi-value {
+    transition: color .22s ease, text-shadow .22s ease;
+  }
+  .nav-link, .section-tab, .primary-button, .quiet-button,
+  .icon-link, .text-link, .mobile-menu-toggle, .center-submit {
+    transition: transform .18s var(--motion-ease),
+      box-shadow .2s ease, background-color .2s ease,
+      border-color .2s ease, color .2s ease;
+  }
+  .nav-link svg, .section-tab svg, .icon-link svg {
+    transition: transform .18s var(--motion-ease);
+  }
+  .nav-link.active::before {
+    animation: motion-indicator .26s var(--motion-ease) both;
+  }
+  @keyframes motion-indicator {
+    from { opacity: .35; transform: scaleY(.4); }
+    to { opacity: 1; transform: scaleY(1); }
+  }
+  .match-skeleton { animation-duration: 1.7s; }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .football-match-card:hover, .match-tile:hover {
+    transform: translateY(-5px);
+    border-color: rgba(184, 255, 71, .52);
+    box-shadow: 0 20px 46px rgba(0, 0, 0, .32),
+      0 0 0 1px rgba(184, 255, 71, .12), 0 0 28px var(--motion-glow);
+  }
+  .football-kpi:hover, .insight-card:hover, .kpi-card:hover, .page-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(184, 255, 71, .27);
+    box-shadow: 0 16px 32px rgba(0,0,0,.2);
+  }
+  .football-match-card:hover .football-score strong,
+  .match-hero:hover .center-score > strong {
+    color: var(--motion-lime);
+    text-shadow: 0 0 18px rgba(184,255,71,.22);
+  }
+  .nav-link:hover, .section-tab:hover {
+    transform: translateX(3px);
+    border-color: rgba(184, 255, 71, .2);
+    background: rgba(184, 255, 71, .08);
+  }
+  .nav-link:hover svg { transform: translateX(2px); }
+  .primary-button:hover:not(:disabled), .quiet-button:hover:not(:disabled), .center-submit:hover:not(:disabled),
+  .mobile-menu-toggle:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 0 18px rgba(184,255,71,.1);
+  }
+  .icon-link:hover:not(:disabled) { transform: translateY(-2px) scale(1.04); }
+  .text-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .brand-mark:hover { box-shadow: 0 0 24px var(--motion-glow); }
+  .primary-button:hover:active:not(:disabled),.quiet-button:hover:active:not(:disabled),
+  .center-submit:hover:active:not(:disabled),.icon-link:hover:active:not(:disabled),
+  .mobile-menu-toggle:hover:active:not(:disabled) { transform:scale(.97); }
+}
+.nav-link.active, .section-tab.active, .icon-link.selected {
+  border-color: rgba(67,221,208,.3);
+  color:var(--turquoise);
+}
+.nav-link.active::before { background: var(--motion-lime); }
+:where(.nav-link, .section-tab, .primary-button,.quiet-button,.icon-link,.mobile-menu-toggle,.text-link,.skip-link):focus-visible,
+:where(.football-match-card,.match-tile) a:focus-visible {
+  outline:2px solid var(--motion-lime); outline-offset:3px;
+}
+:where(.football-match-card, .match-tile):focus-within {
+  border-color: rgba(184,255,71,.58);
+  box-shadow: 0 0 0 2px rgba(184,255,71,.16);
+}
+:where(button, a):active:not(:disabled) { filter: brightness(.94); }
+@media(prefers-reduced-motion:no-preference) {
+ button:active:not(:disabled),a.nav-link:active,a.section-tab:active,a.text-link:active { transform:scale(.97); }
+}
+button:disabled,button:disabled:hover { transform:none;box-shadow:none;filter:none; }
+@media(hover:none) { .football-match-card:hover,.match-tile:hover { transform:none;box-shadow:none; }.nav-link:hover { transform:none; } }
+@media(max-width:600px) { .football-score strong { font-size:30px; }.football-match-card { min-width:0; }.football-teams > a { overflow-wrap:anywhere; } }
+@media (prefers-reduced-motion: reduce) {
+  *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
+  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack),
+  .nav-link.active::before, .match-skeleton {
+    animation: none !important;
+  }
+  .football-match-card, .match-tile, .football-kpi, .insight-card,
+  .kpi-card, .page-card, .match-hero, .filter-panel,
+  .nav-link, .section-tab, .primary-button, .quiet-button, .icon-link,
+  .mobile-menu-toggle, .center-submit {
+    transform: none !important;
+    transition: none !important;
+  }
+}

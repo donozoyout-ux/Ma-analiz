@@ -1,0 +1,23 @@
+[
+  {
+    "family": "inter",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter[opsz,wght].ttf",
+    "bytes": 876576,
+    "sha256": "29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031",
+    "licence": "SIL OFL 1.1"
+  },
+  {
+    "family": "spacegrotesk",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/spacegrotesk/SpaceGrotesk[wght].ttf",
+    "bytes": 136676,
+    "sha256": "acad6de1fc93436f5c0f1f4137751ef04f1aea3063e7036535970ffcfbd79f72",
+    "licence": "SIL OFL 1.1"
+  },
+  {
+    "family": "bebasneue",
+    "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf",
+    "bytes": 61400,
+    "sha256": "08e4623805102d819f58601e46e345648846075e363b2ceb23313c2d1c83ec73",
+    "licence": "SIL OFL 1.1"
+  }
+]

@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-21T21:56:11.799Z",
+  "evidence": "RECORDED_VERIFIED_PRODUCTION_READBACK_UI_TEST",
+  "desktop_1440": "PASS",
+  "mobile_390": "PASS",
+  "local_fonts": "PASS",
+  "hover_glow": "PASS",
+  "disabled_button": "PASS",
+  "button_press": "PASS",
+  "keyboard_focus": "PASS",
+  "sidebar_indicator": "PASS",
+  "mobile_keyboard_escape": "PASS",
+  "touch_no_hover_lift": "PASS",
+  "reduced_motion": "PASS",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN"
+}
