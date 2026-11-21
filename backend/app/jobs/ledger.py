@@ -134,10 +134,8 @@ class SQLLedger:
         self.session.commit()
 
     def prune(self, days: int) -> int:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        result = self.session.execute(delete(JobRun).where(JobRun.created_at < cutoff, JobRun.status != "RUNNING"))
-        self.session.commit()
-        return result.rowcount or 0
+        # Critical job metadata is protected. Archive/review growth separately.
+        return 0
 
 
 def run_idempotent_job(ledger: Ledger, key: str, job_type: str, handler: Callable[[], dict[str, Any]]) -> dict[str, Any]:

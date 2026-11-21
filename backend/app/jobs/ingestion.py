@@ -21,7 +21,8 @@ from app.storage.incremental import archive_incremental, row_identity
 
 
 def _expires(start_time: datetime, days: int) -> datetime:
-    return max(start_time + timedelta(days=days), datetime.now(timezone.utc) + timedelta(hours=1))
+    hours = min(48, getattr(get_settings(), "operational_retention_hours", 48), days * 24)
+    return start_time + timedelta(hours=max(1, hours))
 
 
 def _safe_status(status: str) -> str:
@@ -39,7 +40,7 @@ def upsert_matches(session: Session, matches: list[dict], *, now: datetime | Non
         for key in sorted(keys):
             session.execute(select(func.pg_advisory_xact_lock(key)))
     for match in matches:
-        if match["start_time"] < current - timedelta(days=retention):
+        if match["start_time"] < current - timedelta(hours=min(48, getattr(get_settings(), "operational_retention_hours", 48))):
             skipped += 1
             continue
         identity = fixture_key(match)
@@ -115,7 +116,7 @@ def upsert_odds(session: Session, provider: str, match: ActiveMatch, payloads: l
         columns = {column.name for column in ActiveOdds.__table__.columns}
         values = {key: value for key, value in odds.items() if key in columns and key != "price"}
         values.update({"match_id": match.id, "bookmaker_entity_id": bookmaker.id,
-                       "expires_at": max(odds["captured_at"] + timedelta(days=retention), current + timedelta(hours=1))})
+                       "expires_at": odds["captured_at"] + timedelta(hours=min(48, get_settings().operational_retention_hours, retention * 24))})
         duplicate = session.scalar(select(ActiveOdds).where(
             ActiveOdds.match_id == match.id, ActiveOdds.bookmaker == odds["bookmaker"],
             ActiveOdds.market == odds["market"], ActiveOdds.selection == odds["selection"],
@@ -759,135 +760,9 @@ def archive_expired_active_state(session: Session, store: ObjectStore, *, now: d
     return counts
 
 def cleanup_verified_archives(session: Session, store: ObjectStore, *, today: date | None = None) -> int:
-    """Re-read and verify R2 bytes before deleting old source partitions."""
-    from sqlalchemy import delete, func
-    from app.models import CouponItem, MatchAnalysis, Prediction
-    from app.storage.archive import _verify_object
+    """Disabled legacy delete path. Use retention --dry-run and explicit plan approval.
 
-    def matches_snapshot(entity, row):
-        from decimal import Decimal
-        from uuid import UUID
-        required = {
-            "active_matches": {"provider", "provider_match_id", "league_id", "season", "home_team", "away_team", "start_time", "status"},
-            "active_odds": {"provider", "match_id", "bookmaker", "market", "selection", "line", "odds", "captured_at", "snapshot_type", "period", "source"},
-            "match_results": {"provider", "match_id", "home_score", "away_score", "status", "result_source", "verified_at"},
-        }
-        if not required[entity.__tablename__].issubset(row):
-            return False
-        def value(item):
-            if isinstance(item, datetime):
-                return item.replace(tzinfo=timezone.utc) if item.tzinfo is None else item.astimezone(timezone.utc)
-            if isinstance(item, UUID):
-                return str(item)
-            if isinstance(item, Decimal):
-                return float(item)
-            return item
-        return all(value(getattr(entity, column.name)) == value(row[column.name])
-                   for column in entity.__table__.columns if column.name in row)
-
-    cutoff = (today or datetime.now(timezone.utc).date()) - timedelta(days=1)
-    jobs = session.scalars(select(ArchiveJob).where(
-        ArchiveJob.status == ArchiveStatus.VERIFIED.value,
-        ArchiveJob.dataset_type.in_(("odds", "results", "matches")),
-        ArchiveJob.archive_date < cutoff,
-        ArchiveJob.checksum.is_not(None),
-        ArchiveJob.verified_at.is_not(None),
-        ArchiveJob.row_count > 0,
-        ArchiveJob.file_size_bytes.is_not(None),
-    ).order_by(ArchiveJob.archive_date).with_for_update(skip_locked=True)).all()
-    count = 0
-    for job in jobs:
-        session.refresh(job, with_for_update=True)
-        if job.status != ArchiveStatus.VERIFIED.value:
-            continue
-        remaining_covered = False
-        try:
-            parts = job.r2_key.split("/")
-            date_base = f"date={job.archive_date.isoformat()}"
-            league_segment = f"league={job.league}" if job.league else None
-            if (not parts or parts[0] != job.dataset_type or not (
-                    parts[-1] == date_base + ".parquet" or
-                    (len(parts) == 5 and parts[-2] == date_base and parts[-1].startswith("part=") and parts[-1].endswith(".parquet")))
-                    or not any(part.startswith("season=") for part in parts)
-                    or (league_segment and league_segment not in parts)):
-                continue
-            archived_rows = _verify_object(store, job.r2_key, expected_size=job.file_size_bytes,
-                                           expected_rows=job.row_count, expected_checksum=job.checksum)
-        except Exception:
-            continue
-
-        day_start = datetime.combine(job.archive_date, time.min, tzinfo=timezone.utc)
-        day_end = day_start + timedelta(days=1)
-        season_segment = next((part for part in parts if part.startswith("season=")), None)
-        if season_segment is None:
-            continue
-        season_id = season_segment.removeprefix("season=")
-        if job.dataset_type == "odds":
-            match_scope = select(ActiveMatch.id).where(
-                ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
-            candidates = session.scalars(select(ActiveOdds).where(
-                ActiveOdds.captured_at >= day_start, ActiveOdds.captured_at < day_end,
-                ActiveOdds.expires_at <= datetime.now(timezone.utc),
-                ActiveOdds.match_id.in_(match_scope)).with_for_update()).all()
-            by_id = {row["odds_id"]: row for row in archived_rows if row.get("odds_id")}
-            eligible = [row.id for row in candidates if str(row.id) in by_id and matches_snapshot(row, by_id[str(row.id)])]
-            if not eligible:
-                continue
-            session.execute(delete(ActiveOdds).where(ActiveOdds.id.in_(eligible)))
-            remaining_covered = any(str(row.id) in by_id for row in session.scalars(
-                select(ActiveOdds).where(ActiveOdds.match_id.in_(match_scope))).all())
-        elif job.dataset_type == "results":
-            match_scope = select(ActiveMatch.id).where(
-                ActiveMatch.league_id == job.league, ActiveMatch.season == season_id)
-            candidates = session.scalars(select(MatchResult).where(
-                func.coalesce(MatchResult.finished_at, MatchResult.verified_at) >= day_start,
-                func.coalesce(MatchResult.finished_at, MatchResult.verified_at) < day_end,
-                MatchResult.status == "FINAL", MatchResult.verified_at.is_not(None),
-                MatchResult.match_id.in_(match_scope)).with_for_update()).all()
-            by_id = {row["result_id"]: row for row in archived_rows if row.get("result_id")}
-            eligible = [row.id for row in candidates if str(row.id) in by_id and matches_snapshot(row, by_id[str(row.id)])
-                        and (row.finished_at or row.verified_at).replace(tzinfo=timezone.utc) <
-                        datetime.now(timezone.utc) - timedelta(days=get_settings().active_state_retention_days)]
-            if not eligible:
-                continue
-            session.execute(delete(MatchResult).where(MatchResult.id.in_(eligible)))
-            remaining_covered = any(str(row.id) in by_id for row in session.scalars(
-                select(MatchResult).where(MatchResult.match_id.in_(match_scope))).all())
-        elif job.dataset_type == "matches":
-            # Historical R2 fixtures are the source of truth. Re-read their IDs
-            # and retain product records before deleting the expiring active row.
-            archived_ids = {(row.get("provider"), str(row.get("provider_match_id"))): row
-                            for row in archived_rows if row.get("provider") and row.get("provider_match_id")}
-            eligible = session.scalars(select(ActiveMatch).where(
-                ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end,
-                ActiveMatch.expires_at <= datetime.now(timezone.utc),
-                ActiveMatch.season == season_id,
-                ActiveMatch.league_id == job.league,
-            ).with_for_update()).all()
-            eligible = [match for match in eligible if (match.provider, match.provider_match_id) in archived_ids
-                        and matches_snapshot(match, archived_ids[(match.provider, match.provider_match_id)])]
-            match_ids = [match.id for match in eligible]
-            if not match_ids:
-                continue
-            if job.league:
-                match_ids = [match.id for match in eligible if match.league_id == job.league]
-            protected = set()
-            for model in (ActiveOdds, MatchResult, Prediction, MatchAnalysis, CouponItem):
-                protected.update(session.scalars(select(model.match_id).where(model.match_id.in_(match_ids))).all())
-            match_ids = [identity for identity in match_ids if identity not in protected]
-            if not match_ids:
-                continue
-            session.execute(delete(ActiveMatch).where(ActiveMatch.id.in_(match_ids)))
-            remaining_covered = any((match.provider, match.provider_match_id) in archived_ids for match in
-                                    session.scalars(select(ActiveMatch).where(
-                                        ActiveMatch.league_id == job.league, ActiveMatch.season == season_id,
-                                        ActiveMatch.start_time >= day_start, ActiveMatch.start_time < day_end)).all())
-        else:
-            continue
-
-        if not remaining_covered:
-            job.status = ArchiveStatus.DELETED.value
-            job.deleted_at = datetime.now(timezone.utc)
-        session.commit()
-        count += 1
-    return count
+    This compatibility entrypoint never deletes, even when old expires_at values or
+    old VERIFIED ledgers would previously have authorized it.
+    """
+    return 0

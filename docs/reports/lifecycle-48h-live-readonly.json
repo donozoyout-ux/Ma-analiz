@@ -1,0 +1,26 @@
+{
+  "status": "NOT_CONFIGURED",
+  "mode": "dry-run",
+  "LIVE_DELETE": "NOT_RUN",
+  "deleted": 0,
+  "postgres": "NOT_RUN",
+  "r2": "NOT_RUN",
+  "target": {
+    "status": "NOT_RUN"
+  },
+  "capacity": {
+    "status": "NOT_RUN",
+    "bytes": null,
+    "limit_bytes": 1000000000
+  },
+  "metadata": {
+    "status": "NOT_RUN"
+  },
+  "missing_env": [
+    "DATABASE_URL",
+    "R2_ENDPOINT",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY"
+  ],
+  "invalid_env": []
+}

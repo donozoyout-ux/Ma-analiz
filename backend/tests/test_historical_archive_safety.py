@@ -149,8 +149,8 @@ def test_cleanup_preserves_unarchived_unexpired_and_modified_sql_rows():
         odds[1].expires_at = datetime.now(timezone.utc) + timedelta(days=1)
         odds[2].odds = Decimal("3")
         session.commit()
-        assert cleanup_verified_archives(session, store) == 1
-        assert {item.bookmaker for item in session.query(ActiveOdds)} == {"1", "2", "3"}
+        assert cleanup_verified_archives(session, store) == 0  # legacy deletion disabled
+        assert {item.bookmaker for item in session.query(ActiveOdds)} == {"0", "1", "2", "3"}
         assert store.list_objects()  # Database cleanup never deletes R2.
     engine.dispose()
 
@@ -269,8 +269,8 @@ def test_match_cleanup_handles_supplements_and_preserves_stored_analysis():
         tracker = SQLArchiveTracker(session)
         archive_rows(store, tracker, dataset="matches", season="2025-2026", league="36", day=DAY, rows=rows[:1])
         archive_rows(store, tracker, dataset="matches", season="2025-2026", league="36", day=DAY, rows=rows)
-        assert cleanup_verified_archives(session, store) == 2
-        assert session.query(ActiveMatch).one().provider_match_id == "2"
+        assert cleanup_verified_archives(session, store) == 0  # explicit new plan approval required
+        assert session.query(ActiveMatch).count() == 3
         assert session.query(MatchAnalysis).count() == 1
         assert len(store.list_objects()) == 2
     engine.dispose()

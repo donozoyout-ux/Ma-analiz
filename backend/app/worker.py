@@ -23,6 +23,8 @@ def cycle(now: datetime | None = None) -> list[dict]:
         ("collect_odds", settings.worker_odds_interval_seconds),
         ("process_results", settings.worker_results_interval_seconds),
         ("scheduled_scan", settings.worker_scanner_interval_seconds),
+        ("archive_data", getattr(settings, "worker_archive_interval_seconds", 900)),
+        ("cleanup_database", getattr(settings, "worker_cleanup_interval_seconds", 3600)),
     )
     scheduled = []
     for job_type, raw_interval in job_specs:
@@ -42,7 +44,8 @@ def cycle(now: datetime | None = None) -> list[dict]:
             prune_key = f"prune_job_history:{datetime.fromtimestamp(prune_slot, tz=timezone.utc).isoformat()}"
             outcomes.append(run_idempotent_job(
                 ledger, prune_key, "prune_job_history",
-                lambda: {"status": "SUCCESS", "records_written": prune_job_history(session)},
+                # Preserve critical run logs. Counts/table-byte alerts replace blind pruning.
+                lambda: {"status": "SKIPPED", "records_written": 0, "reason": "METADATA_PROTECTED_NO_PRUNE"},
             ))
             _last_prune_check_slot = prune_slot
         return outcomes

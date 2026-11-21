@@ -4,7 +4,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -54,6 +54,12 @@ class Settings(BaseSettings):
     worker_odds_interval_seconds: int = 1800
     worker_results_interval_seconds: int = 1800
     worker_scanner_interval_seconds: int = 1800
+    worker_archive_interval_seconds: int = 900
+    worker_cleanup_interval_seconds: int = 3600
+    operational_retention_hours: int = Field(default=48, ge=1, le=48)
+    operational_delete_enabled: bool = False
+    lifecycle_batch_size: int = Field(default=25, ge=1, le=100)
+    lifecycle_child_limit: int = Field(default=500, ge=1, le=2000)
     worker_prune_interval_seconds: int = 86400
     job_run_stale_after_seconds: int = 21600
     historical_ingest_lease_seconds: int = 3600
@@ -62,8 +68,8 @@ class Settings(BaseSettings):
     postgres_high_mb: int = 750
     postgres_critical_mb: int = 750
     job_history_retention_days: int = 30
-    active_state_retention_days: int = 14
-    odds_retention_days: int = 30
+    active_state_retention_days: int = 2  # Legacy compatibility; lifecycle uses hours, capped at 48.
+    odds_retention_days: int = 2
     similarity_weak_threshold: int = 30
     similarity_moderate_threshold: int = 100
     similarity_strong_threshold: int = 500

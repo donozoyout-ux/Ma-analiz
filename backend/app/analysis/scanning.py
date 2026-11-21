@@ -71,9 +71,22 @@ def _r2_history(match: ActiveMatch, *, as_of: datetime, odds_rows: list[ActiveOd
     start = kickoff - timedelta(days=365 * 5)
     try:
         repository = HistoricalRepository(R2ObjectStore())
-        rows = repository.get_similarity_history(league=match.league_id, season=match.season,
-            start=start, end=kickoff, before=as_of,
-            bookmaker=(next((row.bookmaker for row in odds_rows or [] if row.market == "1X2" and row.selection == "HOME"), None)))
+        from app.providers.identity import LEAGUES, REVIEWED_IMPORT_KEY
+        canonical_league = LEAGUES.get((match.provider, match.league_id), match.league_id)
+        rows = []
+        for league in dict.fromkeys((canonical_league, match.league_id)):
+            rows.extend(repository.get_similarity_history(league=league, season=match.season,
+                start=start, end=kickoff, before=as_of,
+                bookmaker=(next((row.bookmaker for row in odds_rows or [] if row.market == "1X2" and row.selection == "HOME"), None))))
+        for row in rows:
+            row["canonical_league_id"] = canonical_league
+            row["league_id"] = match.league_id  # reviewed competition ID mapping only
+            if (row.get("identity_review") == REVIEWED_IMPORT_KEY and row.get("operational_provider") == match.provider):
+                snapshot = json.loads(row["sql_snapshot_json"])
+                # This fixture's persisted, reviewed aliases survive SQL cleanup.
+                # Never turn this into a fuzzy or global club-name transformation.
+                for field in ("provider", "provider_match_id", "home_team", "away_team"):
+                    row[field] = snapshot[field]
     except R2NotConfigured:
         return {"status": "R2_NOT_CONFIGURED", "rows": [], "similarity": None}
     except Exception as exc:

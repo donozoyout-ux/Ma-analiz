@@ -152,7 +152,7 @@ def prepare_sql(session, candidate, *, now, retention_days):
                             league_name=event["league_name"], season=event["season"],
                             home_team=event["home_team"], away_team=event["away_team"],
                             start_time=utc(event["start_time"]), status="FINISHED",
-                            expires_at=now + timedelta(days=max(1, retention_days)))
+                            expires_at=utc(event["start_time"]) + timedelta(hours=48))
         session.add(match)
         session.flush()
     result = session.scalar(select(MatchResult).where(MatchResult.match_id == match.id).with_for_update())
@@ -160,7 +160,7 @@ def prepare_sql(session, candidate, *, now, retention_days):
         # Never replace a prior result, even if its score happens to agree.
         raise ImportBlocked("EXISTING_UNJOURNALED_RESULT_REQUIRES_REVIEW")
     match.status = "FINISHED"
-    match.expires_at = max(_aware(match.expires_at), now + timedelta(days=max(1, retention_days)))
+    match.expires_at = utc(candidate["event"]["start_time"]) + timedelta(hours=48)
     result = MatchResult(match_id=match.id, provider="openligadb", provider_result_id="83237",
                          home_score=1, away_score=1, status="FINAL", finished_at=None,
                          verified_at=utc(candidate["verified_at"]), result_source=RESULT_SOURCE)
@@ -251,7 +251,8 @@ def production_session(settings):
         # importer fails immediately; no expiring lease can admit concurrent writers.
         held = []
         try:
-            for key in (LOCK_ID, event_lock):
+            from app.storage.lifecycle import LOCK_ID as lifecycle_lock
+            for key in (lifecycle_lock, LOCK_ID, event_lock):
                 acquired = connection.execute(text("SELECT pg_try_advisory_lock(:key)"), {"key": key}).scalar_one()
                 connection.commit()
                 if not acquired:

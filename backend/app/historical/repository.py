@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import hashlib
+import json
 
 import pyarrow.parquet as pq
 
@@ -36,7 +38,17 @@ class HistoricalRepository:
             raise ValueError("Historical cutoff must include a timezone")
         rows: list[dict] = []
         for key in keys:
-            parquet_file = pq.ParquetFile(self._buffer(self.store.get_object(key)))
+            info = self.store.head_object(key)
+            if info is None: raise IOError("HISTORICAL_OBJECT_MISSING")
+            payload = self.store.get_object(key)
+            metadata = info.metadata or {}
+            if (len(payload) != info.size or metadata.get("sha256") != hashlib.sha256(payload).hexdigest()):
+                raise IOError("HISTORICAL_CHECKSUM_NOT_VERIFIED")
+            parquet_file = pq.ParquetFile(self._buffer(payload))
+            if metadata.get("row-count") != str(parquet_file.metadata.num_rows):
+                raise IOError("HISTORICAL_ROW_COUNT_NOT_VERIFIED")
+            if "part=lifecycle-" in key and metadata.get("archive-key") != key:
+                raise IOError("HISTORICAL_KEY_NOT_VERIFIED")
             for batch in parquet_file.iter_batches(batch_size=self.batch_size):
                 for row in batch.to_pylist():
                     # A finalized result is not available to analysis until it has
@@ -53,7 +65,27 @@ class HistoricalRepository:
                         raise ValueError("Historical timestamps must include a timezone")
                     if event_time <= before:
                         rows.append(row)
-        return rows
+        # Immutable lifecycle revisions must not count as additional matches,
+        # predictions, odds or statistics. Pick the last version available at
+        # the requested analysis time, never a later correction.
+        versions, legacy = {}, []
+        for row in rows:
+            if row.get("archive_format") != "lifecycle-v1":
+                legacy.append(row)
+                continue
+            identity = (row["sql_table"], row["sql_identity"])
+            previous = versions.get(identity)
+            stamp = row["available_at"]
+            if isinstance(stamp, str): stamp = datetime.fromisoformat(stamp)
+            if previous:
+                prior = previous["available_at"]
+                if isinstance(prior, str): prior = datetime.fromisoformat(prior)
+                if stamp < prior: continue
+                if stamp == prior and row["sql_snapshot_json"] != previous["sql_snapshot_json"]:
+                    raise ValueError("AMBIGUOUS_HISTORICAL_REVISION")
+            versions[identity] = row
+        # Lifecycle rows precede legacy exports at the same provider identity.
+        return sorted(versions.values(), key=lambda r: str(r["available_at"]), reverse=True) + legacy
 
     @staticmethod
     def _buffer(data: bytes):
@@ -105,10 +137,12 @@ class HistoricalRepository:
             start=start, end=end), before=before)
         results = self._read(self.partition_keys(dataset="results", season=season, league=league,
             start=start, end=end), before=before)
-        outcomes = {(str(row.get("provider") or ""), str(row.get("provider_match_id"))): row for row in results
-                    if row.get("provider_match_id") is not None and row.get("verified_at") is not None
+        outcomes = {}
+        for row in results:
+            if (row.get("provider_match_id") is not None and row.get("verified_at") is not None
                     and row.get("home_score") is not None and row.get("away_score") is not None
-                    and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}}
+                    and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}):
+                outcomes.setdefault((str(row.get("provider") or ""), str(row.get("provider_match_id"))), row)
         odds_rows = self._read(self.partition_keys(dataset="odds", season=season, league=league,
             start=start, end=end), before=before) if bookmaker else []
         odds_by_match: dict[str, list[dict]] = {}

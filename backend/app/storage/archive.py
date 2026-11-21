@@ -226,27 +226,5 @@ def archive_partition(
 
 def cleanup_database_rows_after_verified(session, *, key: str, delete_rows: Callable,
                                          store: ObjectStore | None = None) -> None:
-    """Delete only rows covered by a persisted VERIFIED job and older than a 1-day buffer.
-
-    delete_rows(session, archive_job) must scope its deletion to this job's partition and
-    must not commit independently. Both status update and deletion share one transaction.
-    """
-    from app.models import ArchiveJob
-    job = session.query(ArchiveJob).filter_by(r2_key=key).with_for_update().one_or_none()
-    today = datetime.now(timezone.utc).date()
-    if (job is None or job.status != ArchiveStatus.VERIFIED.value or not job.checksum
-            or not job.verified_at or not job.row_count or job.archive_date >= today - timedelta(days=1)):
-        session.rollback()
-        raise RuntimeError("Archive is not verified and outside the safety buffer; refusing database cleanup")
-    try:
-        if store is None or not getattr(job, "file_size_bytes", None):
-            raise RuntimeError("Live object verification is required; refusing database cleanup")
-        _verify_object(store, key, expected_size=job.file_size_bytes,
-                       expected_rows=job.row_count, expected_checksum=job.checksum)
-        delete_rows(session, job)
-        job.status = ArchiveStatus.DELETED.value
-        job.deleted_at = datetime.now(timezone.utc)
-        session.commit()
-    except Exception:
-        session.rollback()
-        raise
+    """Disabled compatibility path: a VERIFIED partition alone is not delete approval."""
+    raise RuntimeError("EXPLICIT_48H_PLAN_APPROVAL_REQUIRED")

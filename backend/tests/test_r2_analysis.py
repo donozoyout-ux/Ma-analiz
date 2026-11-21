@@ -5,7 +5,7 @@ from app.storage.r2 import InMemoryObjectStore, parquet_bytes
 
 
 def _put(store, key, rows):
-    store.put_object(key, parquet_bytes(rows), content_type="application/vnd.apache.parquet")
+    store.put_parquet(key, rows)
 
 
 def test_r2_similarity_query_prunes_by_partition_and_joins_verified_result_and_odds():

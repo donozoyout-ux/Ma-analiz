@@ -333,5 +333,5 @@ def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch
         assert connection.unlocks == list(reversed(connection.locks[:-1]))
     else:
         with job.production_session(Settings(_env_file=None)): pass
-        assert len(connection.locks) == 2
+        assert len(connection.locks) == 3
         assert connection.unlocks == list(reversed(connection.locks))

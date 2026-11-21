@@ -131,77 +131,34 @@ def process_results(day: date | None = None) -> dict[str, Any]:
             result = ingest_results(session, caller, today)
             from app.jobs.results import settle_verified_results
             settlement = settle_verified_results(session, day=today)
-            return {**result, **settlement}
+            from app.jobs.technical_ingestion import collect_permitted_statistics
+            technical = collect_permitted_statistics(session, caller, day=today)
+            return {**result, **settlement, "technical_statistics": technical}
         except ProviderFailure as exc:
             session.rollback()
             return _missing_provider_result(exc)
 
 
 def archive_data(day: date | None = None) -> dict[str, Any]:
-    settings = get_settings()
-    try:
-        store = R2ObjectStore()
-    except Exception as exc:
-        code = "R2_NOT_CONFIGURED" if "NOT_CONFIGURED" in str(exc) else "R2_UNAVAILABLE"
-        return {"status": "SKIPPED", "error_code": code, "reason": code, "records_seen": 0,
-                "records_written": 0, "records_skipped": 0, "records_failed": 0}
-    if SessionLocal is None:
-        return {"status": "SKIPPED", "error_code": "DATABASE_NOT_CONFIGURED", "reason": "DATABASE_NOT_CONFIGURED",
-                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
-    from app.jobs.ingestion import archive_expired_active_state, historical_ingest
-    today = day or datetime.now(timezone.utc).date()
-    target_day = today - __import__("datetime").timedelta(days=1)
-    archived_counts = {"odds": 0, "results": 0, "predictions": 0}
-    historical_results = []
-    with SessionLocal() as session:
-        archived_counts = archive_expired_active_state(session, store)
-        try:
-            caller = _caller()
-            seasons, leagues = settings.enabled_season_ids, settings.enabled_league_ids
-            if seasons and leagues:
-                historical_results = [historical_ingest(
-                    session, caller, store, season=season, league=league,
-                    start_date=target_day, end_date=target_day,
-                ) for season in seasons for league in leagues]
-            else:
-                historical_results = [{"status": "SKIPPED", "error_code": "HISTORICAL_SCOPE_NOT_CONFIGURED",
-                                       "records_seen": 0, "records_written": 0, "records_skipped": 0,
-                                       "records_failed": 0}]
-        except ProviderFailure as exc:
-            historical_results = [_missing_provider_result(exc)]
-    archived = sum(archived_counts.values()) + sum(item.get("records_written", 0) for item in historical_results)
-    failures = sum(item.get("records_failed", 0) for item in historical_results)
-    skipped = sum(item.get("records_skipped", 0) for item in historical_results)
-    if failures and archived:
-        status = "PARTIAL"
-    elif failures:
-        status = "FAILED"
-    elif archived:
-        status = "SUCCESS"
-    else:
-        status = "SKIPPED"
-    reason = None if archived else next((item.get("error_code") or item.get("reason") for item in historical_results
-                                         if item.get("error_code") or item.get("reason")), "NO_EXPIRED_ROWS")
-    return {"status": status, "reason": reason, "records_seen": archived + skipped,
-            "records_written": archived, "records_skipped": skipped, "records_failed": failures,
-            "archived_by_dataset": archived_counts, "historical_jobs": historical_results}
+    # No historical scraping in the scheduler. Archive already-ingested SQL rows early.
+    from app.jobs.retention import run
+    result = run(mode="archive")
+    if result["status"] not in {"SUCCESS", "PARTIAL", "SKIPPED"}:
+        return {**result, "status": "FAILED", "records_failed": 1,
+                "error_code": result.get("error_code", "LIFECYCLE_STORAGE_NOT_READY")}
+    return result
+
 
 def cleanup_database() -> dict[str, Any]:
+    # Scheduled cleanup is always a read-only plan. --execute is operator-only.
+    from app.jobs.retention import run
     if SessionLocal is None:
-        return {"status": "SKIPPED", "error_code": "DATABASE_NOT_CONFIGURED", "reason": "DATABASE_NOT_CONFIGURED",
-                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
-    try:
-        store = R2ObjectStore()
-    except Exception as exc:
-        code = "R2_NOT_CONFIGURED" if "NOT_CONFIGURED" in str(exc) else "R2_UNAVAILABLE"
-        return {"status": "SKIPPED", "error_code": code, "reason": code,
-                "records_seen": 0, "records_written": 0, "records_skipped": 0, "records_failed": 0}
-    from app.jobs.ingestion import cleanup_verified_archives
-    with SessionLocal() as session:
-        count = cleanup_verified_archives(session, store)
-    return {"status": "SUCCESS" if count else "SKIPPED",
-            "reason": None if count else "NO_VERIFIED_ARCHIVE_CANDIDATES",
-            "records_seen": count, "records_written": count, "records_skipped": 0, "records_failed": 0}
+        return {"status": "SKIPPED", "reason": "DATABASE_NOT_CONFIGURED", "records_written": 0,
+                "LIVE_DELETE": "NOT_RUN", "deleted": 0}
+    result = run(mode="dry-run")
+    return {**result, "status": "SKIPPED" if result["status"] == "DRY_RUN" else "FAILED",
+            "reason": "EXPLICIT_PLAN_APPROVAL_REQUIRED" if result["status"] == "DRY_RUN" else result.get("error_code", "LIFECYCLE_STORAGE_NOT_READY"),
+            "records_written": 0}
 
 
 def calculate_daily_metrics(day: date | None = None) -> dict[str, Any]:

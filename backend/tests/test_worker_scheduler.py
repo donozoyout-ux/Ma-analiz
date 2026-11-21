@@ -53,10 +53,10 @@ def test_worker_cycle_uses_configured_intervals_and_separate_jobs(monkeypatch):
 
     outcomes = worker.cycle(now)
 
-    assert [name for name, _ in calls] == ["collect_matches", "collect_odds", "process_results", "scheduled_scan"]
-    assert len(outcomes) == 4
+    assert [name for name, _ in calls] == ["collect_matches", "collect_odds", "process_results", "scheduled_scan", "archive_data", "cleanup_database"]
+    assert len(outcomes) == 6
     assert calls[0][1].endswith("10:00:00+00:00")
-    assert all(key.endswith("10:30:00+00:00") for _, key in calls[1:])
+    assert all(key.endswith("10:30:00+00:00") for _, key in calls[1:4])
 
 
 def test_worker_checks_job_history_pruning_once_per_utc_day(monkeypatch):
@@ -302,32 +302,13 @@ def test_daily_archive_reports_unexpected_exception_as_json_failure(monkeypatch,
     assert all("error_code" in job and "credentials" not in job for job in payload["jobs"])
 
 
-def test_archive_data_processes_every_configured_season_and_league(monkeypatch):
-    from contextlib import nullcontext
-    from app.core.config import Settings
-    from app.jobs import tasks
-
-    settings = Settings(enabled_seasons="2024-2025,2025-2026,2026-2027", enabled_leagues="36")
+def test_archive_data_uses_only_existing_sql_and_never_starts_historical_scraping(monkeypatch):
+    from app.jobs import tasks, retention
     calls = []
-    monkeypatch.setattr(tasks, "get_settings", lambda: settings)
-    monkeypatch.setattr(tasks, "R2ObjectStore", lambda: object())
-    monkeypatch.setattr(tasks, "SessionLocal", lambda: nullcontext(object()))
-    monkeypatch.setattr(tasks, "_caller", lambda: object())
-
-    def archive_active(_session, _store):
-        return {"odds": 0, "results": 0, "predictions": 0}
-
-    def ingest(_session, _caller, _store, *, season, league, start_date, end_date):
-        calls.append((season, league, start_date, end_date))
-        return {"status": "SUCCESS", "records_written": 1, "records_failed": 0, "records_skipped": 0}
-
-    monkeypatch.setattr("app.jobs.ingestion.archive_expired_active_state", archive_active)
-    monkeypatch.setattr("app.jobs.ingestion.historical_ingest", ingest)
+    monkeypatch.setattr(retention, "run", lambda **kw: calls.append(kw) or {"status": "SUCCESS", "records_written": 2})
+    monkeypatch.setattr(tasks, "_caller", lambda: (_ for _ in ()).throw(AssertionError("no scraping")))
     result = tasks.archive_data(date(2026, 11, 17))
-
-    assert [row[0] for row in calls] == ["2024-2025", "2025-2026", "2026-2027"]
-    assert all(row[1] == "36" and row[2] == row[3] == date(2026, 11, 16) for row in calls)
-    assert result["records_written"] == 3
+    assert calls == [{"mode": "archive"}] and result["records_written"] == 2
 
 
 def test_historical_backfill_dry_run_plans_only_enabled_scope(monkeypatch, capsys):

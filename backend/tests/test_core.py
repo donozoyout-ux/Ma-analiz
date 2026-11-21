@@ -140,7 +140,7 @@ def test_upload_failure_marks_failed_and_never_deletes_database_rows():
         archive_partition(store, dataset="matches", season="2020", league="l1", day=date(2020, 1, 1), rows=rows, retries=1, sleep=lambda _: None, tracker=tracker)
     assert tracker.state[next(iter(tracker.state))] == ArchiveStatus.FAILED
     job = SimpleNamespace(status="FAILED", checksum=None, verified_at=None, row_count=1, archive_date=date(2020, 1, 1))
-    with pytest.raises(RuntimeError, match="refusing database cleanup"):
+    with pytest.raises(RuntimeError, match="EXPLICIT_48H_PLAN_APPROVAL_REQUIRED"):
         cleanup_database_rows_after_verified(FakeSession(job), key="matches/x", delete_rows=lambda *_: deleted.append(True))
     assert not deleted
 
@@ -151,13 +151,14 @@ def test_persisted_verified_archive_allows_old_partition_cleanup_only():
     old_job = SimpleNamespace(status="VERIFIED", checksum=receipt.checksum, verified_at=datetime.now(timezone.utc), row_count=1,
                               file_size_bytes=receipt.size, archive_date=date(2020, 1, 1), deleted_at=None)
     session, deleted = FakeSession(old_job), []
-    cleanup_database_rows_after_verified(session, key=receipt.key, store=store, delete_rows=lambda db, job: deleted.append((db, job)))
-    assert len(deleted) == 1 and old_job.status == "DELETED" and session.commits == 1
+    with pytest.raises(RuntimeError, match="EXPLICIT_48H_PLAN_APPROVAL_REQUIRED"):
+        cleanup_database_rows_after_verified(session, key=receipt.key, store=store, delete_rows=lambda db, job: deleted.append((db, job)))
+    assert deleted == [] and old_job.status == "VERIFIED" and session.commits == 0
     recent = SimpleNamespace(status="VERIFIED", checksum="sha256", verified_at=datetime.now(timezone.utc), row_count=3, archive_date=date.today(), deleted_at=None)
     recent_session, recent_deleted = FakeSession(recent), []
-    with pytest.raises(RuntimeError, match="safety buffer"):
+    with pytest.raises(RuntimeError, match="EXPLICIT_48H_PLAN_APPROVAL_REQUIRED"):
         cleanup_database_rows_after_verified(recent_session, key="matches/y", delete_rows=lambda *_: recent_deleted.append(True))
-    assert recent_deleted == [] and recent_session.rollbacks == 1
+    assert recent_deleted == [] and recent_session.rollbacks == 0
 
 
 class FakeSession:
@@ -201,10 +202,10 @@ def test_storage_thresholds_and_unconfigured_sizes_are_honest():
 def test_historical_repository_excludes_rows_after_kickoff():
     store = InMemoryObjectStore()
     key = "matches/date=test.parquet"
-    store.put_object(key, parquet_bytes([
+    store.put_parquet(key, [
         {"start_time": datetime(2026, 2, 1, 10, tzinfo=timezone.utc), "home_team": "A", "away_team": "B"},
         {"start_time": datetime(2026, 2, 1, 12, tzinfo=timezone.utc), "home_team": "A", "away_team": "C"},
-    ]), content_type="application/vnd.apache.parquet")
+    ])
     rows = HistoricalRepository(store).get_team_matches([key], before=datetime(2026, 2, 1, 11, tzinfo=timezone.utc), team="A")
     assert len(rows) == 1 and rows[0]["away_team"] == "B"
 
@@ -910,10 +911,9 @@ def test_cleanup_deletes_only_after_live_object_reverification():
         archived_row["odds_id"] = str(archived_odds.id)
         archive_rows(store, SQLArchiveTracker(db), dataset="odds", season="2026-27", league="league-1",
                      day=day, rows=[archived_row])
-        assert cleanup_verified_archives(db, store, today=date(2026, 11, 13)) == 1
-        assert db.query(ActiveOdds).count() == 1
-        assert db.query(ActiveOdds).one().match_id == other_match.id
-        assert db.query(ArchiveJob).one().status == "DELETED"
+        assert cleanup_verified_archives(db, store, today=date(2026, 11, 13)) == 0
+        assert db.query(ActiveOdds).count() == 2
+        assert db.query(ArchiveJob).one().status == "VERIFIED"
     engine.dispose()
 
 
@@ -941,8 +941,8 @@ def test_verified_match_archive_allows_expired_active_match_cleanup():
                      day=day, rows=[{"provider": "goaloo", "provider_match_id": "old-match", "league_id": "36",
                                      "season": "2024-2025", "home_team": "Home", "away_team": "Away",
                                      "start_time": kickoff, "status": "FINISHED"}])
-        assert cleanup_verified_archives(db, store, today=date(2025, 2, 1)) == 1
-        assert db.query(ActiveMatch).count() == 0
+        assert cleanup_verified_archives(db, store, today=date(2025, 2, 1)) == 0
+        assert db.query(ActiveMatch).count() == 1
     engine.dispose()
 
 

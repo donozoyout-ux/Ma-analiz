@@ -1,0 +1,10 @@
+{
+  "status": "PASS",
+  "command": "python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py",
+  "exit_code": 0,
+  "summary": "291 passed, 12 warnings in 26.01s",
+  "scope": "Local automated tests; lifecycle delete assertions use SQLite in memory and R2 uses InMemoryObjectStore",
+  "LIVE_DELETE": "NOT_RUN",
+  "LIVE_MIGRATION": "NOT_RUN",
+  "live_postgres_r2_validation": "NOT_RUN; see lifecycle-48h-live-readonly.json"
+}
