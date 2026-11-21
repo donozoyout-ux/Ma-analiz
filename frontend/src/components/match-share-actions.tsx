@@ -2,22 +2,18 @@
 
 import { useState } from "react";
 import { Check, Copy, Share2 } from "lucide-react";
-
-type Feedback = "idle" | "copied" | "shared" | "error";
+import { copyMatchLink, shareMatchLink, type ShareFeedback } from "@/lib/match-share";
 
 export function MatchShareActions({ homeTeam, awayTeam }: { homeTeam: string; awayTeam: string }) {
-  const [feedback, setFeedback] = useState<Feedback>("idle");
+  const [feedback, setFeedback] = useState<ShareFeedback>("idle");
   const [busy, setBusy] = useState(false);
 
   async function copyLink() {
     if (busy) return;
     setBusy(true);
+    setFeedback("idle");
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
-      await navigator.clipboard.writeText(window.location.href);
-      setFeedback("copied");
-    } catch {
-      setFeedback("error");
+      setFeedback(await copyMatchLink(navigator, window.location.href));
     } finally {
       setBusy(false);
     }
@@ -25,21 +21,13 @@ export function MatchShareActions({ homeTeam, awayTeam }: { homeTeam: string; aw
 
   async function shareLink() {
     if (busy) return;
-    if (!navigator.share) {
-      await copyLink();
-      return;
-    }
     setBusy(true);
+    setFeedback("idle");
     try {
-      await navigator.share({
+      setFeedback(await shareMatchLink(navigator, {
         title: `${homeTeam} – ${awayTeam} | Maç Analiz`,
         url: window.location.href,
-      });
-      setFeedback("shared");
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) {
-        setFeedback("error");
-      }
+      }));
     } finally {
       setBusy(false);
     }
