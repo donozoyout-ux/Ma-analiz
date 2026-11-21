@@ -1,0 +1,67 @@
+name: Safe source snapshot (Drive preparation)
+run-name: Source snapshot ${{ github.event_name }} ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-snapshot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out exact commit without stored credentials
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build and verify source-only archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          paths = subprocess.check_output(["git", "ls-files", "-z"]).decode("utf-8", "strict").split("\0")
+          bad = []
+          for name in filter(None, paths):
+              parts = pathlib.PurePosixPath(name).parts
+              base = parts[-1].lower()
+              if (base == ".env" or (base.startswith(".env.") and base not in {".env.example", ".env.sample", ".env.template"})
+                  or base in {"credentials.json", "service-account.json", "id_rsa", "id_ed25519"}
+                  or re.search(r"\.(pem|p12|pfx|key|sqlite|sqlite3|db|parquet)$", base)):
+                  bad.append(name)
+          if bad:
+              print("Snapshot blocked: tracked potentially sensitive files found:", file=sys.stderr)
+              for name in bad:
+                  print(" - " + name, file=sys.stderr)
+              sys.exit(1)
+          PY
+          mkdir -p backup
+          short_sha="${GITHUB_SHA:0:12}"
+          filename="Ma-analiz-source-${short_sha}.tar.gz"
+          git archive --format=tar.gz --prefix=Ma-analiz/ -o "backup/${filename}" HEAD
+          (cd backup && sha256sum "${filename}" > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tar -tzf "backup/${filename}" >/dev/null
+          printf 'commit=%s\narchive=%s\nkind=SOURCE_SNAPSHOT_NO_GIT_HISTORY\ndrive_upload=NOT_CONFIGURED\n'             "${GITHUB_SHA}" "${filename}" > backup/MANIFEST.txt
+
+      - name: Upload short-lived GitHub artifact (not Google Drive)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: source-snapshot-${{ github.sha }}
+          path: backup/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
