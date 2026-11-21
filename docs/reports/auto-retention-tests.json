@@ -1,0 +1,12 @@
+{
+  "status": "PASS",
+  "base_commit": "a86b3ffe7b5d56ccf2051dff7cb33021271cfb99",
+  "command": "python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py",
+  "summary": "305 passed, 14 warnings in 16.30s",
+  "scope": "Local automated tests. Automatic delete assertions use SQLite in memory; object operations use InMemoryObjectStore.",
+  "LIVE_DELETE": "NOT_RUN",
+  "LIVE_VACUUM": "NOT_RUN",
+  "LIVE_MIGRATION": "NOT_RUN",
+  "live_scheduler_activation": "NOT_RUN; AUTO_RETENTION_DELETE_ENABLED was not changed in Render",
+  "integrated_main_commit": "fd329f9"
+}

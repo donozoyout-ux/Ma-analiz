@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     worker_cleanup_interval_seconds: int = 3600
     operational_retention_hours: int = Field(default=48, ge=1, le=48)
     operational_delete_enabled: bool = False
+    auto_retention_delete_enabled: bool = False
     lifecycle_batch_size: int = Field(default=25, ge=1, le=100)
     lifecycle_child_limit: int = Field(default=500, ge=1, le=2000)
     worker_prune_interval_seconds: int = 86400

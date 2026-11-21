@@ -1,7 +1,7 @@
 """48-hour operational cache and immutable, lossless R2 snapshots.
 
 No source fetching, archive overwrite, R2 deletion, or metadata pruning occurs here.
-Deletion is a separate, plan-bound action; the scheduled path only plans it.
+Deletion is plan-bound, whether approved manually or by the gated automatic worker.
 """
 from __future__ import annotations
 
@@ -337,8 +337,8 @@ def unknown_dependencies(session):
     return sorted(set(unexpected))
 
 
-def execute(session, store, *, approval, enabled, now, **options):
-    """Operator-only, fresh locked plan. Never called by the stage-4 scheduler."""
+def execute(session, store, *, approval, enabled, now, trigger="manual", **options):
+    """Fresh locked plan, snapshot/hash checks and atomic deletion/audit for both paths."""
     if not enabled: raise PermissionError("OPERATIONAL_DELETE_DISABLED")
     try:
         report, actions = plan(session, store, now=now, lock=True, **options)
@@ -369,12 +369,20 @@ def execute(session, store, *, approval, enabled, now, **options):
         for record in actions:
             if isinstance(record.entity, ActiveMatch):
                 index = session.get(SystemSetting, source_index_key(record.entity))
-                index.value = {**index.value, "operational_removed_at": now.isoformat(), "cleanup_approval_digest": approval}
+                index.value = {**index.value, "operational_removed_at": now.isoformat(),
+                               "cleanup_approval_digest": approval, "cleanup_trigger": trigger}
         count = sum(t["deleted"] for t in report["datasets"].values())
         session.add(JobRun(idempotency_key=f"retention_cleanup:{approval}", job_type="retention_cleanup",
                           status="SUCCESS", started_at=now, finished_at=now, records_seen=len(actions),
                           records_written=count, records_processed=count, records_skipped=sum(t["retained"] for t in report["datasets"].values()),
                           records_failed=0))
+        if trigger == "automatic":
+            key = "lifecycle:last-auto-delete"
+            data = {"as_of": now.isoformat(), "policy_hours": options.get("hours", 48), "plan_digest": approval,
+                    "deleted": count, "datasets": report["datasets"], "trigger": trigger}
+            audit = session.get(SystemSetting, key)
+            if audit: audit.value = data
+            else: session.add(SystemSetting(key=key, value=data))
         session.commit()
         report.update(status="COMPLETED", deleted=sum(t["deleted"] for t in report["datasets"].values()),
                       pending_approval=0, LIVE_DELETE="EXECUTED")
@@ -382,6 +390,27 @@ def execute(session, store, *, approval, enabled, now, **options):
     except Exception:
         session.rollback()
         raise
+
+
+def automatic(session, store, *, enabled, now, **options):
+    """Caller holds LOCK_ID across repair commits and both independently computed plans.
+
+    AUTO enablement is separate from the manual gate. No supplied approval digest
+    is trusted here: the system produces one and execute recomputes it under locks.
+    """
+    options["hours"] = 48
+    if not enabled:
+        report, _ = plan(session, store, now=now, **options)
+        return {**report, "auto_delete_enabled": False, "reason": "AUTO_RETENTION_DELETE_DISABLED"}
+    repair = archive_early(session, store, now=now, **options)
+    # Tracker commits during repair. Discard ORM caches before locking/re-reading SQL.
+    session.expire_all()
+    initial, _ = plan(session, store, now=now, lock=True, **options)
+    digest = initial["approval_digest"]
+    session.expire_all()  # execute must reload SQL, not trust the first plan's ORM cache
+    result = execute(session, store, approval=digest, enabled=True, now=now, trigger="automatic", **options)
+    return {**result, "auto_delete_enabled": True, "generated_plan_digest": digest,
+            "archive_repair": repair}
 
 
 def archive_early(session, store, *, now, hours=48, limit=25, after=None, child_limit=500, target=False):

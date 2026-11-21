@@ -1,0 +1,9 @@
+{
+  "observed_at": "2026-11-21T09:02:34.421772+00:00",
+  "url": "https://ma-analiz-2.onrender.com/health/live",
+  "method": "GET",
+  "worker_scheduler": "NOT_VERIFIED_BY_WEB_HEALTH",
+  "LIVE_DELETE": "NOT_RUN",
+  "http_status": 200,
+  "status": "PASS"
+}

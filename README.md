@@ -1,3 +1,7 @@
+## Beşinci aşama: otomatik 48 saat temizliği
+
+Bağımsız worker'da bir kez `AUTO_RETENTION_DELETE_ENABLED=true` ayarlandığında saatlik temizlik kendi güncel planını/hash'ini üretir; manuel `--approve-plan` istemez. Varsayılan false. 15 dakikalık arşivleme, içerik/SQL snapshot/ilişki doğrulamaları, atomik audit, ayrı scheduler döngüsü ve heartbeat korunur. Bu oturumda canlı silme veya aktivasyon yapılmadı. [Kurulum, kontroller, VACUUM değerlendirmesi ve test raporu](docs/scraping-first-stage5.md).
+
 ## Dördüncü aşama: 48 saat PostgreSQL, kalıcı R2
 
 `backend` klasöründe `python -m app.jobs.retention --dry-run --target` ile Bayern–Köln zinciri ve temizlik planı; genel plan için `--target` seçeneğini çıkarın. Erken, değişmez arşivler; tam içerik/SHA-256 doğrulaması; korunan bağımlılıklar; ayrı plan onaylı temizlik. Worker otomatik silmez. **LIVE_DELETE=NOT_RUN**; eksik bağlantılar nedeniyle canlı doğrulama da NOT_RUN. Yeni teknik tampon için `0010_active_statistics` migration'ı hazırlandı, çalıştırılmadı. [Politika, komutlar ve gerçek test raporları](docs/scraping-first-stage4.md).

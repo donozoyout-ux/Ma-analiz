@@ -150,15 +150,22 @@ def archive_data(day: date | None = None) -> dict[str, Any]:
 
 
 def cleanup_database() -> dict[str, Any]:
-    # Scheduled cleanup is always a read-only plan. --execute is operator-only.
+    # Automatic flag is independent of the operator's manual --approve-plan gate.
     from app.jobs.retention import run
     if SessionLocal is None:
         return {"status": "SKIPPED", "reason": "DATABASE_NOT_CONFIGURED", "records_written": 0,
                 "LIVE_DELETE": "NOT_RUN", "deleted": 0}
-    result = run(mode="dry-run")
-    return {**result, "status": "SKIPPED" if result["status"] == "DRY_RUN" else "FAILED",
-            "reason": "EXPLICIT_PLAN_APPROVAL_REQUIRED" if result["status"] == "DRY_RUN" else result.get("error_code", "LIFECYCLE_STORAGE_NOT_READY"),
-            "records_written": 0}
+    result = run(mode="auto")
+    if result["status"] == "DRY_RUN":
+        return {**result, "status": "SKIPPED", "reason": "AUTO_RETENTION_DELETE_DISABLED", "records_written": 0}
+    if result["status"] != "COMPLETED":
+        return {**result, "status": "FAILED", "records_failed": 1,
+                "error_code": result.get("error_code", "AUTO_RETENTION_NOT_READY"), "records_written": 0}
+    failures = result.get("archive_repair", {}).get("records_failed", 0)
+    overdue = sum(t["overdue_retained"] for t in result["datasets"].values())
+    return {**result, "status": "PARTIAL" if failures or overdue else "SUCCESS" if result["deleted"] else "SKIPPED",
+            "records_written": result["deleted"], "records_failed": failures,
+            "reason": "RETAINED_RECORDS_RETRY_NEXT_CYCLE" if failures or overdue else "AUTO_RETENTION_COMPLETED"}
 
 
 def calculate_daily_metrics(day: date | None = None) -> dict[str, Any]:

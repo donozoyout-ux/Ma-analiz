@@ -89,6 +89,16 @@ services:
     buildCommand: python -m pip install -r backend/requirements.txt
     startCommand: cd backend && python -m app.worker
     envVars:
+      # Set once on this independent worker to enable verified automatic deletion.
+      # Application default is false; sync:false preserves an explicit Dashboard choice.
+      - key: AUTO_RETENTION_DELETE_ENABLED
+        sync: false
+      - key: OPERATIONAL_RETENTION_HOURS
+        value: "48"
+      - key: WORKER_ARCHIVE_INTERVAL_SECONDS
+        value: "900"
+      - key: WORKER_CLEANUP_INTERVAL_SECONDS
+        value: "3600"
       - key: PYTHON_VERSION
         value: 3.12.11
       - key: APP_ENV

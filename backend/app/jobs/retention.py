@@ -1,4 +1,4 @@
-"""Read-only 48h cleanup plan; separate explicit archive/execute modes."""
+"""48h retention: read-only plan, explicit manual modes and separately gated automation."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,7 @@ import json
 import hashlib
 from uuid import UUID
 
-from sqlalchemy import create_engine, func, select, text
+from sqlalchemy import bindparam, create_engine, func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -30,6 +30,41 @@ def metadata_report(session):
     return {"tables": counts, "delete": "DISABLED", "growth_control": "COUNTS_AND_TABLE_BYTES_ALERTS",
             "review_above_rows": 100_000,
             "warnings": [f"METADATA_GROWTH:{table}" for table, count in counts.items() if count >= 100_000]}
+
+
+def vacuum_assessment(session):
+    """Read-only diagnostics. Never run VACUUM, FULL, table rewrites or DDL."""
+    try:
+        with session.begin_nested():
+            settings = session.execute(text("SELECT current_setting('autovacuum') AS autovacuum, current_setting('track_counts') AS track_counts")).mappings().one()
+            query = text("""SELECT relname AS table, n_live_tup, n_dead_tup, last_vacuum, last_autovacuum,
+                            last_analyze, last_autoanalyze
+                            FROM pg_stat_user_tables WHERE relname IN :tables ORDER BY relname""").bindparams(bindparam("tables", expanding=True))
+            rows = session.execute(query, {"tables": [m.__tablename__ for m in lifecycle.DATASETS]}).mappings().all()
+            tables = []
+            for row in rows:
+                item = dict(row)
+                live, dead = int(item["n_live_tup"] or 0), int(item["n_dead_tup"] or 0)
+                item["review_needed"] = dead >= 1000 and dead / max(1, live + dead) >= .2
+                tables.append(lifecycle.canonical(item))
+        return {"status": "ASSESSED", **dict(settings), "tables": tables, "row_counts_are_estimates": True,
+                "manual_vacuum": "NOT_RUN", "vacuum_full": "DISABLED",
+                "space_reclamation": "DELETE_MAY_NOT_SHRINK_DATABASE_FILE;_AUTOVACUUM_REUSES_SPACE",
+                "recommendation": "REVIEW_AUTOVACUUM" if settings["autovacuum"] != "on" or any(t["review_needed"] for t in tables) else "MONITOR_AUTOVACUUM"}
+    except Exception:
+        return {"status": "UNAVAILABLE", "manual_vacuum": "NOT_RUN", "vacuum_full": "DISABLED"}
+
+
+def scheduler_report(session, now):
+    heartbeat = session.get(SystemSetting, "scheduler:retention-heartbeat")
+    last_run = session.get(SystemSetting, "lifecycle:last-auto-run")
+    if not heartbeat:
+        return {"status": "NO_HEARTBEAT", "last_auto_run": last_run.value if last_run else None}
+    stamp = lifecycle.utc(heartbeat.value.get("last_cycle_at"))
+    age = (now-stamp).total_seconds() if stamp else None
+    status = "FRESH" if age is not None and 0 <= age <= 900 else "STALE_OR_CLOCK_SKEW"
+    return {"status": status, "age_seconds": age, "heartbeat": heartbeat.value,
+            "last_auto_run": last_run.value if last_run else None}
 
 
 def target_check(session, store):
@@ -130,6 +165,8 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
               "postgres": "NOT_RUN", "r2": "NOT_RUN", "target": {"status": "NOT_RUN"},
               "capacity": {"status": "NOT_RUN", "bytes": None, "limit_bytes": 1_000_000_000},
               "metadata": {"status": "NOT_RUN"},
+              "scheduler": {"status": "NOT_RUN"},
+              "auto_delete_enabled_in_this_process": cfg.auto_retention_delete_enabled,
               "missing_env": (["DATABASE_URL"] if cfg.database_url_missing else []) + list(cfg.r2_missing_env),
               "invalid_env": ([] if cfg.database_url_valid or cfg.database_url_missing else ["DATABASE_URL"]) + list(cfg.r2_invalid_env)}
     if report["missing_env"] or report["invalid_env"]: return report
@@ -137,10 +174,12 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
         report.update(status="BLOCKED", error_code="EXPLICIT_DELETE_ENABLE_AND_PLAN_APPROVAL_REQUIRED")
         return report
     try:
-        with storage_session(cfg, readonly=mode == "dry-run") as session:
+        auto_enabled = mode == "auto" and cfg.auto_retention_delete_enabled
+        readonly = mode == "dry-run" or (mode == "auto" and not auto_enabled)
+        with storage_session(cfg, readonly=readonly) as session:
             size = session.execute(text("SELECT pg_database_size(current_database())")).scalar_one()
             report["capacity"] = capacity(int(size))
-            report["postgres"] = "READ_ONLY_CONNECTED" if mode == "dry-run" else "CONNECTED"
+            report["postgres"] = "READ_ONLY_CONNECTED" if readonly else "CONNECTED"
             report["largest_tables"] = [dict(row) for row in session.execute(text("""
                 SELECT relname AS table, pg_total_relation_size(relid)::bigint AS size_bytes,
                        COALESCE(n_live_tup, 0)::bigint AS rows_estimate
@@ -159,8 +198,11 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                 report.update(status="SCHEMA_NOT_READY", error_code="PREPARED_STATISTICS_MIGRATION_NOT_APPLIED")
                 return report
             report["metadata"] = metadata_report(session)
+            report["scheduler"] = scheduler_report(session, datetime.now(timezone.utc))
+            report["vacuum"] = vacuum_assessment(session)
             store = R2ObjectStore()
-            cursor_record = session.get(SystemSetting, "lifecycle:archive-cursor") if mode == "archive" and not target else None
+            cursor_key = "lifecycle:auto-retention-cursor" if mode == "auto" else "lifecycle:archive-cursor"
+            cursor_record = session.get(SystemSetting, cursor_key) if (mode == "archive" or auto_enabled) and not target else None
             if cursor_record and after is None:
                 after = cursor_record.value.get("after_match_id")
             options = {"now": datetime.now(timezone.utc), "hours": cfg.operational_retention_hours,
@@ -171,7 +213,22 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                 if not target:
                     value = {"after_match_id": outcome["scope"]["next_after_match_id"]}
                     if cursor_record: cursor_record.value = value
-                    else: session.add(SystemSetting(key="lifecycle:archive-cursor", value=value))
+                    else: session.add(SystemSetting(key=cursor_key, value=value))
+                    session.commit()
+            elif mode == "auto":
+                outcome = lifecycle.automatic(session, store, enabled=auto_enabled, **options)
+                if auto_enabled:
+                    if not target:
+                        value = {"after_match_id": outcome["scope"]["next_after_match_id"]}
+                        if cursor_record: cursor_record.value = value
+                        else: session.add(SystemSetting(key=cursor_key, value=value))
+                    last = session.get(SystemSetting, "lifecycle:last-auto-run")
+                    data = {"as_of": options["now"].isoformat(), "policy_hours": 48, "deleted": outcome["deleted"],
+                            "plan_digest": outcome["approval_digest"], "LIVE_DELETE": outcome["LIVE_DELETE"],
+                            "retained_for_safety": outcome["retained_for_safety"], "datasets": outcome["datasets"],
+                            "archive_failures": outcome["archive_repair"]["records_failed"], "capacity_before": report["capacity"]}
+                    if last: last.value = data
+                    else: session.add(SystemSetting(key="lifecycle:last-auto-run", value=data))
                     session.commit()
             elif mode == "execute":
                 outcome = lifecycle.execute(session, store, approval=approval, enabled=cfg.operational_delete_enabled, **options)
@@ -183,7 +240,7 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
         report.update(status="BLOCKED", error_code=str(exc) if str(exc) in allowed else "DELETE_APPROVAL_REQUIRED")
     except Exception:
         report.update(status="FAILED", error_code="LIFECYCLE_CHECK_OR_OPERATION_FAILED")
-        if mode == "execute":
+        if mode in {"execute", "auto"}:
             report.update(LIVE_DELETE="UNKNOWN_RECONCILE_REQUIRED", deleted=None)
     return report
 
@@ -194,12 +251,13 @@ def main(argv=None):
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--archive", action="store_true", help="early append-only R2 writes; never deletes SQL")
     mode.add_argument("--execute", action="store_true", help="operator only; requires env gate and exact reviewed plan digest")
+    mode.add_argument("--auto", action="store_true", help="worker path; AUTO_RETENTION_DELETE_ENABLED controls real deletion")
     parser.add_argument("--approve-plan")
     parser.add_argument("--after-match-id", type=UUID)
     parser.add_argument("--target", action="store_true", help="only reviewed Bayern/Cologne fixture")
     args = parser.parse_args(argv)
     if args.approve_plan and not args.execute: parser.error("--approve-plan requires --execute")
-    report = run(mode="archive" if args.archive else "execute" if args.execute else "dry-run",
+    report = run(mode="archive" if args.archive else "execute" if args.execute else "auto" if args.auto else "dry-run",
                  approval=args.approve_plan, after=str(args.after_match_id) if args.after_match_id else None, target=args.target)
     print(json.dumps(report, ensure_ascii=True, indent=2))
     return 0 if report["status"] in {"DRY_RUN", "SUCCESS", "SKIPPED", "COMPLETED"} else 1

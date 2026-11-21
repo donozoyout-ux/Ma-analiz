@@ -304,13 +304,13 @@ def test_bayern_end_to_end_offline_canonical_archive_and_operational_alias(sessi
     assert target_check(session,store)["status"]=="ARCHIVED_ONLY"
 
 
-def test_scheduler_only_plans_cleanup_even_when_execute_exists(monkeypatch):
+def test_scheduler_uses_gated_automatic_retention_path(monkeypatch):
     from app.jobs import tasks,retention
     calls=[]
     monkeypatch.setattr(tasks,"SessionLocal",object())
     monkeypatch.setattr(retention,"run",lambda **kw:calls.append(kw) or {"status":"DRY_RUN","deleted":0,"LIVE_DELETE":"NOT_RUN"})
     report=tasks.cleanup_database()
-    assert calls==[{"mode":"dry-run"}] and report["deleted"]==0 and report["LIVE_DELETE"]=="NOT_RUN"
+    assert calls==[{"mode":"auto"}] and report["deleted"]==0 and report["LIVE_DELETE"]=="NOT_RUN"
 
 
 def test_legacy_sql_job_prune_is_disabled(session):
