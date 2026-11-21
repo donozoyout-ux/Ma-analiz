@@ -1,0 +1,11 @@
+{
+  "stage": "7C",
+  "evidence_kind": "OFFLINE_TEST_EXECUTION",
+  "command": "python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py",
+  "exit_code": 0,
+  "summary": "458 passed, 14 warnings in 26.14s",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "adapters": "SQLite and InMemoryObjectStore; PostgreSQL advisory-lock mocks; production integration files excluded"
+}

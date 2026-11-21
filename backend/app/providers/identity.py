@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 # Reviewed competition identifiers only. Team aliases require separate evidence.
 LEAGUES = {("goaloo", "8"): "de.bl1", ("openfootball", "de.1"): "de.bl1",
-           ("openligadb", "bl1"): "de.bl1", ("goaloo", "36"): "en.pl",
+           ("openligadb", "bl1"): "de.bl1", ("openligadb", "de.bl1"): "de.bl1", ("goaloo", "36"): "en.pl",
            ("openfootball", "en.1"): "en.pl"}
 REVIEWED_IMPORT_KEY = "verified-import:de.bl1:2026-11-20:openligadb:83237"
 

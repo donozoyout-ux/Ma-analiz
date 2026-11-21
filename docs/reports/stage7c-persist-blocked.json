@@ -1,0 +1,10 @@
+{
+  "stage": "7C",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "AUTO_RETENTION_DELETE_ENABLED": false,
+  "production_ready": false,
+  "status": "BLOCKED",
+  "error_code": "STAGE7C_PRODUCTION_PERSIST_DISABLED"
+}

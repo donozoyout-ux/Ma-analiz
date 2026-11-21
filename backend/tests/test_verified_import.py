@@ -305,8 +305,9 @@ def test_ambiguous_initial_sql_commit_is_reconciled_without_second_match(session
     assert session.query(ActiveMatch).count() == session.query(MatchResult).count() == 1
 
 
-@pytest.mark.parametrize("busy_on", [None, 1, 2])
-def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch, busy_on):
+@pytest.mark.parametrize("busy_on", [None, 1, 2, 3])
+@pytest.mark.parametrize("event_identity", [None, "reviewed-fixture-lock-scope"])
+def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch, busy_on, event_identity):
     from app.db import session as db
     class Scalar:
         def __init__(self, value): self.value = value
@@ -328,10 +329,15 @@ def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch
     monkeypatch.setattr(db, "engine", Engine())
     if busy_on:
         with pytest.raises(job.ImportBlocked, match="IMPORT_ALREADY_RUNNING"):
-            with job.production_session(Settings(_env_file=None)):
+            with job.production_session(Settings(_env_file=None), event_identity=event_identity):
                 pytest.fail("busy lock must reject before opening a SQL session")
         assert connection.unlocks == list(reversed(connection.locks[:-1]))
     else:
-        with job.production_session(Settings(_env_file=None)): pass
+        with job.production_session(Settings(_env_file=None), event_identity=event_identity): pass
         assert len(connection.locks) == 3
+        from app.storage.lifecycle import LOCK_ID
+        from app.providers.identity import lock_id
+        assert connection.locks[:2] == [LOCK_ID, job.LOCK_ID]
+        if event_identity:
+            assert connection.locks[2] == lock_id(event_identity)
         assert connection.unlocks == list(reversed(connection.locks))
