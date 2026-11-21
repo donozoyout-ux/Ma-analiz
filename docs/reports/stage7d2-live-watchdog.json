@@ -1,0 +1,53 @@
+{
+  "run_id": 44935839044,
+  "job_id": 136942149578,
+  "commit": "c2c85d156bae7c1bde8d47eaa3c255d362554a47",
+  "event": "workflow_dispatch",
+  "conclusion": "failure",
+  "source": "GITHUB_ACTIONS_JOB_STDOUT",
+  "report": {
+    "LIVE_DELETE": "NOT_RUN",
+    "SQL_ARCHIVE_WRITE": "NOT_RUN",
+    "checks": {
+      "archive": {
+        "last_scheduled_created_at": "2026-11-21T16:58:19+00:00",
+        "last_success_age_seconds": 5531.839065,
+        "last_success_created_at": "2026-11-21T16:58:19+00:00",
+        "last_success_run_id": 44927449780,
+        "latest_run_id": 44927449780,
+        "sql_audit_matches_scheduled_success": true,
+        "threshold_minutes": 45
+      },
+      "auto": {
+        "last_scheduled_created_at": "2026-11-21T17:11:45+00:00",
+        "last_success_age_seconds": 4725.839065,
+        "last_success_created_at": "2026-11-21T17:11:45+00:00",
+        "last_success_run_id": 44928703385,
+        "latest_run_id": 44928703385,
+        "sql_audit_matches_scheduled_success": true,
+        "threshold_minutes": 120
+      }
+    },
+    "errors": [
+      "ARCHIVE_SQL_AUDIT_STALE",
+      "NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE"
+    ],
+    "limitation": "THIS_WATCHDOG_CAN_ALSO_BE_DISABLED_AFTER_60_DAYS;_INDEPENDENT_MONITORING_REQUIRED",
+    "observed_at": "2026-11-21T18:30:30.839065+00:00",
+    "state": "ARCHIVE_STALE",
+    "states": [
+      "ARCHIVE_STALE"
+    ],
+    "status": "FAILED",
+    "storage_evidence": {
+      "capacity_status": "HEALTHY",
+      "incomplete_archive_ledgers": 0,
+      "last_real_readback_at": "2026-11-21T18:30:23.321155+00:00",
+      "last_sql_ledger_verified_at": "2026-11-21T08:48:54.195223+00:00",
+      "retention_status": "NO_ELIGIBLE_RECORDS",
+      "running_jobs": 0,
+      "status": "VERIFIED"
+    },
+    "warnings": []
+  }
+}

@@ -6,11 +6,29 @@ Başlangıç **ee38e18**, tarih **21 Kasım 2026**. Stage 3 verified-import/sour
 
 ## Canlı kanıt ve gözlem sınırı
 
-Yeni kodun gerçek salt okunur storage/watchdog çalışmaları bu ilk kod teslimatında **NOT_VERIFIED / henüz NOT_RUN**; tamamlandıktan sonra sonuçlar aşağıya eklenecek. Stage 7D.1'in önceki kapasite/R2 sonucu yeni canlı gözlem gibi sunulmaz.
+Yeni kod **c2c85d1** üzerinde iki gerçek, yalnız **workflow_dispatch / salt okunur** kontrol tamamlandı. Bunlar scheduled çalışma veya production yazma testi değildir:
+
+- [Storage 44935835102](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44935835102), job **136942141835**, **success**, [kalıcı JSON](reports/stage7d2-live-storage.json), artifact **14719662536**. Preflight başlangıcı `2026-11-21T18:30:34Z`, plan/readback `18:30:55Z`. Aynı Linux runner'da **589 passed, 14 warnings, 22,93 saniye**.
+- [Watchdog 44935839044](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44935839044), job **136942149578**, **failure**, [kalıcı JSON](reports/stage7d2-live-watchdog.json), artifact **14719891511**. Değerlendirme `18:30:30Z`, gerçek storage readback `18:30:23Z`. **state=ARCHIVE_STALE**, errors=`ARCHIVE_SQL_AUDIT_STALE` ve `NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE`. Bu beklenen güvenlik uyarısıdır; kod crash'i veya başarısız SQL/R2 bağlantısı değildir. Artifact yükleme success; gerçek e-posta teslimatı kanıtlanmadı.
+
+Mevcut scheduler'ın kod push'u için çalıştırdığı [Retention dry-run 44935817256](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44935817256) da success tamamlandı. Bu **push** kanıtıdır; scheduled archive başarısı olarak sayılmadı.
+
+Yeni canlı depolama bulguları:
+
+- PostgreSQL **8.910.527 byte / 1.000.000.000 byte = yaklaşık 8,91 MB / %0,89, HEALTHY**. Şema READY, mevcut head/constraint/tip denetimleri PASS.
+- **48h dolan=0, eligible=0, korunan=2, deleted=0; NO_ELIGIBLE_RECORDS**. Bir maç **23,0153 saat**, bir sonuç **20,3787 saat** yaşında; yalnız WITHIN_RETENTION_WINDOW nedeniyle korunuyor. Diğer operasyonel dataset'ler boş. Tam tarama; bilinmeyen FK/eksik yaş referansı yok.
+- **4 VERIFIED archive ledger, incomplete=0**, R2 nesne/receipt/SHA/boyut/birer satır/metadata/tam içerik/snapshot/source identity PASS. Eski Stage 3 parçaları ve lifecycle parçaları birlikte doğrulandı. Bayern–Köln UUID/source index/journal baseline hash'i Stage 7D ile aynı; geçmiş veri değiştirilmedi.
+- Son **SQL ledger verified_at** `2026-11-21T08:48:54.195223Z`; son **gerçek yeniden indirme/SQL-R2 doğrulaması** yukarıdaki `18:30:55Z`. Aradaki fark gizlenmedi; yeni archive yazımı iddia edilmez.
+- R2/DELETE yapabilecek archive/auto/retry türlerindeki RUNNING job=0, truncated=false. SQL archive audit: `16:59:06.699233Z`, run **44927449780**, SKIPPED/deleted=0. SQL auto audit: `17:12:47.338201Z`, run **44928703385**, SKIPPED/deleted=0. Her ikisi ilgili scheduled başarıyla run ID üzerinden eşleşiyor; archive audit'i stale kaldığından watchdog HEALTHY demedi.
+- Korunan metadata: system_settings **4**, job_runs **13**, archive_jobs **4**, source identity **1**, verified-import **1**, başarılı cleanup audit **0**. Users/review/operator kayıtları şu an **0**; var olmayan kullanıcı verisi varmış gibi sunulmadı. Read-only=`on`, isolation=REPEATABLE_READ, snapshot sayıları değişmedi; bu denetimler SQL audit bile yazmadı. Ayrı mevcut push dry-run audit'i eşzamanlı değişebilir.
+- Büyük alanlar: job_runs **98.304 byte** (table 16.384 / index 81.920), active_matches **81.920** (16.384 / 65.536), archive_jobs **65.536** (16.384 / 49.152), match_results **57.344** (8.192 / 49.152). Tam table/index dökümü JSON'dadır. Operasyonel dead tuple tahmini **0**; job_runs **13**, archive_jobs **12**, system_settings küçük metadata dead tuple'ları izlenir. Autovacuum ve track_counts **on**; öneri MONITOR_AUTOVACUUM. VACUUM çalıştırılmadı.
+- GitHub AUTO_RETENTION_DELETE_ENABLED variable **404 / NOT_SET_DEFAULT_FALSE**; değiştirilmedi. Her iki denetim adımında iki silme bayrağı false. **Yeni production retry ve DELETE NOT_RUN**; SQL/R2 yazma/DELETE izinleri bu readonly başarıyla sınanmış sayılmaz.
 
 [GitHub API snapshot'ı](reports/stage7d2-actions-observation.json): gözlem **2026-11-21T18:23:22Z**. `schedule`, `workflow_dispatch` ve `push` ayrı kaydedildi. Son başarılı **scheduled archive**: [44927449780](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44927449780), `16:58:19Z`, workflow success. Son başarılı **scheduled auto**: [44928703385](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44928703385), `17:11:45Z`, workflow success. Son **scheduled watchdog**: [44927261704](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44927261704), `16:56:09Z`, failure. Bu eski watchdog logunun nedeni Stage 7D.1'de doğrulanan iki `NO_RECENT_SUCCESSFUL_*_SCHEDULE` uyarısıdır; SQL/R2 crash olduğu iddia edilmez.
 
 Bu gözlemde archive başarısı yaklaşık **85**, auto yaklaşık **72 dakika** eskidir. Archive 45 dakikalık stale eşiğini aşmıştır; sürekli 15 dakika/saat çalışma kanıtlanamaz. Cron'un nominal hangi tetiklerini GitHub'ın atladığı kesin bilinmez. `created_at → run_started_at` görünen kuyruk süresi ölçülebilir, fakat bu, nominal cron → oluşturulma gecikmesinin tamamı değildir. Manuel/push başarıları schedule yerine kullanılmaz. API listesi workflow başına en fazla 100 run'dır; toplam sayı ve örnek kapsamı JSON'dadır. Eski manuel başarısız dry-run ve watchdog işleri de tarihleriyle korunur; düzeltilmiş eski hata güncel hataymış gibi sunulmaz.
+
+Üç scheduled örnekte created_at ile run_started_at aynı saniyedir (görünen kuyruk **0 saniye**). Oluşturulmadan tamamlanmaya süreler archive **70 saniye**, auto **84 saniye**, watchdog **8 saniye**. Bunlar cron gecikme ölçümü değildir. Erişilen örnekte cancelled/timed_out çalışma yoktur; failure olan manuel ve scheduled run'lar JSON'da ayrı durur. Yeni manuel watchdog'un failure'ı da scheduled geçmişe eklenmez.
 
 ## Read-only depolama ve audit kanıtı
 
