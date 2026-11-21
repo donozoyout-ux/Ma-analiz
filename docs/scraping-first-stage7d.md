@@ -39,7 +39,20 @@ Trusted proof normalizer'ın yeni gövdelerinden üretilen, değişiklik tespiti
 
 [Yerel preflight](reports/stage7d-local-preflight.json): **BLOCKED / STORAGE_CONFIGURATION_INCOMPLETE**. DATABASE_URL, R2_ENDPOINT, R2_ACCESS_KEY_ID ve R2_SECRET_ACCESS_KEY eksik; değerleri yayımlanmadı. Yerelde gerçek PG/R2 bağlantısı **NOT_RUN**.
 
-Gerçek ortam kontrolü için ayrı `.github/workflows/import-preflight.yml` yalnız **workflow_dispatch** kabul eder. Mevcut beş Actions Secret'ını kullanır; operatör Secret'ı yoktur. Önce secretsız tam güvenli testler, sonra salt okunur preflight ve 14 günlük güvenli JSON artifact'i üretir. SQL audit yazmaz; artifact ve Actions logu denetim kanıtıdır. Üretim import komutu, approve yolu veya schedule bu workflow'da yoktur. Canlı Actions sonucu bu rapora çalışmadan sonra eklenecektir; şu an **NOT_RUN**.
+Gerçek ortam kontrolü için ayrı `.github/workflows/import-preflight.yml` yalnız **workflow_dispatch** kabul eder. Mevcut beş Actions Secret'ını kullanır; operatör Secret'ı yoktur. Önce secretsız tam güvenli testler, sonra salt okunur preflight ve 14 günlük güvenli JSON artifact'i üretir. SQL audit yazmaz; artifact ve Actions logu denetim kanıtıdır. Üretim import komutu, approve yolu veya schedule bu workflow'da yoktur.
+
+**Gerçek Actions preflight PASS:** [44931543935](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44931543935), commit **11f5206**, `workflow_dispatch`, job **136929046863**, bütün adımlar success. [Kalıcı güvenli kanıt JSON'u](reports/stage7d-actions-preflight.json) job stdout'undaki preflight sonucundan alınmıştır; artifact ID **14718066543**. Kontrol başlangıcı **17:43:30 UTC / 20:43:30 Türkiye**:
+
+- PostgreSQL: **CONNECTED_READ_ONLY**; şema **READY**, Alembic head **0010_active_statistics**, gerekli uniqueness/tip kontrolleri **PASS**.
+- R2: HEAD_BUCKET **ACCESSIBLE**; eski matches/results nesneleri SHA-256, birer satır, metadata, tam içerik ve SQL ledger/readback bakımından **PASS**.
+- Bayern–Köln zinciri **VERIFIED**; mevcut UUID **e168fa17-c0f1-4e42-96c6-adf260d16bd8**, 1–1 FINAL sonuç doğrulaması ve journal korunuyor.
+- PostgreSQL **8.910.527 byte / 1.000.000.000 byte**, yaklaşık **8,91 MB / %0,89**, **HEALTHY**.
+- **SQL_WRITE=NOT_RUN, R2_WRITE=NOT_RUN, LIVE_DELETE=NOT_RUN**, iki silme bayrağı false; migration ve yazma izinlerini deneme **NOT_RUN / NOT_EXERCISED**.
+- Aynı Linux runner'da tam secretsız test paketi: **520 passed, 14 warnings, 18,19 saniye**.
+
+Salt okunur GitHub API kontrolünde `AUTO_RETENTION_DELETE_ENABLED` repository variable'ı **yoktu (404 / NOT_SET_DEFAULT_FALSE)**; mevcut scheduler bu durumda false kullanır. Variable veya Secret değiştirilmedi. Kod commit'inin tetiklediği mevcut [Retention dry-run 44931523049](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44931523049) da success tamamlandı; bu importer'ın çalıştırılması değildir.
+
+Bu A aşamasının gerçek okuma kanıtıdır; bağımsız UTC şartını sağlayamayan B aşamasını geçerli hale getirmez. Kaynak ve preflight gözlemlerinin sonradan tazeliği varsayılmaz. Yazma izni/INSERT/PUT veya canlı import başarısı iddia edilmez.
 
 ## Aşama B — dry-run komutları
 

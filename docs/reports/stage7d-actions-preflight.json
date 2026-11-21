@@ -1,0 +1,77 @@
+{
+  "run_id": 44931543935,
+  "job_id": 136929046863,
+  "artifact_id": 14718066543,
+  "commit": "11f5206bef8bd88834d9c8e0f540028b4612b593",
+  "event": "workflow_dispatch",
+  "conclusion": "success",
+  "safe_backend_tests": {
+    "passed": 520,
+    "warnings": 14,
+    "seconds": 18.19
+  },
+  "report": {
+    "stage": "7D",
+    "mode": "READ_ONLY_PREFLIGHT",
+    "checked_at": "2026-11-21T17:43:30.536013+00:00",
+    "status": "PASS",
+    "postgres": "CONNECTED_READ_ONLY",
+    "r2": {
+      "status": "ACCESSIBLE",
+      "missing_env": [],
+      "invalid_env": [],
+      "operation": "HEAD_BUCKET"
+    },
+    "protected_target": {
+      "status": "VERIFIED",
+      "postgres": "PASS",
+      "r2": "PASS",
+      "receipts": {
+        "matches": {
+          "key": "matches/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+          "sha256": "3b1992dba835a325a2229eab87f7afbc2fac89e57615a33c2041d1dec8583ff5",
+          "row_count": 1,
+          "readback": "PASS"
+        },
+        "results": {
+          "key": "results/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+          "sha256": "206aee158c1c32225521c929809b4630d562b73ddc65e994b838924178780d6a",
+          "row_count": 1,
+          "readback": "PASS"
+        }
+      },
+      "match_id": "e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+      "verified_at": "2026-11-20T22:08:11.894979+00:00",
+      "LIVE_DELETE": "NOT_RUN"
+    },
+    "missing_env": [],
+    "invalid_env": [],
+    "SQL_WRITE": "NOT_RUN",
+    "R2_WRITE": "NOT_RUN",
+    "LIVE_DELETE": "NOT_RUN",
+    "FINAL_IMPORT": "BLOCKED",
+    "AUTO_RETENTION_DELETE_ENABLED": false,
+    "OPERATIONAL_DELETE_ENABLED": false,
+    "schema": {
+      "status": "READY",
+      "issues": [],
+      "expected_revisions": [
+        "0010_active_statistics"
+      ]
+    },
+    "constraints": {
+      "status": "PASS",
+      "missing": []
+    },
+    "capacity": {
+      "bytes": 8910527,
+      "limit_bytes": 1000000000,
+      "used_percent": 0.89,
+      "status": "HEALTHY",
+      "action": "ARCHIVE_AND_REVIEW_BLOCKERS_NEVER_FORCE_DELETE"
+    },
+    "protected_sha256": "296f8adf1d3ad1fbdb085ef30b81ea27405835517f2284d65e482dbc628eff26",
+    "write_privileges": "NOT_EXERCISED",
+    "migrations": "NOT_RUN"
+  }
+}
