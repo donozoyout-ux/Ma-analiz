@@ -93,6 +93,32 @@ class HistoricalRepository:
         import io
         return io.BytesIO(data)
 
+    def read_verified_part(self, key: str, *, checksum: str, size: int, row_count: int = 1) -> list[dict]:
+        """Ledger-addressed public reads: never list a bucket or decode an unbounded file."""
+        from app.storage.archive import _verify_object
+        if row_count != 1 or not 0 < size <= 1_048_576:
+            raise IOError("HISTORICAL_PART_LIMIT")
+        info = self.store.head_object(key)
+        if info is None or info.size != size:
+            raise IOError("HISTORICAL_OBJECT_MISSING_OR_SIZE_CHANGED")
+        payload = self.store.get_object(key)
+        if len(payload) != size or hashlib.sha256(payload).hexdigest() != checksum:
+            raise IOError("HISTORICAL_CHECKSUM_NOT_VERIFIED")
+        import pyarrow.parquet as pq
+        metadata = pq.read_metadata(self._buffer(payload))
+        unpacked = sum(metadata.row_group(g).column(c).total_uncompressed_size
+            for g in range(metadata.num_row_groups) for c in range(metadata.num_columns))
+        if metadata.num_rows != 1 or metadata.num_columns > 100 or unpacked > 8_388_608:
+            raise IOError("HISTORICAL_DECODE_LIMIT")
+        class BufferedPart:
+            def head_object(self, requested):
+                if requested != key: raise IOError("PART_SCOPE_CHANGED")
+                return info
+            def get_object(self, requested):
+                if requested != key: raise IOError("PART_SCOPE_CHANGED")
+                return payload
+        return _verify_object(BufferedPart(), key, expected_size=size, expected_rows=1, expected_checksum=checksum)
+
     def get_team_matches(self, keys: list[str], *, before: datetime, team: str) -> list[dict]:
         return [row for row in self._read(keys, before=before) if team in (row.get("home_team"), row.get("away_team"))]
 

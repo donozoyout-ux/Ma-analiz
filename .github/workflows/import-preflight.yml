@@ -8,7 +8,7 @@ on:
         description: 'Read-only inspection only; neither choice writes SQL/R2'
         type: choice
         default: storage
-        options: [storage, retention-validation]
+        options: [storage, retention-validation, match-center]
 
 permissions:
   contents: read
@@ -49,7 +49,9 @@ jobs:
           OPERATIONAL_DELETE_ENABLED: 'false'
           PREFLIGHT_CHECK: ${{ inputs.check || 'storage' }}
         run: |
-          if [ "$PREFLIGHT_CHECK" = retention-validation ]; then
+          if [ "$PREFLIGHT_CHECK" = match-center ]; then
+            python -m app.jobs.match_center_probe --output stage7d-preflight.json
+          elif [ "$PREFLIGHT_CHECK" = retention-validation ]; then
             python -m app.jobs.retention_validation --output stage7d-preflight.json
           else
             python -m app.jobs.live_import --preflight --output stage7d-preflight.json

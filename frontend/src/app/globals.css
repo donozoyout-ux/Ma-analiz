@@ -334,3 +334,31 @@ button { cursor:pointer; }.quiet-button { border:1px solid var(--line-strong); b
 .match-pagination { display:flex; align-items:center; justify-content:flex-end; flex-wrap:wrap; gap:12px; }
 .match-pagination span { color:var(--muted); font-size:13px; }
 .quiet-button:disabled { opacity:.45; cursor:default; }
+
+/* Bounded SQL/R2 match centre */
+.center-filter-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.center-submit { align-self:end; min-height:44px; display:flex; gap:8px; justify-content:center; align-items:center; color:var(--turquoise); border-color:#43ddd03b; background:#43ddd010; }
+.match-freshness { color:var(--muted); text-align:center; font-size:11px; line-height:1.7; margin:-6px 0 14px; }
+.center-loading { padding:22px; color:var(--muted); }
+.center-loading > span { display:block; margin-bottom:16px; }
+.match-skeleton { height:225px; border-radius:12px; background:linear-gradient(110deg,#122235,#192c3e,#122235); background-size:200% 100%; animation:match-loading 1.6s ease infinite; }
+@keyframes match-loading { to { background-position:-200% 0; } }
+.center-notice { padding:16px; border:1px solid #b5a36845; border-radius:12px; color:#cfc399; line-height:1.7; }
+.center-back { display:inline-flex; align-items:center; gap:7px; }
+.center-hero { gap:24px; }
+.center-hero p,.center-score small { display:flex; align-items:center; gap:7px; }
+.center-score { display:flex; flex-direction:column; gap:10px; align-items:center; min-width:180px; padding:12px; }
+.center-score > strong { font-size:clamp(38px,6vw,64px); font-variant-numeric:tabular-nums; color:var(--mint); white-space:nowrap; }
+.center-score > span { font-size:13px; color:#b1c4d3; }
+.center-score small { font-size:12px; color:var(--muted); }
+.center-provenance { padding:24px; }
+.center-provenance > p { color:#b1c4d3; line-height:1.7; overflow-wrap:anywhere; }
+.center-meta { display:flex; flex-wrap:wrap; gap:18px 30px; margin:20px 0; }
+.center-meta > span { display:grid; gap:6px; color:var(--muted); font-size:12px; }
+.center-meta strong { color:#bdd0de; font-size:13px; font-weight:500; }
+.center-statistics > div { display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); gap:16px; }
+.center-statistics dd { color:var(--mint); font-variant-numeric:tabular-nums; }
+.match-center button:focus-visible,.match-center a:focus-visible { outline:2px solid var(--turquoise); outline-offset:4px; }
+@media(max-width:900px) { .center-filter-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:600px) { .center-filter-grid { grid-template-columns:1fr; }.center-hero { flex-direction:column; align-items:stretch; }.center-score { align-items:flex-start; padding:0; }.center-provenance { padding:18px; }.center-meta { flex-direction:column; gap:16px; }.match-pagination { justify-content:space-between; }.football-teams { gap:10px; }.match-center .list-toolbar { flex-wrap:wrap; gap:12px; } }
+@media(prefers-reduced-motion:reduce) { .match-skeleton { animation:none; } }

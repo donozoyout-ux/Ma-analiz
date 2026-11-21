@@ -1,2 +1,2 @@
-import { MatchExplorer } from "@/components/match-explorer";
-export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Geçmiş maç arşivi</h1><p className="page-intro">Erişilebilir tamamlanmış maçları tarih, lig ve takıma göre araştırın.</p></div><span className="today-chip">Türkiye saati · UTC+3</span></header><MatchExplorer mode="archive" /></>; }
+import { MatchCenter } from "@/components/match-center";
+export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / VERİ ARŞİVİ</div><h1 className="title">Geçmiş maç arşivi</h1><p className="page-intro">Doğrulanmış arşiv parçalarındaki maçları inceleyin. Kalıcı geçmiş, aynı maç kimliği.</p></div><span className="today-chip">Türkiye saati · TSİ</span></header><MatchCenter initialSource="history" /></>; }
