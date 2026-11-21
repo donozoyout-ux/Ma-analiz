@@ -1,4 +1,4 @@
-"""Read-only GitHub schedule watchdog; no DB/R2 secrets and no outbound messages."""
+"""Read-only GitHub + optional storage watchdog. No retry dispatch or outbound messages."""
 from datetime import datetime, timezone
 import json
 import os
@@ -17,11 +17,13 @@ def github_get(repo, path, token):
 
 
 def stamp(value):
-    try: return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc) if parsed.utcoffset() is not None else None
     except (ValueError, TypeError, AttributeError): return None
 
 
-def assess(workflow, runs, repo, *, now):
+def assess(workflow, runs, repo, *, now, storage=None):
     errors, warnings, checks = [], [], {}
     if workflow.get("state") != "active": errors.append("RETENTION_WORKFLOW_NOT_ACTIVE")
     created = stamp(workflow.get("created_at"))
@@ -43,33 +45,53 @@ def assess(workflow, runs, repo, *, now):
     pushed = stamp(repo.get("pushed_at"))
     if repo.get("private") is False and pushed and (now-pushed).days >= 50:
         warnings.append("PUBLIC_REPO_LAST_PUSH_OLDER_THAN_50_DAYS_REVIEW_INACTIVITY")
-    return {"status": "FAILED" if errors else "PASS", "errors": errors, "warnings": warnings, "checks": checks,
-            "limitation": "THIS_WATCHDOG_CAN_ALSO_BE_DISABLED_AFTER_60_DAYS;_INDEPENDENT_MONITORING_REQUIRED"}
+    from app.jobs.scheduler_health import extend
+    return extend({"status": "FAILED" if errors else "PASS", "errors": errors, "warnings": warnings, "checks": checks,
+            "limitation": "THIS_WATCHDOG_CAN_ALSO_BE_DISABLED_AFTER_60_DAYS;_INDEPENDENT_MONITORING_REQUIRED"},
+            runs=runs, storage=storage, now=now)
+
+
+def publish(result):
+    print(json.dumps(result, sort_keys=True))
+    output = os.environ.get("WATCHDOG_REPORT_PATH")
+    if output:
+        from pathlib import Path
+        try:
+            Path(output).write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            print("::error::WATCHDOG_REPORT_WRITE_FAILED")
+            return 1
+    for code in result["errors"]: print(f"::error::{code}")
+    for code in result["warnings"]: print(f"::warning::{code}")
+    return 1 if result["errors"] else 0
+
+
+def unavailable(code):
+    return publish({"status":"FAILED", "state":"INSUFFICIENT_EVIDENCE", "errors":[code], "warnings":[],
+        "storage_evidence":{"status":"NOT_VERIFIED"}, "LIVE_DELETE":"NOT_RUN", "SQL_ARCHIVE_WRITE":"NOT_RUN"})
 
 
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     token = os.environ.get("GH_TOKEN", "")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo) or not token:
-        print("::error::Watchdog GitHub API configuration is missing.")
-        return 1
+        return unavailable("WATCHDOG_GITHUB_CONFIGURATION_MISSING")
     def get(path):
         return github_get(repo, path, token)
     try:
         workflow = get(f"actions/workflows/{WORKFLOW}")
         runs = get(f"actions/workflows/{WORKFLOW}/runs?per_page=100")["workflow_runs"]
         metadata = get("")
-        result = assess(workflow, runs, metadata, now=datetime.now(timezone.utc))
+        storage = {"status": "NOT_VERIFIED"}
+        if os.environ.get("WATCHDOG_STORAGE_CHECK") == "true":
+            from app.jobs.retention_validation import run
+            storage = run()
+        result = assess(workflow, runs, metadata, now=datetime.now(timezone.utc), storage=storage)
     except HTTPError as exc:
-        print(f"::error::Watchdog GitHub API returned HTTP {int(exc.code)}. No token or response body is logged.")
-        return 1
+        return unavailable(f"WATCHDOG_GITHUB_HTTP_{int(exc.code)}")
     except Exception:
-        print("::error::Watchdog could not verify workflow freshness. No token or raw API error is logged.")
-        return 1
-    print(json.dumps(result, sort_keys=True))
-    for code in result["errors"]: print(f"::error::{code}")
-    for code in result["warnings"]: print(f"::warning::{code}")
-    return 1 if result["errors"] else 0
+        return unavailable("WATCHDOG_OBSERVATION_NOT_VERIFIED")
+    return publish(result)
 
 
 if __name__ == "__main__": raise SystemExit(main())

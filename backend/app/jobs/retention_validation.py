@@ -3,6 +3,7 @@ import argparse
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 import json
+import hashlib
 from pathlib import Path
 
 from sqlalchemy import bindparam, func, select, text
@@ -115,6 +116,32 @@ def table_sizes(session):
     return [dict(row) for row in session.execute(statement, {"tables": list(Base.metadata.tables)}).mappings()]
 
 
+def archive_runtime(session, *, now, stale_seconds):
+    """Counts + bounded safe metadata, never raw errors, journal values or user data."""
+    from app.models import ArchiveJob
+    from app.jobs.actions_retention import safe_code
+    rows = session.execute(select(ArchiveJob.status, func.count()).group_by(ArchiveJob.status)).all()
+    counts = {safe_code(status): count for status, count in rows}
+    latest = session.scalar(select(func.max(ArchiveJob.verified_at)).where(ArchiveJob.status == "VERIFIED"))
+    active = session.scalars(select(JobRun).where(JobRun.job_type.in_(["archive_data", "cleanup_database", "archive_retry"]),
+        JobRun.status == "RUNNING").order_by(JobRun.started_at).limit(26)).all()
+    jobs = []
+    for row in active[:25]:
+        age = (now - lc.aware(row.started_at)).total_seconds()
+        jobs.append({"job_type": row.job_type, "started_at": lc.aware(row.started_at).isoformat(),
+            "state": "UNKNOWN_RECONCILE_REQUIRED" if age >= stale_seconds or age < 0 else "IN_PROGRESS",
+            "age_seconds": max(0, age)})
+    slots = session.scalars(select(JobRun).where(JobRun.job_type.in_(["archive_data", "cleanup_database", "archive_retry"]))
+        .order_by(JobRun.started_at.desc()).limit(25)).all()
+    return {"ledger_status_counts": counts, "last_sql_ledger_verified_at": lc.aware(latest).isoformat() if latest else None,
+        "incomplete_archive_ledgers": sum(counts.get(k, 0) for k in ("PENDING", "UPLOADING", "UPLOADED", "FAILED")),
+        "running_jobs": jobs, "running_jobs_truncated": len(active) > 25,
+        "recent_slots": [{"job_type": r.job_type, "status": safe_code(r.status),
+            "started_at": lc.aware(r.started_at).isoformat(), "finished_at": lc.aware(r.finished_at).isoformat() if r.finished_at else None,
+            "slot_sha256": hashlib.sha256(r.idempotency_key.encode()).hexdigest(),
+            "records_written": r.records_written, "error_code": safe_code(r.error_code, "NONE")} for r in slots]}
+
+
 def run(settings=None):
     from app.core.config import get_settings
     from app.jobs.retention_errors import error_code
@@ -137,6 +164,9 @@ def run(settings=None):
             output["table_sizes"] = table_sizes(session)
             output["vacuum"] = retention.vacuum_assessment(session)
             output["sql_scheduler_audit"] = scheduler_audit(session)
+            # Tests may inject an opaque settings object; production always has the configured lease.
+            lease = getattr(cfg, "job_run_stale_after_seconds", 3600)
+            output["archive_runtime"] = archive_runtime(session, now=datetime.now(timezone.utc), stale_seconds=max(60, lease))
             phase = "R2_VERIFICATION"
             store = import_preflight.bounded_store(cfg)
             with closing(store.client):

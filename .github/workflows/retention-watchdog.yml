@@ -15,7 +15,7 @@ concurrency:
 jobs:
   freshness:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -23,8 +23,29 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
       - name: Detect stale, disabled, failed or cancelled retention schedules
         working-directory: backend
         env:
           GH_TOKEN: ${{ github.token }}
+          WATCHDOG_STORAGE_CHECK: 'true'
+          WATCHDOG_REPORT_PATH: watchdog-report.json
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+          AUTO_RETENTION_DELETE_ENABLED: 'false'
+          OPERATIONAL_DELETE_ENABLED: 'false'
         run: python -m app.jobs.actions_watchdog
+      - name: Safe watchdog evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: watchdog-${{ github.run_id }}
+          path: backend/watchdog-report.json
+          retention-days: 14
+          if-no-files-found: warn
