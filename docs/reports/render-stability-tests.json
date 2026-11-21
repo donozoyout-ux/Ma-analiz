@@ -1,0 +1,16 @@
+{
+  "evidence_kind": "LOCAL_TEST_EXECUTION",
+  "backend_tests": { "passed": 460, "warnings": 14 },
+  "frontend_unit_tests": { "passed": 22 },
+  "typescript": "PASS",
+  "production_build": "PASS",
+  "single_service_smoke": "PASS",
+  "fastapi_child_exit_stops_both_listeners": "PASS",
+  "nextjs_child_exit_stops_both_listeners": "PASS",
+  "posix_graceful_sigterm": "NOT_TESTED_WINDOWS_HOST",
+  "render_dashboard_logs": "NOT_READ_BROWSER_URL_SAFETY_GUARD",
+  "production_deploy": "NOT_VERIFIED",
+  "LIVE_DELETE": "NOT_RUN",
+  "production_import": "NOT_RUN",
+  "live_migrations": "NOT_RUN"
+}

@@ -27,5 +27,5 @@ jobs:
             --max-time 120 \
             --retry 0 \
             --output /dev/null \
-            --write-out "Render liveness HTTP %{http_code}\\n" \
+            --write-out "Render liveness HTTP %{http_code} total_seconds=%{time_total} connect_seconds=%{time_connect}\\n" \
             "https://ma-analiz-2.onrender.com/health/live"

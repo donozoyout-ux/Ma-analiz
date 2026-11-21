@@ -12,7 +12,7 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", 
 
 
 @app.get("/health/live", include_in_schema=False)
-def liveness() -> dict[str, str]:
+async def liveness() -> dict[str, str]:
     """Process-only probe; deliberately performs no dependency checks."""
     return {"status": "ok"}
 

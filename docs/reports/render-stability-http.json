@@ -1,0 +1,31 @@
+[
+  {
+    "url": "https://ma-analiz-2.onrender.com/health/live",
+    "observed_at": "2026-11-21T16:40:43.729172+00:00",
+    "status": 200,
+    "seconds": 0.187,
+    "content_type": "application/json",
+    "server": "cloudflare",
+    "body": {
+      "status": "ok"
+    }
+  },
+  {
+    "url": "https://ma-analiz-2.onrender.com/",
+    "observed_at": "2026-11-21T16:40:43.914464+00:00",
+    "status": 200,
+    "seconds": 0.063,
+    "content_type": "text/html; charset=utf-8",
+    "server": "cloudflare",
+    "html_title": "Ma\u00e7 Analiz | Analytics"
+  },
+  {
+    "url": "https://ma-analiz-2.onrender.com/health/ready",
+    "observed_at": "2026-11-21T16:40:43.981465+00:00",
+    "status": 404,
+    "seconds": 0.39,
+    "content_type": "text/html; charset=utf-8",
+    "server": "cloudflare",
+    "html_title": "Ma\u00e7 Analiz | Analytics"
+  }
+]

@@ -8,6 +8,8 @@ const repoRoot = path.resolve(frontendRoot, "..");
 const supervisorPath = path.join(frontendRoot, "scripts", "run-single-service.mjs");
 const backendPort = 8000;
 const shutdownSignal = process.platform === "win32" ? "SIGINT" : "SIGTERM";
+const crashTarget = process.argv.find(arg => arg.startsWith("--crash-child="))?.split("=")[1];
+if (crashTarget && !["FastAPI", "Next.js"].includes(crashTarget)) throw new Error("Invalid crash-test child name.");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -87,6 +89,8 @@ Object.assign(safeEnv, {
   GROQ_MODEL: "",
   TELEGRAM_BOT_TOKEN: "",
   TELEGRAM_CHAT_ID: "",
+  AUTO_RETENTION_DELETE_ENABLED: "false",
+  OPERATIONAL_DELETE_ENABLED: "false",
   BACKEND_PORT: String(backendPort),
   PORT: String(renderPort),
   NODE_ENV: "production",
@@ -105,6 +109,12 @@ let logs = "";
 const appendLog = (chunk) => { logs = (logs + chunk.toString()).slice(-12_000); };
 child.stdout.on("data", appendLog);
 child.stderr.on("data", appendLog);
+
+function stopOwnedChild(name) {
+  const started = [...logs.matchAll(/(FastAPI|Next\.js) process started \(pid=(\d+)\)\./g)].find(match => match[1] === name);
+  if (!started) throw new Error(`No owned ${name} PID was reported.`);
+  try { process.kill(Number(started[2]), "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+}
 
 let failed = false;
 try {
@@ -129,6 +139,24 @@ try {
   if (!liveResponse.ok || (await liveResponse.json()).status !== "ok") {
     throw new Error("The public liveness route did not reach FastAPI successfully.");
   }
+  const readyResponse = await fetch(new URL("/health/ready", origin), { signal: AbortSignal.timeout(5000) });
+  const ready = await readyResponse.json();
+  if (!readyResponse.ok || ready.status !== "ok" || ready.scope !== "web_api_transport" || ready.dependencies !== "not_checked") {
+    throw new Error("Bounded public readiness must reflect the colocated web/API transport.");
+  }
+
+  if (crashTarget) {
+    const closed = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Supervisor did not stop after a child crash.")), 30_000);
+      child.once("close", () => { clearTimeout(timer); resolve(); });
+    });
+    stopOwnedChild(crashTarget);
+    await closed;
+    if (!child.exitCode) throw new Error("Unexpected child termination must fail the supervisor.");
+    await expectOffline(new URL("/", origin));
+    await expectOffline(`http://127.0.0.1:${backendPort}/health/live`);
+    console.log(`PASS: ${crashTarget} termination stops both listeners and fails the supervisor.`);
+  } else {
 
   const apiResponse = await fetch(new URL("/api/v1/health", origin), { signal: AbortSignal.timeout(10_000) });
   if (!apiResponse.ok) throw new Error(`The API rewrite returned HTTP ${apiResponse.status}.`);
@@ -181,11 +209,19 @@ try {
     ? "Windows signal-handler semantics NOT_TESTED"
     : "SIGTERM graceful shutdown verified";
   console.log(`PASS: Next.js standalone server on PORT=${renderPort}; /health/live and /api/v1/health reached FastAPI through rewrites; ${shutdownNote}.`);
+  }
 } catch (error) {
   failed = true;
   console.error(`FAIL: ${error.message}`);
 } finally {
   if (child.exitCode === null) {
+    // Windows kill() does not emulate POSIX graceful signal handlers. Explicitly
+    // clean up our own logged child PIDs before stopping the test parent there.
+    if (process.platform === "win32") {
+      for (const name of ["FastAPI", "Next.js"]) {
+        try { stopOwnedChild(name); } catch { /* startup may have failed before spawn */ }
+      }
+    }
     child.kill(shutdownSignal);
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 15_000);
@@ -196,7 +232,7 @@ try {
     child.kill("SIGKILL");
     failed = true;
     console.error(`FAIL: single-service supervisor did not stop after ${shutdownSignal}.`);
-  } else if (child.exitCode !== 0) {
+  } else if (!crashTarget && process.platform !== "win32" && child.exitCode !== 0) {
     if (process.platform !== "win32" || child.signalCode !== shutdownSignal) {
       failed = true;
       console.error(`FAIL: supervisor exited with ${child.exitCode ?? `signal ${child.signalCode}`} after shutdown signal.`);

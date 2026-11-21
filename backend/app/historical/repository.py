@@ -2,8 +2,6 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 
-import pyarrow.parquet as pq
-
 from app.storage.r2 import ObjectStore
 
 
@@ -44,6 +42,9 @@ class HistoricalRepository:
             metadata = info.metadata or {}
             if (len(payload) != info.size or metadata.get("sha256") != hashlib.sha256(payload).hexdigest()):
                 raise IOError("HISTORICAL_CHECKSUM_NOT_VERIFIED")
+            # Keep native Arrow libraries out of web startup/liveness. Load only
+            # when a real historical partition is read; validation is unchanged.
+            import pyarrow.parquet as pq
             parquet_file = pq.ParquetFile(self._buffer(payload))
             if metadata.get("row-count") != str(parquet_file.metadata.num_rows):
                 raise IOError("HISTORICAL_ROW_COUNT_NOT_VERIFIED")
