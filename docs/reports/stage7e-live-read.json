@@ -1,0 +1,73 @@
+{
+  "run_id": 44952788193,
+  "job_id": 136994184523,
+  "commit": "313a594e2e0bdf064797acdaf2e196361d5ff7c5",
+  "evidence": "REAL_READ_ONLY_SQL_R2",
+  "report": {
+    "stage": "7E",
+    "status": "VERIFIED",
+    "observed_at": "2026-11-21T21:41:40.020498+00:00",
+    "SQL_WRITE": "NOT_RUN",
+    "R2_WRITE": "NOT_RUN",
+    "R2_DELETE": "NOT_RUN",
+    "LIVE_DELETE": "NOT_RUN",
+    "active_detail": {
+      "id": "e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+      "home_team": "FC Bayern München",
+      "away_team": "1. FC Köln",
+      "league_id": "de.bl1",
+      "league_name": "Bundesliga",
+      "season": "2026-2027",
+      "start_time": "2026-11-20T19:30:00+00:00",
+      "status": "FINISHED",
+      "result": {
+        "home_score": 1,
+        "away_score": 1,
+        "status": "FINAL",
+        "verified_at": "2026-11-20T22:08:11.894979+00:00"
+      },
+      "last_updated_at": "2026-11-20T22:08:17.634147+00:00",
+      "storage": "POSTGRESQL",
+      "source": {
+        "name": "OpenLigaDB",
+        "licence": "ODbL-1.0",
+        "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+        "licence_url": "https://www.openligadb.de/lizenz",
+        "native_id": "83237"
+      },
+      "analysis_summary": null,
+      "statistics": [],
+      "archive_verified_at": null
+    },
+    "history_detail": {
+      "id": "e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+      "home_team": "FC Bayern München",
+      "away_team": "1. FC Köln",
+      "league_id": "de.bl1",
+      "league_name": "Bundesliga",
+      "season": "2026-2027",
+      "start_time": "2026-11-20T19:30:00+00:00",
+      "status": "FINISHED",
+      "result": {
+        "home_score": 1,
+        "away_score": 1,
+        "status": "FINAL",
+        "verified_at": "2026-11-20T22:08:11.894979+00:00"
+      },
+      "last_updated_at": "2026-11-20T22:08:17.634147+00:00",
+      "storage": "R2",
+      "source": {
+        "name": "OpenLigaDB",
+        "licence": "ODbL-1.0",
+        "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+        "licence_url": "https://www.openligadb.de/lizenz",
+        "native_id": "83237"
+      },
+      "analysis_summary": null,
+      "statistics": [],
+      "archive_verified_at": "2026-11-21T21:41:42.728318+00:00"
+    },
+    "combined_count": 1,
+    "canonical_uuid_dedup": "PASS"
+  }
+}

@@ -55,7 +55,7 @@ try {
  await call("Page.navigate",{url:archivedDetail});
  await wait(`document.querySelector('.center-meta')?.textContent.includes('Doğrulanmış R2 arşivi')`);
  await shot("history-mobile.png");
- const report={observed_at:new Date().toISOString(),evidence:"PUBLIC_READ_ONLY_BROWSER",desktop:"PASS",mobile_390:"PASS",detail:"PASS",history:"PASS",empty_filter:"PASS",network_error_and_retry:"PASS",SQL_WRITE:"NOT_RUN",R2_WRITE:"NOT_RUN",R2_DELETE:"NOT_RUN",LIVE_DELETE:"NOT_RUN"};
+ const report={observed_at:new Date().toISOString(),evidence:process.env.MATCH_CENTER_RECORDED_UI === "true" ? "RECORDED_VERIFIED_PRODUCTION_READBACK_UI_TEST" : "PUBLIC_READ_ONLY_BROWSER",desktop:"PASS",mobile_390:"PASS",detail:"PASS",history:"PASS",empty_filter:"PASS",network_error_and_retry:"PASS",SQL_WRITE:"NOT_RUN",R2_WRITE:"NOT_RUN",R2_DELETE:"NOT_RUN",LIVE_DELETE:"NOT_RUN"};
  await writeFile(join(output,"report.json"),JSON.stringify(report,null,2)+"\n");console.log(JSON.stringify(report));
 } finally {
  socket?.close();child.kill();await sleep(1000);

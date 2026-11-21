@@ -163,3 +163,23 @@ def test_previously_reviewed_bayern_alias_uses_original_uuid_and_licensed_names(
         item=api.detail_view(session,match.id,source=source,now=NOW,store=store)
         assert item["id"]==str(match.id) and item["home_team"]=="FC Bayern München"
         assert item["result"]["home_score"]==item["result"]["away_score"]==1
+
+
+def test_real_read_dependency_enforces_readonly_bounded_statements_and_no_commit(monkeypatch):
+    from unittest.mock import MagicMock
+    engine=MagicMock();conn=engine.connect.return_value.__enter__.return_value
+    monkeypatch.setattr(api,"read_engine",lambda:engine)
+    dependency=api.read_db();next(dependency)
+    with pytest.raises(StopIteration):next(dependency)
+    statements=[str(call.args[0]) for call in conn.execute.call_args_list]
+    assert statements==["SET TRANSACTION READ ONLY","SET TRANSACTION ISOLATION LEVEL REPEATABLE READ","SET LOCAL statement_timeout = '4s'"]
+    conn.commit.assert_not_called();conn.rollback.assert_called_once()
+
+
+def test_historical_part_limits_reject_before_any_download():
+    from app.historical.repository import HistoricalRepository
+    class Forbidden:
+        def get_object(self,*a):pytest.fail("oversized part downloaded")
+        def head_object(self,*a):pytest.fail("oversized ledger accepted")
+    with pytest.raises(IOError,match="PART_LIMIT"):
+        HistoricalRepository(Forbidden()).read_verified_part("part",checksum="a"*64,size=1_048_577)
