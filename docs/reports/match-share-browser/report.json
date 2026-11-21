@@ -1,0 +1,66 @@
+{
+  "observed_at": "2026-11-21T22:13:27.119Z",
+  "evidence": "RECORDED_VERIFIED_READBACK_LOCAL_UI_WITH_MOCKED_SHARE_CAPABILITIES",
+  "results": [
+    {
+      "width": 1440,
+      "source": "active",
+      "real_clipboard": "PASS",
+      "unsupported_share": "PASS",
+      "clipboard_denial": "PASS",
+      "native_share_stub": "PASS",
+      "cancel_stub": "PASS",
+      "share_denial_stub": "PASS",
+      "canShare_false": "PASS",
+      "pending_disabled": "PASS",
+      "keyboard": "PASS",
+      "overflow": "PASS"
+    },
+    {
+      "width": 1440,
+      "source": "history",
+      "real_clipboard": "PASS",
+      "unsupported_share": "PASS",
+      "clipboard_denial": "PASS",
+      "native_share_stub": "PASS",
+      "cancel_stub": "PASS",
+      "share_denial_stub": "PASS",
+      "canShare_false": "PASS",
+      "pending_disabled": "PASS",
+      "keyboard": "PASS",
+      "overflow": "PASS"
+    },
+    {
+      "width": 390,
+      "source": "active",
+      "real_clipboard": "PASS",
+      "unsupported_share": "PASS",
+      "clipboard_denial": "PASS",
+      "native_share_stub": "PASS",
+      "cancel_stub": "PASS",
+      "share_denial_stub": "PASS",
+      "canShare_false": "PASS",
+      "pending_disabled": "PASS",
+      "keyboard": "PASS",
+      "overflow": "PASS"
+    },
+    {
+      "width": 390,
+      "source": "history",
+      "real_clipboard": "PASS",
+      "unsupported_share": "PASS",
+      "clipboard_denial": "PASS",
+      "native_share_stub": "PASS",
+      "cancel_stub": "PASS",
+      "share_denial_stub": "PASS",
+      "canShare_false": "PASS",
+      "pending_disabled": "PASS",
+      "keyboard": "PASS",
+      "overflow": "PASS"
+    }
+  ],
+  "history_request": "PASS",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN"
+}
