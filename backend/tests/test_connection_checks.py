@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,7 +18,15 @@ def settings():
         r2_access_key_id='private-access-key', r2_secret_access_key='private-secret', r2_bucket='private-bucket')
 
 @pytest.fixture
-def client(monkeypatch, settings):
+def monotonic_clock(monkeypatch):
+    clock = MagicMock(return_value=1000.0)
+    # Replace this endpoint's clock namespace, not the process-wide time module:
+    # TestClient/asyncio must continue using their real monotonic clocks.
+    monkeypatch.setattr(module, 'time', SimpleNamespace(monotonic=clock))
+    return clock
+
+@pytest.fixture
+def client(monkeypatch, settings, monotonic_clock):
     app = FastAPI()
     app.include_router(module.router)
     monkeypatch.setattr(module, 'get_settings', lambda: settings)
@@ -50,6 +59,49 @@ def test_endpoint_rate_limit_and_no_cache(client, monkeypatch):
     assert response.headers['cache-control'] == 'no-store'
     assert response.json()['read_only'] is True
     assert client.post('/system/connections', headers=headers).status_code == 429
+    pg.assert_called_once()
+    r2.assert_called_once()
+
+
+@pytest.mark.parametrize('elapsed,expected', [(0.0,429), (29.0,429), (29.999,429), (30.0,200), (30.001,200)])
+def test_endpoint_enforces_exact_30_second_interval(client, monkeypatch, monotonic_clock, elapsed, expected):
+    pg = MagicMock(return_value={'status': 'CONNECTED'})
+    r2 = MagicMock(return_value={'status': 'ACCESSIBLE'})
+    monkeypatch.setattr(module, 'postgres_check', pg)
+    monkeypatch.setattr(module, 'r2_check', r2)
+    headers = {'Authorization': f'Bearer {TOKEN}'}
+    assert client.post('/system/connections', headers=headers).status_code == 200
+    assert module._last_check == 1000.0
+    monotonic_clock.return_value = 1000.0 + elapsed
+    response = client.post('/system/connections', headers=headers)
+    assert response.status_code == expected
+    if expected == 429:
+        assert response.json()['detail'] == 'WAIT_30_SECONDS'
+        assert response.headers['retry-after'] == '30'
+        assert module._last_check == 1000.0  # Rejection neither probes nor resets the window.
+        assert pg.call_count == r2.call_count == 1
+    else:
+        assert response.headers['cache-control'] == 'no-store'
+        assert module._last_check == 1000.0 + elapsed
+        assert client.post('/system/connections', headers=headers).status_code == 429
+        assert pg.call_count == r2.call_count == 2
+
+
+@pytest.mark.parametrize('initial_clock', [0.0, 5.0, 29.999])
+def test_zero_last_check_with_low_monotonic_preserves_existing_startup_limit(client, monkeypatch, monotonic_clock, initial_clock):
+    pg = MagicMock(return_value={'status': 'CONNECTED'})
+    r2 = MagicMock(return_value={'status': 'ACCESSIBLE'})
+    monkeypatch.setattr(module, 'postgres_check', pg)
+    monkeypatch.setattr(module, 'r2_check', r2)
+    monotonic_clock.return_value = initial_clock
+    headers = {'Authorization': f'Bearer {TOKEN}'}
+    response = client.post('/system/connections', headers=headers)
+    assert response.status_code == 429 and response.headers['retry-after'] == '30'
+    assert module._last_check == 0
+    pg.assert_not_called()
+    r2.assert_not_called()
+    monotonic_clock.return_value = 30.0
+    assert client.post('/system/connections', headers=headers).status_code == 200
     pg.assert_called_once()
     r2.assert_called_once()
 

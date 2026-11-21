@@ -51,6 +51,9 @@ jobs:
 
   retention:
     needs: validate
+    # Tests-only fixes still run the full suite, without SQL audit/archive writes.
+    # This opt-out applies only to push; scheduled and manual maintenance are unchanged.
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[tests-only]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
