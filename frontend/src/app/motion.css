@@ -117,3 +117,24 @@ button:disabled,button:disabled:hover { transform:none;box-shadow:none;filter:no
     transition: none !important;
   }
 }
+
+/* Stage 7F — shareable match detail controls */
+.match-detail-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.match-share-actions { display: grid; justify-items: end; gap: 5px; min-width: 0; }
+.match-share-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.match-share-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; }
+.match-share-feedback { color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 360px; text-align: right; }
+.match-share-feedback:empty { display: none; }
+@media (max-width: 620px) {
+  .match-detail-toolbar { align-items: stretch; flex-direction: column; }
+  .match-share-actions { justify-items: stretch; }
+  .match-share-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .match-share-button { white-space: normal; }
+  .match-share-feedback { text-align: left; }
+}
