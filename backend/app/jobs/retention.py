@@ -182,10 +182,12 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
     if mode == "execute" and (not cfg.operational_delete_enabled or not approval):
         report.update(status="BLOCKED", error_code="EXPLICIT_DELETE_ENABLE_AND_PLAN_APPROVAL_REQUIRED")
         return report
+    phase = "SQL_CONNECTION"
     try:
         auto_enabled = mode == "auto" and cfg.auto_retention_delete_enabled
         readonly = mode == "dry-run" or (mode == "auto" and not auto_enabled)
         with storage_session(cfg, readonly=readonly) as session:
+            phase = "SQL_QUERY"
             size = session.execute(text("SELECT pg_database_size(current_database())")).scalar_one()
             report["capacity"] = capacity(int(size))
             report["postgres"] = "READ_ONLY_CONNECTED" if readonly else "CONNECTED"
@@ -194,7 +196,9 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                        COALESCE(n_live_tup, 0)::bigint AS rows_estimate
                 FROM pg_stat_user_tables ORDER BY pg_total_relation_size(relid) DESC LIMIT 20
             """)).mappings()]
+            phase = "R2_VERIFICATION"
             report["target"] = target_check(session, R2ObjectStore())
+            phase = "SCHEMA_CHECK"
             # Read revision metadata only. No upgrade or CREATE is ever called.
             from alembic.runtime.migration import MigrationContext
             head = set(MigrationContext.configure(session.connection()).get_current_heads())
@@ -204,8 +208,9 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
             alembic = Config(str(PROJECT_ROOT / "backend/alembic.ini"))
             alembic.set_main_option("script_location", str(PROJECT_ROOT / "backend/migrations"))
             if head != set(ScriptDirectory.from_config(alembic).get_heads()):
-                report.update(status="SCHEMA_NOT_READY", error_code="PREPARED_STATISTICS_MIGRATION_NOT_APPLIED")
+                report.update(status="SCHEMA_NOT_READY", failure_stage=phase, error_code="PREPARED_STATISTICS_MIGRATION_NOT_APPLIED")
                 return report
+            phase = "SQL_QUERY"
             report["metadata"] = metadata_report(session)
             report["scheduler"] = scheduler_report(session, datetime.now(timezone.utc))
             report["vacuum"] = vacuum_assessment(session)
@@ -218,6 +223,7 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                        "limit": cfg.lifecycle_batch_size, "child_limit": cfg.lifecycle_child_limit,
                        "after": after, "target": target}
             if mode == "archive":
+                phase = "RETENTION"
                 outcome = lifecycle.archive_early(session, store, **options)
                 if not target:
                     value = {"after_match_id": outcome["scope"]["next_after_match_id"]}
@@ -225,6 +231,7 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                     else: session.add(SystemSetting(key=cursor_key, value=value))
                     session.commit()
             elif mode == "auto":
+                phase = "RETENTION"
                 outcome = lifecycle.automatic(session, store, enabled=auto_enabled, **options)
                 if auto_enabled:
                     if not target:
@@ -240,15 +247,18 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                     else: session.add(SystemSetting(key="lifecycle:last-auto-run", value=data))
                     session.commit()
             elif mode == "execute":
+                phase = "RETENTION"
                 outcome = lifecycle.execute(session, store, approval=approval, enabled=cfg.operational_delete_enabled, **options)
             else:
+                phase = "RETENTION"
                 outcome, _ = lifecycle.plan(session, store, **options)
             report.update(outcome, postgres="PASS", r2="CHECKED")
     except PermissionError as exc:
         allowed = {"OPERATIONAL_DELETE_DISABLED", "APPROVAL_PLAN_CHANGED", "UNKNOWN_FOREIGN_KEY_DEPENDENCY"}
         report.update(status="BLOCKED", error_code=str(exc) if str(exc) in allowed else "DELETE_APPROVAL_REQUIRED")
-    except Exception:
-        report.update(status="FAILED", error_code="LIFECYCLE_CHECK_OR_OPERATION_FAILED")
+    except Exception as exc:
+        from app.jobs.retention_errors import error_code
+        report.update(status="FAILED", failure_stage=phase, error_code=error_code(exc, phase))
         if mode in {"execute", "auto"}:
             report.update(LIVE_DELETE="UNKNOWN_RECONCILE_REQUIRED", deleted=None)
     return report

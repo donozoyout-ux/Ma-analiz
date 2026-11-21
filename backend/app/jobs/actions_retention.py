@@ -7,8 +7,24 @@ import json
 import os
 from pathlib import Path
 import re
+from contextlib import contextmanager
 
 REQUIRED = ("DATABASE_URL", "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")
+
+
+@contextmanager
+def audit_session(cfg):
+    """Bound only Actions audit connections; preserve TLS/search_path URL options."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    url = cfg.database_url
+    if url.startswith("postgresql://"): url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    engine = create_engine(url, hide_parameters=True, pool_pre_ping=True, pool_timeout=10,
+                           connect_args={"connect_timeout": 10})
+    try:
+        with Session(engine, expire_on_commit=False) as session: yield session
+    finally:
+        engine.dispose()
 
 
 def safe_code(value, default="UNAVAILABLE"):
@@ -21,6 +37,7 @@ def number(value):
 
 def public_summary(report):
     """Whitelist fields; never serialize URLs, exception messages, keys or raw rows."""
+    from app.jobs.retention_errors import STAGES
     datasets = report.get("datasets", {})
     totals = {field: sum(number(row.get(field)) or 0 for row in datasets.values())
               for field in ("scanned", "eligible", "retained", "overdue_retained")}
@@ -31,6 +48,7 @@ def public_summary(report):
             reasons[code] = reasons.get(code, 0) + 1
     digest = report.get("approval_digest")
     return {"storage_status": safe_code(report.get("status")), "error_code": safe_code(report.get("error_code"), "NONE"),
+            "failure_stage": report.get("failure_stage") if report.get("failure_stage") in STAGES else "NONE",
             "LIVE_DELETE": safe_code(report.get("LIVE_DELETE"), "NOT_RUN"), "deleted": number(report.get("deleted")),
             "policy_hours": number(report.get("policy_hours")), **totals, "retention_reasons": reasons,
             "plan_digest": digest if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None,
@@ -67,14 +85,15 @@ def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None):
     invalid = ([] if cfg.database_url_missing or cfg.database_url_valid else ["DATABASE_URL"]) + list(cfg.r2_invalid_env)
     if missing or invalid:
         return {"status": "FAILED", "mode": mode, "LIVE_DELETE": "NOT_RUN", "deleted": 0,
-                "error_code": "ACTIONS_SECRETS_NOT_CONFIGURED", "missing_env": missing, "invalid_env": invalid}, 1
+                "failure_stage": "CONFIGURATION", "error_code": "ACTIONS_SECRETS_NOT_CONFIGURED", "missing_env": missing, "invalid_env": invalid}, 1
     from app.jobs.retention import run
     from app.jobs.ledger import SQLLedger, run_idempotent_job
     from app.models import SystemSetting
+    from app.jobs.retention_errors import error_code
+    from sqlalchemy import text
     runner = runner or run
     if session_factory is None:
-        from app.db.session import SessionLocal
-        session_factory = SessionLocal
+        session_factory = lambda: audit_session(cfg)
     if session_factory is None:
         return {"status": "FAILED", "error_code": "DATABASE_NOT_CONFIGURED", "LIVE_DELETE": "NOT_RUN", "deleted": 0}, 1
     interval = 900 if mode == "archive" else 3600
@@ -85,20 +104,40 @@ def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None):
     # Dry-run attempts are independently audited. Archive/auto share Stage 5 slot keys.
     key = f"{job_type}:{run_id}:{os.environ.get('GITHUB_RUN_ATTEMPT','1')}" if mode == "dry-run" else f"{job_type}:{slot}"
     core = {}
+    phase = "SQL_CONNECTION"
+    class DiagnosedLedger(SQLLedger):
+        def claim(self, *args, **kwargs):
+            nonlocal phase
+            phase = "LEDGER_CLAIM"
+            return super().claim(*args, **kwargs)
+        def finish(self, *args, **kwargs):
+            nonlocal phase
+            phase = "LEDGER_FINISH"
+            return super().finish(*args, **kwargs)
     try:
         with session_factory() as session:
+            session.execute(text("SELECT 1")).scalar_one()  # separate transport/TLS from ledger access
+            session.rollback()
             def handler():
-                report = runner(mode=mode, settings=cfg)
+                nonlocal phase
+                phase = "RETENTION"
+                try:
+                    report = runner(mode=mode, settings=cfg)
+                except Exception as exc:
+                    uncertain = mode == "auto" and cfg.auto_retention_delete_enabled
+                    report = {"status": "FAILED", "LIVE_DELETE": "UNKNOWN_RECONCILE_REQUIRED" if uncertain else "NOT_RUN", "deleted": None if uncertain else 0,
+                              "failure_stage": phase, "error_code": error_code(exc, phase)}
                 core.update(report)
                 normalized = normalize(report)
                 normalized["reason"] = normalized.get("reason", "RETENTION_RESULT") + "_GHA_" + run_id.upper()
                 return normalized
-            result = run_idempotent_job(SQLLedger(session), key, job_type, handler)
+            result = run_idempotent_job(DiagnosedLedger(session), key, job_type, handler)
             summary = public_summary(core or {"status": result.get("status"), "LIVE_DELETE": "NOT_RUN", "deleted": 0})
             summary.update(status=safe_code(result.get("status")), mode=mode,
                            sql_audit="RECORDED", reason=safe_code(result.get("reason"), "NONE"), slot=slot)
             if result.get("reason") == "IDEMPOTENT_DUPLICATE":
                 summary["LIVE_DELETE"], summary["deleted"] = "NOT_RUN", 0
+            phase = "SCHEDULER_AUDIT"
             state = session.get(SystemSetting, "scheduler:github-actions-retention")
             previous = state.value if state else {}
             value = {**previous, mode: {"completed_at": now.isoformat(), "status": summary["status"],
@@ -109,10 +148,10 @@ def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None):
             session.commit()
             code = 0 if result.get("status") in {"SUCCESS", "SKIPPED"} else 1
             return summary, code
-    except Exception:
+    except Exception as exc:
         summary = public_summary(core or {"status": "FAILED", "LIVE_DELETE": "NOT_RUN", "deleted": 0})
         return {**summary, "status": "FAILED", "mode": mode, "sql_audit": "UNAVAILABLE",
-                "error_code": "ACTIONS_SQL_AUDIT_OR_RUN_FAILED"}, 1
+                "failure_stage": phase, "error_code": error_code(exc, phase)}, 1
 
 
 def emit(report, code):
