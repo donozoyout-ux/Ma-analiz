@@ -1,0 +1,101 @@
+/* Stage 7E Motion UI — visual-only layer. No data or API behavior changes. */
+:root {
+  --motion-lime: #b8ff47;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+  --motion-glow: rgba(184, 255, 71, .16);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack) {
+    animation: motion-enter .45s var(--motion-ease) both;
+  }
+  @keyframes motion-enter {
+    from { opacity: 0; transform: translateY(9px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .football-match-card, .match-tile, .football-kpi, .insight-card,
+  .kpi-card, .page-card, .match-hero, .filter-panel {
+    transition: transform .24s var(--motion-ease),
+      box-shadow .24s var(--motion-ease), border-color .24s ease,
+      background-color .24s ease;
+  }
+  .football-score strong, .center-score > strong,
+  .football-kpi-value, .kpi-value {
+    transition: color .22s ease, text-shadow .22s ease;
+  }
+  .nav-link, .section-tab, .primary-button, .quiet-button,
+  .icon-link, .text-link, .mobile-menu-toggle, .center-submit {
+    transition: transform .18s var(--motion-ease),
+      box-shadow .2s ease, background-color .2s ease,
+      border-color .2s ease, color .2s ease;
+  }
+  .nav-link svg, .section-tab svg, .icon-link svg {
+    transition: transform .18s var(--motion-ease);
+  }
+  .nav-link.active::before {
+    animation: motion-indicator .26s var(--motion-ease) both;
+  }
+  @keyframes motion-indicator {
+    from { opacity: .35; transform: scaleY(.4); }
+    to { opacity: 1; transform: scaleY(1); }
+  }
+  .match-skeleton { animation-duration: 1.7s; }
+}
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .football-match-card:hover, .match-tile:hover {
+    transform: translateY(-5px);
+    border-color: rgba(184, 255, 71, .52);
+    box-shadow: 0 20px 46px rgba(0, 0, 0, .32),
+      0 0 0 1px rgba(184, 255, 71, .12), 0 0 28px var(--motion-glow);
+  }
+  .football-kpi:hover, .insight-card:hover, .kpi-card:hover, .page-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(184, 255, 71, .27);
+    box-shadow: 0 16px 32px rgba(0,0,0,.2);
+  }
+  .football-match-card:hover .football-score strong,
+  .match-hero:hover .center-score > strong {
+    color: var(--motion-lime);
+    text-shadow: 0 0 18px rgba(184,255,71,.22);
+  }
+  .nav-link:hover, .section-tab:hover {
+    transform: translateX(3px);
+    border-color: rgba(184, 255, 71, .2);
+    background: rgba(184, 255, 71, .08);
+  }
+  .nav-link:hover svg { transform: translateX(2px); }
+  .primary-button:hover, .quiet-button:hover, .center-submit:hover,
+  .mobile-menu-toggle:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 0 18px rgba(184,255,71,.1);
+  }
+  .icon-link:hover { transform: translateY(-2px) scale(1.04); }
+  .text-link:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .brand-mark:hover { box-shadow: 0 0 24px var(--motion-glow); }
+}
+.nav-link.active, .section-tab.active, .icon-link.selected {
+  border-color: rgba(184, 255, 71, .3);
+  box-shadow: inset 3px 0 0 rgba(184,255,71,.65);
+}
+.nav-link.active::before { background: var(--motion-lime); }
+:where(.football-match-card, .match-tile, .nav-link, .section-tab, .primary-button,
+ .quiet-button, .icon-link, .mobile-menu-toggle) :focus-visible {
+  outline-color: var(--motion-lime);
+}
+:where(.football-match-card, .match-tile):focus-within {
+  border-color: rgba(184,255,71,.58);
+  box-shadow: 0 0 0 2px rgba(184,255,71,.16);
+}
+:where(button, a):active:not(:disabled) { filter: brightness(.94); }
+@media (prefers-reduced-motion: reduce) {
+  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack),
+  .nav-link.active::before, .match-skeleton {
+    animation: none !important;
+  }
+  .football-match-card, .match-tile, .football-kpi, .insight-card,
+  .kpi-card, .page-card, .match-hero, .filter-panel,
+  .nav-link, .section-tab, .primary-button, .quiet-button, .icon-link,
+  .mobile-menu-toggle, .center-submit {
+    transform: none !important;
+    transition: none !important;
+  }
+}
