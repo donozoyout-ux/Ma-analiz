@@ -32,6 +32,8 @@ OpenLigaDB/ODbL ve mevcut lisans atfı korunur. OpenFootball politikası değiş
 
 Yerel sonuç: **614 backend testi geçti (14 mevcut warning)**; **26 frontend testi geçti**; TypeScript ve production build başarılı. Backend entegrasyonları SQLite/bellek R2 sentetik verisidir; 1–1 Bayern fixture testi canlı gözlem diye sunulmaz. İzole retention temizliği sonrasında aynı UUID ile R2 liste/detay okuması test edildi. Eksik/bozuk nesne, metadata/ledger/native identity/snapshot değişimi, skor eksikliği, filtreler/cursor, UTC→İstanbul ve public hata/alan güvenliği kapsandı.
 
+Son iki RO/boyut sınırı testiyle nihai GitHub paketi **616 passed, 14 warnings**: [44953180350](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44953180350), commit abf3945, validate success. Tests-only push nedeniyle retention job skipped/steps=null; canlı SQL audit veya archive çalışmadı.
+
 ```powershell
 cd backend
 python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py
@@ -48,5 +50,7 @@ Başka çalışma main'e önce iki dosya eklediği için bu değişiklik korunar
 Chrome headless ile ayrı geçici profilde **yerel production build** ekran testi PASS: 1440px masaüstü, 390px mobil, liste/detay/arşiv, boş takım araması, tarayıcıya özel engellenmiş ağ isteği ve retry. Mobil yatay taşma kontrolü PASS. Veri kaynağı yukarıdaki gerçek SQL/R2 okuma snapshot'ıdır; yerel API fixture'ı üzerinden gösterildi, yeni gerçek production HTTP çağrısı veya sentetik canlı maç gibi sunulmaz. [Tarayıcı raporu](reports/stage7e-browser/report.json), [masaüstü](reports/stage7e-browser/desktop.png), [mobil](reports/stage7e-browser/mobile.png), [detay](reports/stage7e-browser/detail-mobile.png), [arşiv](reports/stage7e-browser/history-mobile.png).
 
 **Public deploy henüz NOT_VERIFIED:** kontrol anında `https://ma-analiz-2.onrender.com/health/live` 200, yeni `/api/v1/match-center` ise 404 verdi. Bu, kodun canlı servis sürümüne ulaştığının henüz kanıtlanmadığını gösterir; Render Events/Logs veya deploy ayarları görülmeden sebebi tahmin edilmez. Ayar/Start Command değiştirilmedi. Mevcut servisin güncel main deploy'u tamamlandıktan sonra `node scripts/test-match-center-browser.mjs https://ma-analiz-2.onrender.com` ile public test tekrar yapılabilir. Bu eksik, gerçek SQL/R2 okuma kanıtından ve yerel ekran testinden ayrıdır.
+
+Kullanıcı sonradan **Manuel Deploy Latest Commit gerekli** bilgisini verdi. Bu oturumda Render deploy bağlantısı/CLI mevcut değil; deploy yapılmış gibi raporlanmaz. Kalan operatör adımı: mevcut Render web servisinde main için **Manual Deploy → Deploy Latest Commit**, ardından yukarıdaki public GET/ekran testi. Yeni servis, ayar veya Start Command değişikliği gerekmez. Main kod ve test teslimatı tamamdır; public UI deploy doğrulaması bu adımı bekler.
 
 Mobilde tek kolon filtre/kart, taşmayan skor, yatay kaydırılabilir semantik tablo, dokunmatik butonlar, aria-busy/status/alert, erişilebilir etiketler ve reduced-motion skeleton vardır. Otomatik canlı skor/güncelleme garantisi verilmez. Canlı temizlik/otomatik import sonraki ayrı kullanıcı onayının konusu olarak kalır.
