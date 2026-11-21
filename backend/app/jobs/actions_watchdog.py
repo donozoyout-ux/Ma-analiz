@@ -4,8 +4,16 @@ import json
 import os
 import re
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
 WORKFLOW = "retention-scheduler.yml"
+
+
+def github_get(repo, path, token):
+    url = f"https://api.github.com/repos/{repo}" + (f"/{path}" if path else "")
+    request = Request(url, headers={"Authorization":f"Bearer {token}", "Accept":"application/vnd.github+json",
+                                   "X-GitHub-Api-Version":"2022-11-28", "User-Agent":"MaAnalizRetentionWatchdog/1"})
+    with urlopen(request, timeout=20) as response: return json.load(response)
 
 
 def stamp(value):
@@ -46,15 +54,15 @@ def main():
         print("::error::Watchdog GitHub API configuration is missing.")
         return 1
     def get(path):
-        request = Request(f"https://api.github.com/repos/{repo}/{path}",
-                          headers={"Authorization":f"Bearer {token}", "Accept":"application/vnd.github+json",
-                                   "X-GitHub-Api-Version":"2022-11-28"})
-        with urlopen(request, timeout=20) as response: return json.load(response)
+        return github_get(repo, path, token)
     try:
         workflow = get(f"actions/workflows/{WORKFLOW}")
         runs = get(f"actions/workflows/{WORKFLOW}/runs?per_page=100")["workflow_runs"]
         metadata = get("")
         result = assess(workflow, runs, metadata, now=datetime.now(timezone.utc))
+    except HTTPError as exc:
+        print(f"::error::Watchdog GitHub API returned HTTP {int(exc.code)}. No token or response body is logged.")
+        return 1
     except Exception:
         print("::error::Watchdog could not verify workflow freshness. No token or raw API error is logged.")
         return 1

@@ -124,6 +124,7 @@ def test_workflow_is_pinned_least_privilege_and_push_is_dry_run():
     assert "contents: read" in workflow and "pull_request" not in workflow
     assert "github.event_name != 'push'" in workflow and "default: dry-run" in workflow
     assert "vars.AUTO_RETENTION_DELETE_ENABLED == 'true'" in workflow
+    assert 'if [ "$RETENTION_MODE" = auto ]' in workflow and '--mode dry-run' in workflow
     for name in actions.REQUIRED:assert "${{ secrets."+name+" }}" in workflow
     for line in workflow.splitlines():
         if "uses:" in line:
@@ -132,3 +133,17 @@ def test_workflow_is_pinned_least_privilege_and_push_is_dry_run():
     render=(root/"render.yaml").read_text()
     assert "type: worker" not in render and "type: cron" not in render
     assert "startCommand: node frontend/scripts/run-single-service.mjs" in render
+
+
+def test_watchdog_repository_root_has_no_trailing_slash(monkeypatch):
+    from io import BytesIO
+    from app.jobs import actions_watchdog as watchdog
+    urls=[]
+    def response(request,timeout):
+        urls.append(request.full_url)
+        assert timeout==20
+        return BytesIO(b'{"id": 1}')
+    monkeypatch.setattr(watchdog,"urlopen",response)
+    assert watchdog.github_get("offline/repo","","SECRET")=={"id":1}
+    watchdog.github_get("offline/repo","actions/workflows/test.yml","SECRET")
+    assert urls==["https://api.github.com/repos/offline/repo","https://api.github.com/repos/offline/repo/actions/workflows/test.yml"]

@@ -76,4 +76,8 @@ jobs:
           OPERATIONAL_DELETE_ENABLED: 'false'
           AUTO_RETENTION_DELETE_ENABLED: ${{ github.event_name != 'push' && (github.event_name == 'schedule' || inputs.mode == 'auto') && vars.AUTO_RETENTION_DELETE_ENABLED == 'true' && 'true' || 'false' }}
           RETENTION_MODE: ${{ github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
-        run: python -m app.jobs.actions_retention --mode "$RETENTION_MODE"
+        run: |
+          if [ "$RETENTION_MODE" = auto ] && [ "$AUTO_RETENTION_DELETE_ENABLED" = true ]; then
+            python -m app.jobs.actions_retention --mode dry-run
+          fi
+          python -m app.jobs.actions_retention --mode "$RETENTION_MODE"

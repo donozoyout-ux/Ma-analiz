@@ -1,9 +1,27 @@
 {
   "status": "PASS",
   "command": "python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py",
-  "summary": "315 passed, 14 warnings in 13.94s",
+  "summary": "316 passed, 14 warnings in 14.18s",
   "workflow_yaml_parse": "PASS",
-  "actions_dry_run": "PENDING_PUBLICATION",
+  "actions_dry_run": {
+    "run_id": 44890606821,
+    "url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44890606821",
+    "validation_job": "PASS: 315 tests",
+    "storage_job": "BLOCKED_MISSING_REPOSITORY_SECRETS",
+    "missing_env": [
+      "DATABASE_URL",
+      "R2_ENDPOINT",
+      "R2_ACCESS_KEY_ID",
+      "R2_SECRET_ACCESS_KEY",
+      "R2_BUCKET"
+    ],
+    "LIVE_DELETE": "NOT_RUN"
+  },
   "LIVE_DELETE": "NOT_RUN",
-  "scope": "Local adapters only; no live SQL deletion, R2 write, migration or VACUUM"
+  "scope": "Local adapters only; no live SQL deletion, R2 write, migration or VACUUM",
+  "watchdog": {
+    "first_run_id": 44890806470,
+    "status": "ROOT_URL_404_FIXED_AND_REGRESSION_TESTED",
+    "rerun": "PENDING"
+  }
 }

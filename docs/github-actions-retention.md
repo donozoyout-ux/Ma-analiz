@@ -29,7 +29,7 @@ Değerleri kod, issue, log, workflow YAML veya bu dokümana yazmayın. Gerekli D
 
 Türkiye saati UTC+3'tür; dakika değerleri aynıdır. Bunlar Render web servisine HTTP bakım çağrısı değildir; runner beş secret ile doğrudan mevcut PostgreSQL/R2 altyapısına bağlanır. Yeni scraping, Sportmonks, ücretli API veya geçmiş sezon taraması başlamaz.
 
-Her çalışmada önce secretsız otomatik test job'u geçmelidir. Ardından kısa ömürlü retention runner çalışır. Production veri/dizin raporlarının tamamı loglanmaz: durum, sayı, plan hash'i, kapasite, tutma nedenleri ve eksik değişken **adları** beyaz listeyle yazılır. Exception traceback/URL/token/nesne anahtarı/raw satırlar yayımlanmaz; ortamdaki secret değerleri ayrıca string çıktılardan redakte edilir.
+Her çalışmada önce secretsız otomatik test job'u geçmelidir. Auto bayrağı ileride true yapılırsa aynı Actions çalışmasında ayrıca zorunlu dry-run geçmeden auto adımı başlamaz. Ardından kısa ömürlü retention runner çalışır. Production veri/dizin raporlarının tamamı loglanmaz: durum, sayı, plan hash'i, kapasite, tutma nedenleri ve eksik değişken **adları** beyaz listeyle yazılır. Exception traceback/URL/token/nesne anahtarı/raw satırlar yayımlanmaz; ortamdaki secret değerleri ayrıca string çıktılardan redakte edilir.
 
 ## Stage 5 güvenliği ve audit
 
@@ -72,6 +72,6 @@ cd backend
 python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py
 ```
 
-Bu geliştirmede **315 yerel test geçti**; iki workflow YAML olarak da parse edildi. Yeni testler secret'sız preflight, zorunlu dry-run, idempotent slot/audit, partial başarısızlık, redaksiyon, stale/disabled watchdog ve workflow güvenlik kısıtlarını kapsar. Test operasyonel silmeleri yalnız bellek SQLite'tadır.
+Bu geliştirmede **316 yerel test geçti**; iki workflow YAML olarak da parse edildi. Yeni testler secret'sız preflight, zorunlu dry-run, idempotent slot/audit, partial başarısızlık, redaksiyon, stale/disabled watchdog ve workflow güvenlik kısıtlarını kapsar. Test operasyonel silmeleri yalnız bellek SQLite'tadır.
 
-Actions dry-run sonucu yayınlandıktan sonra bu dosyaya gerçek run bağlantısı ve sonucu eklenecektir; henüz gerçekleşmemiş bir production kontrolü başarılı gösterilmez. Secret değerleri bu rapora eklenmez.
+İlk gerçek [Actions dry-run](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44890606821) çalıştırıldı: secretsız CI job'unda 315 test geçti; storage adımı eksik beş repository secret nedeniyle `ACTIONS_SECRETS_NOT_CONFIGURED` ile durdu. `LIVE_DELETE=NOT_RUN`. Bu sonuç gerçek PostgreSQL/R2 kontrolü başarılıymış gibi sunulmaz. Secret değerleri rapora eklenmez. Watchdog gerçek koşusunda yakalanan repository API kök URL 404 sorunu giderildi ve regresyon testi eklendi; son doğrulama sonucu [makine raporunda](reports/actions-retention-validation.json) izlenir.
