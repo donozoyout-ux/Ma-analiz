@@ -209,5 +209,28 @@
       "manual_count_in_sample": 2
     }
   },
-  "auto_delete_repository_variable": "NOT_SET_OR_UNAVAILABLE"
+  "auto_delete_repository_variable": "NOT_SET_DEFAULT_FALSE",
+  "freshness_assessment_at_observation": {
+    "kind": "OFFLINE_ASSESSMENT_OF_REAL_API_OBSERVATION_NOT_ANOTHER_WORKFLOW_RUN",
+    "result": {
+      "status": "FAILED",
+      "errors": [
+        "NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE"
+      ],
+      "warnings": [],
+      "checks": {
+        "archive": {
+          "threshold_minutes": 45,
+          "last_success_age_seconds": 3654.72424,
+          "latest_run_id": 44927449780
+        },
+        "auto": {
+          "threshold_minutes": 120,
+          "last_success_age_seconds": 2848.72424,
+          "latest_run_id": 44928703385
+        }
+      },
+      "limitation": "THIS_WATCHDOG_CAN_ALSO_BE_DISABLED_AFTER_60_DAYS;_INDEPENDENT_MONITORING_REQUIRED"
+    }
+  }
 }

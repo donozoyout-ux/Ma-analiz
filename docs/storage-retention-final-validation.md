@@ -4,7 +4,19 @@ Başlangıç **3b16c54**, tarih **21 Kasım 2026**. Stage 5 lifecycle/retention,
 
 ## Canlı salt okunur doğrulama
 
-Bu raporun kod/test teslimatı sırasında yeni canlı rapor henüz **NOT_RUN**; Actions salt okunur kontrolü tamamlandığında bu bölüm gerçek sonuçla güncellenecek. Önceki Stage 7D preflight'ı yeni gözlem gibi sunulmaz.
+[Canlı rapor JSON'u](reports/stage7d1-live-retention-validation.json), [Actions 44933363146](https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44933363146), commit **0cffe7a**, job **136934612410**: bütün adımlar success. Yeni readonly planın zamanı **21 Kasım 2026 18:04:03 UTC / 21:04:03 Türkiye**. Aynı runner'da **544 passed, 14 warnings, 21,16 saniye**. Sonuç **NO_ELIGIBLE_RECORDS**; bu bir inceleme sonucudur, canlı silme başarısı değildir.
+
+- **PostgreSQL: 8.910.527 byte / 1.000.000.000 byte, yaklaşık 8,91 MB / %0,89, HEALTHY.**
+- Operasyonel kayıtlar: **1 maç + 1 sonuç = 2**. Oran, teknik veri, tahmin, analiz, kupon ve kupon öğesi: **0**.
+- **48 saati dolan=0; güvenle silinebilecek=0; korunan=2; production'da silinen=0.** Tarama tam; taranmayan kayıt, eksik yaş referansı ve bilinmeyen FK tablosu=0.
+- Maç UUID `e168fa17-c0f1-4e42-96c6-adf260d16bd8`, yaş **22,5676 saat**; sonuç UUID `9342733b-bd71-4174-9702-3cc66e8ee641`, verified_at temelli yaş **19,931 saat**. İkisi de yalnız **WITHIN_RETENTION_WINDOW** nedeniyle korunuyor.
+- İki **lifecycle** Parquet nesnesinin varlık/SHA-256/boyut/birer satır/metadata/tam içerik/SQL snapshot/ledger doğrulaması **PASS**; source identity **PASS**. SHA-256 ve değişmez key'ler JSON'dadır. Eski Stage 3 matches/results parçaları ve 1–1 FINAL Bayern–Köln zinciri de yeniden **VERIFIED**. Toplam dört arşiv ledger kaydı korunuyor.
+- Korunan metadata snapshot'ı: **system_settings=4, job_runs=12, archive_jobs=4, source-identity=1, verified-import journal=1**. Users ve kalıcı review/operator metadata şu an **0**; mevcut olmayan kullanıcı/review değerleri varmış gibi raporlanmaz. SQL'de read-only=`on`, isolation=`REPEATABLE_READ`, aynı snapshot sayıları değişmedi; cleanup success audit=0. Kullanıcı/ayar/audit/review gövdeleri dışa aktarılmadı.
+- Operasyonel tablolarda dead tuple tahmini **0**. Metadata tahminleri: job_runs=12, archive_jobs=12, system_settings=2 dead tuple. Autovacuum/track_counts **on**, öneri **MONITOR_AUTOVACUUM**; bu ölçümde acil manuel VACUUM gerekmiyor. VACUUM çalıştırılmadı.
+- Büyük tablolar: job_runs **98.304 byte** (table 16.384, index 81.920); active_matches **81.920** (16.384 + 65.536); archive_jobs **65.536** (16.384 + 49.152); match_results **57.344** (8.192 + 49.152). Bütün 17 uygulama tablosunun table/index/total/dead tuple dökümü JSON'da. Veritabanı toplamı kataloglar gibi ek alanlar da içerdiğinden bu toplamların eşit olması beklenmez.
+- İki silme bayrağı **false**, **SQL_WRITE=NOT_RUN, R2_WRITE=NOT_RUN, LIVE_DELETE=NOT_RUN**. Yeni kontrol SQL audit yazmadı. SQL scheduler audit'inde eski archive/auto run ID'leri gerçek Actions kayıtlarıyla eşleşti; son push dry-run **44933335342** de deleted=0 / LIVE_DELETE=NOT_RUN.
+
+Salt okunur GitHub kontrolünde AUTO_RETENTION_DELETE_ENABLED repository variable'ı **404 / NOT_SET_DEFAULT_FALSE**; değiştirilmedi. Bu anlık sonuç gelecekte uygun kayıt oluşmayacağı veya arşivlerin hiç değişmeyeceği garantisi değildir. Canlı DELETE izinleri/transaction başarısı bu görevde denenmedi.
 
 Yeni komut:
 
@@ -54,7 +66,7 @@ Crash senaryosu, DELETE flush'ından önce hata enjekte ederek SQL satırların�
 
 Cron değişmedi: archive UTC `7,22,37,52`, auto UTC `2`, watchdog UTC `41`; `concurrency=ma-analiz-retention`, cancel-in-progress=false. Connection-scope lifecycle advisory lock arşiv commit'leri boyunca tutulur. Aynı zaman slotu SQL ledger idempotency anahtarıyla tekrar işlenmez. Auto ayrıca güncel planı kendi üretir; snapshot/hash ve bağımlılıklar yeniden kontrol edilir; manuel approve-plan gerekmez, bağımsız auto bayrağı gerekir.
 
-İki başarılı schedule, sürekli 15 dakika/saat hizmet garantisi değildir. Gözlemde son archive yaklaşık 61 dakika önceydi; watchdog'un 45 dakikalık archive eşiğini aşar. Kaçırılmış nominal cron sayısı bu sınırlı API örneklerinden kesin hesaplanamaz. GitHub gecikme/atlama ve public repo 60 günlük hareketsizlik riski sürer; watchdog'un kendisi de çalışmayabilir. Harici bağımsız izleme/insan takibi gerekir. 48 saat bu nedenle veri güvenliği pahasına zorunlu silme garantisi yapılamaz.
+İki başarılı schedule, sürekli 15 dakika/saat hizmet garantisi değildir. Gözlemde son archive yaklaşık 61 dakika önceydi; watchdog'un 45 dakikalık archive eşiğini aşar. Gerçek API snapshot'ı mevcut `assess` fonksiyonundan offline tekrar geçirildi: **FAILED / NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE**; auto henüz 120 dakika eşiğini aşmamıştı. Bu, yeni bir scheduled watchdog çalışması değildir; ayrım JSON'da etiketlidir. Kaçırılmış nominal cron sayısı bu sınırlı API örneklerinden kesin hesaplanamaz. GitHub gecikme/atlama ve public repo 60 günlük hareketsizlik riski sürer; watchdog'un kendisi de çalışmayabilir. Harici bağımsız izleme/insan takibi gerekir. 48 saat bu nedenle veri güvenliği pahasına zorunlu silme garantisi yapılamaz.
 
 ## Kapasite, VACUUM ve bildirimler
 
