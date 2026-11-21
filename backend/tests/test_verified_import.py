@@ -307,7 +307,8 @@ def test_ambiguous_initial_sql_commit_is_reconciled_without_second_match(session
 
 @pytest.mark.parametrize("busy_on", [None, 1, 2, 3])
 @pytest.mark.parametrize("event_identity", [None, "reviewed-fixture-lock-scope"])
-def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch, busy_on, event_identity):
+@pytest.mark.parametrize("override", [False, True])
+def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch, busy_on, event_identity, override):
     from app.db import session as db
     class Scalar:
         def __init__(self, value): self.value = value
@@ -326,14 +327,16 @@ def test_production_lock_releases_on_success_or_busy_without_waiting(monkeypatch
     class Engine:
         @contextmanager
         def connect(self): yield connection
-    monkeypatch.setattr(db, "engine", Engine())
+    active_engine = Engine()
+    monkeypatch.setattr(db, "engine", None if override else active_engine)
+    kwargs = {"event_identity": event_identity, "engine_override": active_engine if override else None}
     if busy_on:
         with pytest.raises(job.ImportBlocked, match="IMPORT_ALREADY_RUNNING"):
-            with job.production_session(Settings(_env_file=None), event_identity=event_identity):
+            with job.production_session(Settings(_env_file=None), **kwargs):
                 pytest.fail("busy lock must reject before opening a SQL session")
         assert connection.unlocks == list(reversed(connection.locks[:-1]))
     else:
-        with job.production_session(Settings(_env_file=None), event_identity=event_identity): pass
+        with job.production_session(Settings(_env_file=None), **kwargs): pass
         assert len(connection.locks) == 3
         from app.storage.lifecycle import LOCK_ID
         from app.providers.identity import lock_id

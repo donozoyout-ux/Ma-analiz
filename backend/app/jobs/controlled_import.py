@@ -34,6 +34,9 @@ def _finish_offline_archive(session, store, source_key, *, now):
             or not index or index.value["match_id"] != str(match.id)):
         raise ReviewBlocked("DURABLE_IMPORT_PROOF_CHANGED")
     record = lc.make_record(session, match, match, now=now, hours=48)
+    from app.storage.import_permission import ImmutableImportStore
+    if isinstance(store, ImmutableImportStore):
+        store.keys = {record.key}
     if set(record.blockers) & {"REUSE_PERMISSION_NOT_CONFIRMED", "PARTITION_IDENTITY_MISSING"}:
         raise ReviewBlocked("ARCHIVE_PERMISSION_OR_PARTITION_BLOCKED")
     # Exactly one row: use Stage 5 format/verifier and Stage 3's immutable archive API.
@@ -59,8 +62,9 @@ def _finish_offline_archive(session, store, source_key, *, now):
     if (journal.value["phase"] != "ARCHIVE_VERIFIED" or journal.value["receipts"] != receipts
             or lc.sql_snapshot(match) != journal.value["sql_snapshot"] or lc.verify_record(session, store, record)):
         raise ReviewBlocked("FINAL_SQL_R2_READBACK_FAILED")
-    return {"status": "OFFLINE_VERIFIED", "match_id": str(match.id), "receipts": receipts,
-            "LIVE_DELETE": "NOT_RUN", "production_writes": "NOT_RUN"}
+    production = session.get_bind().dialect.name == "postgresql"
+    return {"status": "VERIFIED" if production else "OFFLINE_VERIFIED", "match_id": str(match.id), "receipts": receipts,
+            "LIVE_DELETE": "NOT_RUN", "production_writes": "VERIFIED" if production else "NOT_RUN"}
 
 
 def exercise_offline_import(session, store, *, revalidate, source_key, review_id, now):

@@ -1,4 +1,4 @@
-"""Durable SQL review/journal preparation, executable only with offline adapters in 7C."""
+"""Durable review/journal: offline by default; scoped Stage 7D operator capability for PG."""
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
@@ -24,6 +24,9 @@ class ReviewBlocked(RuntimeError):
 
 
 def offline_only(session, store=None):
+    from app.storage.import_permission import check_permission
+    if check_permission(session, store):
+        return
     if session.get_bind().dialect.name != "sqlite" or (store is not None and not isinstance(store, InMemoryObjectStore)):
         raise ReviewBlocked("STAGE7C_PRODUCTION_PERSIST_DISABLED")
 
@@ -100,7 +103,7 @@ class ReviewRepository:
         self.session.flush()
         return version
 
-    def decide(self, version, *, state, reviewer, reason, now, previous=None):
+    def decide(self, version, *, state, reviewer, reason, now, previous=None, authorization_ref=None):
         offline_only(self.session)
         if state not in STATES or not isinstance(reviewer, str) or not 1 <= len(reviewer.strip()) <= 80 or not isinstance(reason, str) or not 1 <= len(reason.strip()) <= 500:
             raise ReviewBlocked("REVIEW_ACTOR_AND_REASON_REQUIRED")
@@ -127,6 +130,8 @@ class ReviewRepository:
         review = {"evidence_sha256": version, "state": state, "reviewer": reviewer, "reason": reason,
                   "source_version": stored.value["evidence"]["source_version"],
                   "decided_at": now.isoformat(), "previous": previous, "schema_version": 1}
+        if authorization_ref:
+            review["authorization_ref"] = authorization_ref
         review_id = digest(review)
         immutable_setting(self.session, "review-audit:" + review_id, review)
         history["reviews"].append(review_id)
@@ -152,8 +157,8 @@ class ReviewRepository:
         return review.value
 
 
-def prepare_fixture_sql(session, candidate, *, review_id, now):
-    """Controlled offline extension of the Stage 3 SQL journal, not a production API."""
+def prepare_fixture_sql(session, candidate, *, review_id, now, authorization_ref=None):
+    """Stage 3 journal extension; PG requires the Stage 7D session-local capability."""
     offline_only(session)
     ReviewRepository(session).approved(candidate, review_id, now=now)
     row = candidate["evidence"]["observation"]
@@ -215,6 +220,8 @@ def prepare_fixture_sql(session, candidate, *, review_id, now):
     journal = SystemSetting(key=journal_key, value={"schema_version": 1, "phase": "SQL_COMMITTED", "identity": expected,
         "match_id": str(match.id), "sql_snapshot": sql_snapshot(match), "review_id": review_id,
         "evidence_sha256": candidate["evidence_sha256"], "receipts": []})
+    if authorization_ref:
+        journal.value = {**journal.value, "operator_grant_sha256": authorization_ref}
     session.add(journal)
     immutable_setting(session, "import-audit:" + digest([candidate["source_key"], "SQL_COMMITTED"]),
         {"phase": "SQL_COMMITTED", "match_id": str(match.id), "review_id": review_id,

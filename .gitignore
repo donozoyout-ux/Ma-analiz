@@ -12,3 +12,4 @@ dist/
 
 *.tsbuildinfo
 backend/.collector/
+backend/.trusted-fixture/

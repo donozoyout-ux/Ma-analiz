@@ -238,15 +238,16 @@ def persist_verified(session, store, candidate, *, now, retention_days=14):
 
 
 @contextmanager
-def production_session(settings, *, event_identity=None):
+def production_session(settings, *, event_identity=None, engine_override=None):
     from app.db.session import engine
     from sqlalchemy.orm import Session
-    if engine is None:
+    active_engine = engine_override if engine_override is not None else engine
+    if active_engine is None:
         raise ImportBlocked("DATABASE_NOT_CONFIGURED")
     event_lock = lock_id(event_identity or fixture_key({"provider": "openligadb", "provider_match_id": "83237",
                                     "league_id": "de.bl1", "start_time": "2026-11-20T19:30:00Z",
                                     "home_team": "FC Bayern München", "away_team": "1. FC Köln"}))
-    with engine.connect() as connection:
+    with active_engine.connect() as connection:
         # A connection-scoped lock survives the archive tracker's commits. A second
         # importer fails immediately; no expiring lease can admit concurrent writers.
         held = []

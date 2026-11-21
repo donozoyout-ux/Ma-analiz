@@ -1,0 +1,52 @@
+name: Controlled import read-only preflight
+run-name: Stage 7D storage preflight (no writes)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ma-analiz-import-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Offline safety tests (no production secrets)
+        run: |
+          touch .env
+          cd backend
+          python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py
+      - name: Read-only SQL and R2 inspection
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+          AUTO_RETENTION_DELETE_ENABLED: 'false'
+          OPERATIONAL_DELETE_ENABLED: 'false'
+        run: python -m app.jobs.live_import --preflight --output stage7d-preflight.json
+      - name: Safe preflight evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stage7d-preflight-${{ github.run_id }}
+          path: backend/stage7d-preflight.json
+          if-no-files-found: warn
+          retention-days: 14
