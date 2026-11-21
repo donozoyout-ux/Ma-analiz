@@ -56,6 +56,15 @@ def vacuum_assessment(session):
 
 
 def scheduler_report(session, now):
+    actions = session.get(SystemSetting, "scheduler:github-actions-retention")
+    if actions:
+        ages = {}
+        for mode in ("archive", "auto"):
+            at = lifecycle.utc(actions.value.get(mode, {}).get("completed_at"))
+            ages[mode] = (now-at).total_seconds() if at else None
+        fresh = all(ages[m] is not None and 0 <= ages[m] <= limit for m, limit in (("archive", 2700), ("auto", 7200)))
+        return {"owner": "github-actions", "status": "FRESH" if fresh else "STALE_OR_NOT_INITIALIZED",
+                "age_seconds": ages, "last_runs": actions.value}
     heartbeat = session.get(SystemSetting, "scheduler:retention-heartbeat")
     last_run = session.get(SystemSetting, "lifecycle:last-auto-run")
     if not heartbeat:

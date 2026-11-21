@@ -1,3 +1,7 @@
+## GitHub Actions: ücretsiz retention scheduler
+
+Yalnız Render web servisiyle kullanım: 15 dakikada R2 arşivi, saatte bir Stage 5 retention kontrolü GitHub Actions'ta çalışır. İlk kurulumda DELETE kapalıdır. Beş repository secret ve ileride tek `AUTO_RETENTION_DELETE_ENABLED` repository variable'ı kullanılır. Keepalive ve web Start Command korunur; ücretli worker/cron blueprint tanımları kaldırıldı. [Kurulum, Actions dry-run ve schedule/watchdog sınırları](docs/github-actions-retention.md).
+
 ## Beşinci aşama: otomatik 48 saat temizliği
 
 Bağımsız worker'da bir kez `AUTO_RETENTION_DELETE_ENABLED=true` ayarlandığında saatlik temizlik kendi güncel planını/hash'ini üretir; manuel `--approve-plan` istemez. Varsayılan false. 15 dakikalık arşivleme, içerik/SQL snapshot/ilişki doğrulamaları, atomik audit, ayrı scheduler döngüsü ve heartbeat korunur. Bu oturumda canlı silme veya aktivasyon yapılmadı. [Kurulum, kontroller, VACUUM değerlendirmesi ve test raporu](docs/scraping-first-stage5.md).
