@@ -27,9 +27,9 @@ def validate_clock(observed_at):
     return observed_at.astimezone(timezone.utc)
 
 
-def openfootball(payload, league, *, observed_at, source_url):
+def openfootball(payload, league, *, observed_at, source_url, scope=None):
     validate_clock(observed_at)
-    scope = PILOT[league]
+    scope = PILOT[league] if scope is None else scope
     if not isinstance(payload, dict) or payload.get("name") != scope["openfootball_name"]:
         raise ValueError("LEAGUE_RESOURCE_MISMATCH")
     # Reuse the conservative score/time decoder, then explicitly scope its league.
@@ -48,9 +48,10 @@ def openfootball(payload, league, *, observed_at, source_url):
     return rows
 
 
-def openligadb(payload, league, shortcut, league_id, matchday, *, observed_at, source_url):
+def openligadb(payload, league, shortcut, league_id, matchday, *, observed_at, source_url, scope=None):
     observed_at = validate_clock(observed_at)
-    if (shortcut, league_id, matchday) not in PILOT[league]["oldb"]:
+    scope = PILOT[league] if scope is None else scope
+    if (shortcut, league_id, matchday) not in scope["oldb"]:
         raise ValueError("UNREVIEWED_LEAGUE_RESOURCE")
     if not isinstance(payload, list):
         raise ValueError("SOURCE_SCHEMA_INVALID")
@@ -63,7 +64,7 @@ def openligadb(payload, league, shortcut, league_id, matchday, *, observed_at, s
         kickoff = utc(raw.get("matchDateTimeUTC"))
         if kickoff is None:
             raise ValueError("UTC_KICKOFF_MISSING")
-        if kickoff.date().isoformat() != PILOT[league]["date"]:
+        if kickoff.date().isoformat() != scope["date"]:
             continue
         home, away = raw.get("team1", {}), raw.get("team2", {})
         ids = [raw.get("matchID"), home.get("teamId"), away.get("teamId")]

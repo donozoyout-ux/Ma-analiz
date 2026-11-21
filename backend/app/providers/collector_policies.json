@@ -1,0 +1,20 @@
+{
+  "reviewed_on": "2026-11-21",
+  "expires_on": "2026-12-21",
+  "documents": {
+    "openligadb_licence": {
+      "url": "https://www.openligadb.de/lizenz",
+      "sha256": "eec9a145cf65b3c45211459ec0339d426f19c534b49884068ee5c8565dc90c98",
+      "format": "html-main-card-visible-links-v1"
+    },
+    "openligadb_terms": {
+      "url": "https://www.openligadb.de/nutzungsbedingungen",
+      "sha256": "28ee512bfec3aa0bbbb17a2b0f044760e740e42a5b1611aae1fd197b6e1fe486",
+      "format": "html-main-card-visible-links-v1"
+    },
+    "openfootball_licence": {
+      "url": "https://raw.githubusercontent.com/openfootball/football.json/master/LICENSE.md",
+      "sha256": "36ffd9dc085d529a7e60e1276d73ae5a030b020313e6c5408593a6ae2af39673"
+    }
+  }
+}
