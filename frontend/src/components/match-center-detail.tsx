@@ -6,6 +6,7 @@ import { type Match, formatMatchTime, statusLabel, verifiedScoreText } from "@/l
 import { useMatchRead } from "@/lib/use-match-read";
 import { displayStatus } from "@/lib/turkish";
 import { MatchOdds } from "./match-odds";
+import { MatchShareActions } from "./match-share-actions";
 
 export function MatchCenterDetail({id,source="all"}:{id:string;source?:"all"|"history"}) {
  const {data:match,error,refresh} = useMatchRead<Match>(`match-center/${encodeURIComponent(id)}?source=${source}`);
@@ -14,7 +15,7 @@ export function MatchCenterDetail({id,source="all"}:{id:string;source?:"all"|"hi
  if(!match)return <section className="card empty" role="status">Maç kaydı doğrulanıyor…</section>;
  const score=verifiedScoreText(match.result);
  return <div className="match-detail-stack">
-  <Link className="text-link center-back" href="/matches"><ArrowLeft size={15}/> Maç Merkezi</Link>
+  <div className="match-detail-toolbar"><Link className="text-link center-back" href="/matches"><ArrowLeft size={15}/> Maç Merkezi</Link><MatchShareActions homeTeam={match.home_team} awayTeam={match.away_team}/></div>
   <section className="match-hero card center-hero">
    <div><div className="section-kicker">{match.league_name??"Lig belirtilmedi"} · {match.season??"Sezon belirtilmedi"}</div><h2>{match.home_team}<span>karşı</span>{match.away_team}</h2><p><CalendarDays size={15}/>{formatMatchTime(match.start_time)} · TSİ</p><span className="badge">{statusLabel(match.status)}</span></div>
    <div className="center-score"><strong>{score??"— : —"}</strong><span>{score?"Doğrulanmış final skor":"Skor henüz doğrulanmadı"}</span>{score&&<small><ShieldCheck size={14}/>{formatMatchTime(match.result?.verified_at)}</small>}</div>
