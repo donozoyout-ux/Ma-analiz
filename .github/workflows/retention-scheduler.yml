@@ -1,5 +1,5 @@
 name: Retention scheduler
-run-name: Retention ${{ github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
+run-name: Retention ${{ github.event_name == 'pull_request' && 'tests-only (no storage)' || github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
 
 on:
   pull_request:
