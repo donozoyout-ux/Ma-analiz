@@ -75,7 +75,7 @@ def snapshot(engine):
             SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public'
             ORDER BY tablename,indexname
         """)).mappings()]
-    return {"tables":data,"columns_sha256":digest(columns),"constraints":constraints,"indexes_sha256":digest(indexes)}
+    return {"tables":data,"columns":columns,"columns_sha256":digest(columns),"constraints":constraints,"indexes_sha256":digest(indexes)}
 
 
 class RecoveryHarness:
@@ -173,7 +173,16 @@ class RecoveryHarness:
         if hashlib.sha256(payload).hexdigest() != checksum: raise RecoveryFailure("BACKUP_CHECKSUM_MISMATCH")
         result = self.raw_restore(name,engine,payload=payload)
         if result.returncode: raise RecoveryFailure("PG_RESTORE_FAILED")
-        if snapshot(engine) != expected: raise RecoveryFailure("RESTORE_CONTENT_MISMATCH")
+        actual=snapshot(engine)
+        if actual != expected:
+            self.report["last_restore_mismatch"]={
+                "sections":[k for k in expected if expected[k]!=actual.get(k)],
+                "tables":[k for k in expected["tables"] if expected["tables"][k]!=actual["tables"].get(k)],
+                "columns":{k:{"expected":expected["columns"][k],"actual":actual["columns"].get(k)}
+                           for k in expected["columns"] if expected["columns"][k]!=actual["columns"].get(k)},
+                "constraints": {"expected":expected["constraints"],"actual":actual["constraints"]}
+                    if expected["constraints"]!=actual["constraints"] else None}
+            raise RecoveryFailure("RESTORE_CONTENT_MISMATCH")
         return {"status":"PASS","sha256":checksum,"bytes":len(payload)}
 
     def close(self):
