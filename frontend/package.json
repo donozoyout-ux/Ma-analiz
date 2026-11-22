@@ -11,7 +11,9 @@
     "test:single-service": "node scripts/test-single-service.mjs",
     "test": "node --test scripts/test-match-filters.mjs scripts/test-navigation.mjs scripts/test-football-summary.mjs scripts/test-service-readiness.mjs scripts/test-match-center.mjs scripts/test-match-share.mjs scripts/test-stage7i3-readonly-contract.mjs scripts/test-stage7i4-live-get-probe.mjs scripts/test-stage7i6-match-center.mjs scripts/test-dashboard-tilt.mjs",
     "probe:read-only": "node scripts/run-stage7i4-live-probe.mjs --live",
-    "test:dashboard-browser": "node scripts/test-dashboard-browser.mjs"
+    "test:dashboard-browser": "node scripts/test-dashboard-browser.mjs",
+    "test:beta-integration-browser": "node scripts/test-beta-integration-browser.mjs",
+    "test:beta-integration": "python ../backend/tests/run_beta_integration.py"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
