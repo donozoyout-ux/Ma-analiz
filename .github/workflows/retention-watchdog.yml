@@ -26,7 +26,7 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r backend/requirements.txt
-      - name: Detect stale, disabled, failed or cancelled retention schedules
+      - name: Read scheduled run/attempt evidence and storage health (never dispatch)
         working-directory: backend
         env:
           GH_TOKEN: ${{ github.token }}
@@ -45,7 +45,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: watchdog-${{ github.run_id }}
+          name: watchdog-${{ github.run_id }}-${{ github.run_attempt }}
           path: backend/watchdog-report.json
           retention-days: 14
           if-no-files-found: warn

@@ -1,0 +1,184 @@
+{
+  "evidence_kind": "HISTORICAL_REAL_GITHUB_LOGS_AND_EXISTING_READ_ONLY_ARTIFACT;_NOT_NEW_LIVE_STORAGE_PROBE",
+  "observed_at": "2026-11-22T09:17:22.610792+00:00",
+  "scheduled_runs": [
+    {
+      "id": 44978081445,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention auto",
+      "created_at": "2026-11-22T02:52:43Z",
+      "run_started_at": "2026-11-22T02:52:43Z",
+      "updated_at": "2026-11-22T02:53:55Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44975402609,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention archive",
+      "created_at": "2026-11-22T02:17:37Z",
+      "run_started_at": "2026-11-22T02:17:37Z",
+      "updated_at": "2026-11-22T02:19:02Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44959053836,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention auto",
+      "created_at": "2026-11-21T22:53:34Z",
+      "run_started_at": "2026-11-21T22:53:34Z",
+      "updated_at": "2026-11-21T22:54:41Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44955084514,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention archive",
+      "created_at": "2026-11-21T22:07:31Z",
+      "run_started_at": "2026-11-21T22:07:31Z",
+      "updated_at": "2026-11-21T22:08:48Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44928703385,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention auto",
+      "created_at": "2026-11-21T17:11:45Z",
+      "run_started_at": "2026-11-21T17:11:45Z",
+      "updated_at": "2026-11-21T17:13:09Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 44927449780,
+      "run_attempt": 1,
+      "event": "schedule",
+      "display_title": "Retention archive",
+      "created_at": "2026-11-21T16:58:19Z",
+      "run_started_at": "2026-11-21T16:58:19Z",
+      "updated_at": "2026-11-21T16:59:29Z",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "history_total_count": 6,
+  "watchdog_observations": [
+    {
+      "run_id": 44935839044,
+      "event": "workflow_dispatch",
+      "observed_at": "2026-11-21T18:30:30.839065+00:00",
+      "state": "ARCHIVE_STALE",
+      "errors": [
+        "ARCHIVE_SQL_AUDIT_STALE",
+        "NO_RECENT_SUCCESSFUL_ARCHIVE_SCHEDULE"
+      ],
+      "archive_success_age_seconds": 5531.839065,
+      "storage_evidence": "VERIFIED",
+      "audit_run_id_match": true
+    },
+    {
+      "run_id": 44956133644,
+      "event": "schedule",
+      "observed_at": "2026-11-21T22:20:02.172242+00:00",
+      "state": "AUTO_STALE",
+      "errors": [
+        "AUTO_SQL_AUDIT_STALE",
+        "NO_RECENT_SUCCESSFUL_AUTO_SCHEDULE"
+      ],
+      "auto_success_age_seconds": 18497.172242,
+      "storage_evidence": "VERIFIED",
+      "audit_run_id_match": true
+    },
+    {
+      "run_id": 44976919486,
+      "event": "schedule",
+      "observed_at": "2026-11-22T02:37:39.575558+00:00",
+      "state": "AUTO_STALE",
+      "errors": [
+        "AUTO_SQL_AUDIT_STALE",
+        "NO_RECENT_SUCCESSFUL_AUTO_SCHEDULE"
+      ],
+      "auto_success_age_seconds": 13445.575558,
+      "storage_evidence": "VERIFIED",
+      "audit_run_id_match": true
+    }
+  ],
+  "invocation_summaries": [
+    {
+      "run_id": 44955084514,
+      "mode": "archive",
+      "status": "SKIPPED",
+      "storage_status": "SKIPPED",
+      "scanned": 0,
+      "archive_failures": 0,
+      "sql_audit": "RECORDED"
+    },
+    {
+      "run_id": 44975402609,
+      "mode": "archive",
+      "status": "SKIPPED",
+      "storage_status": "SKIPPED",
+      "scanned": 0,
+      "archive_failures": 0,
+      "sql_audit": "RECORDED"
+    },
+    {
+      "run_id": 44978081445,
+      "mode": "auto",
+      "status": "SKIPPED",
+      "storage_status": "DRY_RUN",
+      "scanned": 2,
+      "archive_failures": 0,
+      "sql_audit": "RECORDED"
+    }
+  ],
+  "existing_readback": {
+    "run_id": 44955849151,
+    "status": "NO_ELIGIBLE_RECORDS",
+    "as_of": "2026-11-21T22:17:05.772294+00:00",
+    "scan_complete": true,
+    "over_48h": 0,
+    "eligible": 0,
+    "capacity_status": "HEALTHY",
+    "read_only": "on",
+    "metadata_unchanged": true,
+    "target_status": "VERIFIED",
+    "incomplete_ledgers": 0,
+    "sql_scheduler_audit": {
+      "archive": {
+        "completed_at": "2026-11-21T22:08:27.806163+00:00",
+        "run_id": "44955084514",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      },
+      "auto": {
+        "completed_at": "2026-11-21T17:12:47.338201+00:00",
+        "run_id": "44928703385",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      },
+      "dry-run": {
+        "completed_at": "2026-11-21T18:30:37.786301+00:00",
+        "run_id": "44935817256",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      }
+    }
+  },
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "AUTO_RETENTION_DELETE_ENABLED": false,
+  "OPERATIONAL_DELETE_ENABLED": false
+}

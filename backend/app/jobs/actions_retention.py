@@ -73,9 +73,34 @@ def normalize(report):
             "records_failed": max(1, report.get("records_failed", 0)), "reason": "RETENTION_STORAGE_NOT_READY"}
 
 
-def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None):
+def record_observation(previous, mode, summary, *, run_id, started_at, completed_at):
+    """Bounded invocation evidence, separate from the Stage 5 slot ledger.
+
+    Manual invocations must not replace schedule evidence. A duplicate records
+    this invocation's no-op, never borrows the previous run's write count.
+    """
+    raw_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    run_attempt = int(raw_attempt) if re.fullmatch(r"[1-9][0-9]{0,5}", raw_attempt) else None
+    raw_event = os.environ.get("GITHUB_EVENT_NAME", "local")
+    event = raw_event if raw_event in {"schedule", "workflow_dispatch", "push", "local"} else "unknown"
+    entry = {"schema_version": 2, "event": event, "run_id": run_id, "run_attempt": run_attempt,
+        "started_at": started_at.isoformat(), "completed_at": completed_at.isoformat(),
+        **{k: summary.get(k) for k in ("status", "storage_status", "execution_status", "archive_records_written",
+            "archive_failures", "LIVE_DELETE", "deleted", "plan_digest", "slot")}}
+    value = {**previous, mode: entry}
+    if event == "schedule" and mode in {"archive", "auto"}:
+        scheduled = dict(previous.get("scheduled_runs", {}))
+        rows = [r for r in scheduled.get(mode, []) if (r.get("run_id"), r.get("run_attempt")) != (run_id, run_attempt)]
+        # At most 64 entries total. No table or critical history is pruned.
+        scheduled[mode] = (rows + [entry])[-32:]
+        value["scheduled_runs"] = scheduled
+    return value
+
+
+def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None, clock=None):
     if mode not in {"dry-run", "archive", "auto"}: raise ValueError("INVALID_ACTIONS_RETENTION_MODE")
-    now = now or datetime.now(timezone.utc)
+    clock = clock or (lambda: datetime.now(timezone.utc))
+    now = now or clock()
     from app.core.config import get_settings
     cfg = cfg or get_settings()
     # Even an accidentally enabled repo variable cannot turn a dry-run into DELETE.
@@ -135,14 +160,17 @@ def run_once(mode, *, now=None, cfg=None, session_factory=None, runner=None):
             summary = public_summary(core or {"status": result.get("status"), "LIVE_DELETE": "NOT_RUN", "deleted": 0})
             summary.update(status=safe_code(result.get("status")), mode=mode,
                            sql_audit="RECORDED", reason=safe_code(result.get("reason"), "NONE"), slot=slot)
+            summary["execution_status"] = "EXECUTED" if core else "NOT_EXECUTED"
+            summary["archive_records_written"] = (number(core.get("records_written")) if mode == "archive"
+                else number(core.get("archive_repair", {}).get("records_written"))) if core else 0
+            if not core:
+                summary["storage_status"] = "NOT_RUN"
             if result.get("reason") == "IDEMPOTENT_DUPLICATE":
                 summary["LIVE_DELETE"], summary["deleted"] = "NOT_RUN", 0
             phase = "SCHEDULER_AUDIT"
             state = session.get(SystemSetting, "scheduler:github-actions-retention")
             previous = state.value if state else {}
-            value = {**previous, mode: {"completed_at": now.isoformat(), "status": summary["status"],
-                     "run_id": run_id, "slot": slot, "LIVE_DELETE": summary["LIVE_DELETE"],
-                     "deleted": summary["deleted"], "plan_digest": summary["plan_digest"]}}
+            value = record_observation(previous, mode, summary, run_id=run_id, started_at=now, completed_at=clock())
             if state: state.value = value
             else: session.add(SystemSetting(key="scheduler:github-actions-retention", value=value))
             session.commit()
@@ -167,6 +195,11 @@ def emit(report, code):
         return value
     report = scrub(report)
     print(json.dumps(report, ensure_ascii=True, sort_keys=True))
+    if path := os.environ.get("RETENTION_REPORT_PATH"):
+        try:
+            Path(path).write_text(json.dumps(report, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        except OSError:
+            print("::error::RETENTION_REPORT_WRITE_FAILED")
     if os.environ.get("GITHUB_ACTIONS") == "true":
         if report.get("capacity_status") in {"WARNING", "HIGH", "CRITICAL"}:
             print("::warning::POSTGRES_CAPACITY_" + report["capacity_status"] + "; archive and review blockers, never force-delete unverified data.")

@@ -121,7 +121,8 @@ def test_workflow_is_pinned_least_privilege_and_push_is_dry_run():
     root=Path(__file__).resolve().parents[2]
     workflow=(root/".github/workflows/retention-scheduler.yml").read_text()
     assert "cancel-in-progress: false" in workflow and "group: ma-analiz-retention" in workflow
-    assert "contents: read" in workflow and "pull_request" not in workflow
+    assert "contents: read" in workflow
+    assert "github.event_name != 'pull_request' &&" in workflow  # PR tests cannot access the retention job
     assert "github.event_name != 'push'" in workflow and "default: dry-run" in workflow
     assert "vars.AUTO_RETENTION_DELETE_ENABLED == 'true'" in workflow
     assert 'if [ "$RETENTION_MODE" = auto ]' in workflow and '--mode dry-run' in workflow
