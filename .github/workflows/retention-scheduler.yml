@@ -2,6 +2,12 @@ name: Retention scheduler
 run-name: Retention ${{ github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/retention-scheduler.yml'
+      - '.github/workflows/retention-watchdog.yml'
+      - 'backend/**'
   schedule:
     - cron: '7,22,37,52 * * * *'
     - cron: '2 * * * *'
@@ -26,7 +32,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: ma-analiz-retention
+  # PR validation cannot replace a pending production maintenance run.
+  group: ma-analiz-retention${{ github.event_name == 'pull_request' && format('-pr-{0}', github.event.pull_request.number) || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -53,7 +60,8 @@ jobs:
     needs: validate
     # Tests-only fixes still run the full suite, without SQL audit/archive writes.
     # This opt-out applies only to push; scheduled and manual maintenance are unchanged.
-    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, '[tests-only]') }}
+    # PRs run secret-free tests only; never open the production audit connection.
+    if: ${{ github.event_name != 'pull_request' && (github.event_name != 'push' || !contains(github.event.head_commit.message, '[tests-only]')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
@@ -79,8 +87,17 @@ jobs:
           OPERATIONAL_DELETE_ENABLED: 'false'
           AUTO_RETENTION_DELETE_ENABLED: ${{ github.event_name != 'push' && (github.event_name == 'schedule' || inputs.mode == 'auto') && vars.AUTO_RETENTION_DELETE_ENABLED == 'true' && 'true' || 'false' }}
           RETENTION_MODE: ${{ github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
+          RETENTION_REPORT_PATH: retention-report.json
         run: |
           if [ "$RETENTION_MODE" = auto ] && [ "$AUTO_RETENTION_DELETE_ENABLED" = true ]; then
             python -m app.jobs.actions_retention --mode dry-run
           fi
           python -m app.jobs.actions_retention --mode "$RETENTION_MODE"
+      - name: Safe invocation evidence (not proof of new R2 data)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: retention-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/retention-report.json
+          retention-days: 14
+          if-no-files-found: warn

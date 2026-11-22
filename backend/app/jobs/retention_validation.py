@@ -95,14 +95,24 @@ def scheduler_audit(session):
     from app.providers.result_sources import utc
     item = session.get(SystemSetting, "scheduler:github-actions-retention")
     result = {}
-    for mode in ("archive", "auto", "dry-run"):
-        row = item.value.get(mode, {}) if item else {}
+    def safe_row(row):
         at = utc(row.get("completed_at"))
         run_id = str(row.get("run_id", ""))
-        result[mode] = {"completed_at": at.isoformat() if at else None,
-            "run_id": run_id if run_id.isdigit() and len(run_id) <= 20 else None,
+        return {"completed_at": at.isoformat() if at else None,
+            "run_id": run_id if run_id.isdigit() and len(run_id) <= 24 else None,
             "status": safe_code(row.get("status")), "LIVE_DELETE": safe_code(row.get("LIVE_DELETE")),
-            "deleted": row.get("deleted") if type(row.get("deleted")) is int else None}
+            "deleted": row.get("deleted") if type(row.get("deleted")) is int else None,
+            "schema_version": 2 if row.get("schema_version") == 2 else 1,
+            "event": row.get("event") if row.get("event") in {"schedule", "workflow_dispatch", "push", "local"} else None,
+            "run_attempt": row.get("run_attempt") if type(row.get("run_attempt")) is int and 1 <= row["run_attempt"] <= 999999 else None,
+            "storage_status": safe_code(row.get("storage_status")),
+            "execution_status": safe_code(row.get("execution_status")),
+            "archive_records_written": row.get("archive_records_written") if type(row.get("archive_records_written")) is int and row["archive_records_written"] >= 0 else None,
+            "archive_failures": row.get("archive_failures") if type(row.get("archive_failures")) is int and row["archive_failures"] >= 0 else None}
+    for mode in ("archive", "auto", "dry-run"):
+        result[mode] = safe_row(item.value.get(mode, {}) if item else {})
+    result["scheduled_runs"] = {mode: [safe_row(row) for row in item.value.get("scheduled_runs", {}).get(mode, [])[-32:]]
+        if item else [] for mode in ("archive", "auto")}
     return result
 
 

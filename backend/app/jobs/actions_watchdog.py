@@ -24,34 +24,21 @@ def stamp(value):
 
 
 def assess(workflow, runs, repo, *, now, storage=None):
-    errors, warnings, checks = [], [], {}
-    if workflow.get("state") != "active": errors.append("RETENTION_WORKFLOW_NOT_ACTIVE")
-    created = stamp(workflow.get("created_at"))
-    for mode, minutes in (("archive", 45), ("auto", 120)):
-        scheduled = [r for r in runs if r.get("event") == "schedule" and
-                     r.get("display_title", "").startswith(f"Retention {mode}")]
-        completed = [r for r in scheduled if r.get("conclusion") == "success"]
-        success = max(completed, key=lambda r:r.get("created_at", ""), default=None)
-        at = stamp(success.get("created_at")) if success else None
-        age = (now-at).total_seconds() if at else None
-        bootstrap = created and 0 <= (now-created).total_seconds() < minutes*60
-        if age is None or age > minutes*60 or age < 0:
-            (warnings if bootstrap and not success else errors).append(f"NO_RECENT_SUCCESSFUL_{mode.upper()}_SCHEDULE")
-        latest = max(scheduled, key=lambda r:r.get("created_at", ""), default=None)
-        if latest and latest.get("conclusion") in {"failure", "cancelled", "timed_out", "action_required", "startup_failure"}:
-            errors.append(f"LATEST_{mode.upper()}_FAILED_OR_CANCELLED")
-        checks[mode] = {"threshold_minutes": minutes, "last_success_age_seconds": age,
-                        "latest_run_id": latest.get("id") if latest else None}
+    from app.jobs.scheduler_health import schedule_checks
+    observed = schedule_checks(workflow, runs, now=now)
+    errors, warnings = observed["errors"], observed["warnings"]
     pushed = stamp(repo.get("pushed_at"))
     if repo.get("private") is False and pushed and (now-pushed).days >= 50:
         warnings.append("PUBLIC_REPO_LAST_PUSH_OLDER_THAN_50_DAYS_REVIEW_INACTIVITY")
     from app.jobs.scheduler_health import extend
-    return extend({"status": "FAILED" if errors else "PASS", "errors": errors, "warnings": warnings, "checks": checks,
+    return extend({"status": "FAILED" if errors else "PASS", "errors": errors, "warnings": warnings, "checks": observed["checks"], "schedule_states": observed["schedule_states"],
             "limitation": "THIS_WATCHDOG_CAN_ALSO_BE_DISABLED_AFTER_60_DAYS;_INDEPENDENT_MONITORING_REQUIRED"},
             runs=runs, storage=storage, now=now)
 
 
 def publish(result):
+    from app.jobs.scheduler_health import alert_payload
+    result["alert"] = alert_payload(result)
     print(json.dumps(result, sort_keys=True))
     output = os.environ.get("WATCHDOG_REPORT_PATH")
     if output:
@@ -71,6 +58,19 @@ def unavailable(code):
         "storage_evidence":{"status":"NOT_VERIFIED"}, "LIVE_DELETE":"NOT_RUN", "SQL_ARCHIVE_WRITE":"NOT_RUN"})
 
 
+def scheduled_runs(get, branch, *, max_pages=3):
+    """Bounded schedule-only history; push/manual traffic cannot crowd it out."""
+    from urllib.parse import urlencode
+    rows = []
+    for page in range(1, max_pages + 1):
+        query = urlencode({"event": "schedule", "branch": branch, "per_page": 100, "page": page})
+        batch = get(f"actions/workflows/{WORKFLOW}/runs?{query}")["workflow_runs"]
+        rows.extend(batch)
+        if len(batch) < 100:
+            return rows, False
+    return rows, True
+
+
 def main():
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     token = os.environ.get("GH_TOKEN", "")
@@ -80,13 +80,16 @@ def main():
         return github_get(repo, path, token)
     try:
         workflow = get(f"actions/workflows/{WORKFLOW}")
-        runs = get(f"actions/workflows/{WORKFLOW}/runs?per_page=100")["workflow_runs"]
         metadata = get("")
+        runs, truncated = scheduled_runs(get, metadata.get("default_branch", "main"))
         storage = {"status": "NOT_VERIFIED"}
         if os.environ.get("WATCHDOG_STORAGE_CHECK") == "true":
             from app.jobs.retention_validation import run
             storage = run()
         result = assess(workflow, runs, metadata, now=datetime.now(timezone.utc), storage=storage)
+        result["history"] = {"event": "schedule", "runs_observed": len(runs), "truncated": truncated}
+        if truncated:
+            result["warnings"].append("SCHEDULE_RUN_HISTORY_TRUNCATED")
     except HTTPError as exc:
         return unavailable(f"WATCHDOG_GITHUB_HTTP_{int(exc.code)}")
     except Exception:
