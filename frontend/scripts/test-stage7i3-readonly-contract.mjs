@@ -13,6 +13,7 @@ function evidence(){
     ready:{statusCode:200,body:{status:"ok",scope:"web_api_transport",dependencies:"not_checked"}},
     health:{statusCode:200,body:{status:"ok",database:"CONNECTED",database_schema:"READY",r2:"CONNECTED"}},
     list:{statusCode:200,body:{items:[item],as_of:when,source:"all",history_status:"NOT_READ",warnings:[]}},
+    history:{statusCode:200,body:{items:[{...history}],as_of:when,source:"history",history_status:"VERIFIED",warnings:[]}},
     detail:{statusCode:200,body:{...item}},archive:{statusCode:200,body:{...history}},
     analysis_verified:true
   };
@@ -45,3 +46,18 @@ for(const [name,change,expected] of cases){
 test("missing data is not healthy",()=>{
   const r=assess(null);assert.equal(r.status,"NOT_VERIFIED");assert.deepEqual(r.blockers,["EVIDENCE_MISSING"]);
 });
+
+for(const [name,mutation] of [
+  ["history absent",s=>delete s.history],
+  ["history partial",s=>s.history.body.history_status="PARTIAL"],
+  ["history empty",s=>s.history.body.items=[]],
+  ["history detail mismatched",s=>s.archive.body.id=id],
+  ["history detail unrelated",s=>s.archive.body.home_team="Unrelated"],
+  ["history detail ahead of observation",s=>s.archive.body.archive_verified_at="2026-11-23T00:00:00+00:00"],
+]){
+  test(name+" is not R2 verification",()=>{
+    const s=evidence();mutation(s);const r=assess(s);
+    assert.equal(r.status,"NOT_VERIFIED");assert.ok(r.blockers.includes("R2_HISTORY_NOT_VERIFIED"));
+    assert.equal(r.SAFE_TO_DELETE,"NO");
+  });
+}
