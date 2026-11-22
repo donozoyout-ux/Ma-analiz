@@ -39,7 +39,7 @@ export async function collectReadOnlyEvidence(fetcher=fetch){
     : {statusCode:null,error:"NO_VERIFIED_HISTORY_ID"};
   // Return only minimal public fields expected by the offline assessor;
   // callers MUST NOT print the collected snapshot, which may contain match data.
-  return {root:homepage,live,ready,health,list,detail,archive,
+  return {root:homepage,live,ready,health,list,history,detail,archive,
     analysis_verified:false}; // requires independent operator verification
 }
 export function summarizeEvidence(snapshot){
