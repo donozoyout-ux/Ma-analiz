@@ -50,9 +50,21 @@ export function assessLiveReadOnlyEvidence(snap) {
   }
   // Readback of at least one R2 history detail is required, distinct from SQL-only list.
   const archive = snap.archive?.body;
-  if (statusCode(snap.archive) !== 200 || !good(archive) ||
-      !uuid.test(archive.id || "") || archive.storage !== "R2" ||
-      !stamp(archive.archive_verified_at) || !permittedResult(archive.result)) {
+  const history = snap.history?.body;
+  const indexed = good(history) && statusCode(snap.history) === 200 &&
+    history.source === "history" && history.history_status === "VERIFIED" &&
+    Array.isArray(history.warnings) && history.warnings.length === 0 &&
+    Array.isArray(history.items) && history.items.length > 0 &&
+    history.items.length <= 12 && stamp(history.as_of) &&
+    history.items.every(row => good(row) && uuid.test(row.id || "") && row.storage === "R2");
+  const source = indexed ? history.items[0] : null;
+  if (!indexed || statusCode(snap.archive) !== 200 || !good(archive) || !source ||
+      archive.id !== source.id || archive.storage !== "R2" ||
+      archive.home_team !== source.home_team || archive.away_team !== source.away_team ||
+      archive.start_time !== source.start_time ||
+      !stamp(archive.archive_verified_at) ||
+      Date.parse(archive.archive_verified_at) > Date.parse(history.as_of) ||
+      !permittedResult(archive.result)) {
     blockers.push("R2_HISTORY_NOT_VERIFIED");
   }
   // Domain signal isn't proven by a rendered page or a configured AI key.
