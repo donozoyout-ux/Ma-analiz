@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "smoke:production-api": "node scripts/smoke-production-api.mjs",
     "test:single-service": "node scripts/test-single-service.mjs",
-    "test": "node --test scripts/test-match-filters.mjs scripts/test-navigation.mjs scripts/test-football-summary.mjs scripts/test-service-readiness.mjs scripts/test-match-center.mjs scripts/test-match-share.mjs"
+    "test": "node --test scripts/test-match-filters.mjs scripts/test-navigation.mjs scripts/test-football-summary.mjs scripts/test-service-readiness.mjs scripts/test-match-center.mjs scripts/test-match-share.mjs scripts/test-dashboard-tilt.mjs",
+    "test:dashboard-browser": "node scripts/test-dashboard-browser.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
