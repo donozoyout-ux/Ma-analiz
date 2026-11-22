@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import "./motion.css";
+import "./premium-dashboard.css";
 import { Sidebar } from "@/components/sidebar";
 const inter = localFont({src:"./fonts/inter.ttf",variable:"--font-inter",weight:"100 900",display:"swap"});
 const space = localFont({src:"./fonts/spacegrotesk.ttf",variable:"--font-space",weight:"300 700",display:"swap"});

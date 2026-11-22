@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BrainCircuit, ChartNoAxesCombined, CalendarDays, RefreshCw } from "lucide-react";
+import { ArrowUpRight, BrainCircuit, ChartNoAxesCombined, CalendarDays, RefreshCw } from "lucide-react";
 import { useApiList } from "@/lib/use-api-list";
 import { type Match, istanbulDay, summarizeTodaysMatches } from "@/lib/matches";
 import { performanceSummary, type DailyPerformance, type PredictionSummary } from "@/lib/football-summary";
 import { MatchExplorer } from "./match-explorer";
 import { OverviewMetrics } from "./overview-metrics";
+import { DashboardSurface } from "./dashboard-surface";
 export function FootballHome() {
  const matches = useApiList<Match>("matches?limit=500");
  const predictions = useApiList<PredictionSummary>("predictions?limit=500");
@@ -18,12 +19,13 @@ export function FootballHome() {
  const todaysPredictions = predictions.rows?.filter(row => istanbulDay(row.created_at) === today);
  const pending = todaysPredictions?.filter(row => row.status === "PENDING").length;
  const refreshAll = () => { matches.refresh(); predictions.refresh(); performance.refresh(); };
- return <>
-  <header className="topbar football-heading"><div><div className="eyebrow">MA-ANALİZ / FUTBOLUN VERİYLE BULUŞTUĞU YER</div><h1 className="title">Futbol Analiz Merkezi</h1><p className="page-intro">Günün maçlarını keşfedin, analizleri inceleyin ve tahminlerin sonuçlarını takip edin.</p></div><div className="heading-actions"><span className="today-chip"><CalendarDays size={16}/>{today ? new Date(`${today}T12:00:00+03:00`).toLocaleDateString("tr-TR",{day:"numeric",month:"long"}) : "Bugün"}</span><button className="quiet-button home-refresh" onClick={refreshAll}><RefreshCw size={15}/>Verileri yenile</button></div></header>
+ return <DashboardSurface>
+  <div className="dashboard-context"><span>Çalışma alanı <span aria-hidden="true">/</span> <strong>Genel Bakış</strong></span><span className="dashboard-edition">MAÇ ANALİZ <span aria-hidden="true">●</span> FUTBOL ODAKLI</span></div>
+  <header className="topbar football-heading"><div><div className="eyebrow"><span aria-hidden="true"/> OYUNU VERİYLE OKUYUN</div><h1 className="title">Futbol Analiz Merkezi<span aria-hidden="true">.</span></h1><p className="page-intro">Günün maçları, sahadaki veriler ve analizler.<br className="dashboard-intro-break"/> Futbola daha yakından bakın.</p></div><div className="heading-actions"><span className="today-chip"><CalendarDays size={17}/>{today ? new Date(`${today}T12:00:00+03:00`).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"}) : "Bugün"}</span><button className="quiet-button home-refresh" onClick={refreshAll}><RefreshCw size={16}/>Verileri yenile</button></div></header>
   <p className="scope-note home-scope" role="status"><strong>BETA / TEST SÜRÜMÜ</strong> — Maç verileri ve analizler doğrulama aşamasındadır. Kayıt yoksa sonuç veya tahmin üretilmez; eksik veriler açıkça gösterilir.</p>
   <OverviewMetrics matches={matchSummary?.total ?? null} analyzed={matchSummary?.analyzed ?? null} rate={summary?.rate ?? null} loading={!matches.rows && !matches.error}/>
   {matches.rows?.length === 500 && <p className="scope-note home-scope">Maç sayıları ve filtreler API’nin döndürdüğü ilk 500 aktif kayıtla sınırlıdır.</p>}
-  <section className="home-match-section" aria-labelledby="daily-matches-heading"><div className="section-heading-row"><div><div className="section-kicker">MAÇ GÜNÜ</div><h2 className="section-heading" id="daily-matches-heading">Günün Maçları</h2></div><Link className="text-link" href="/matches">Maç Merkezi</Link></div><MatchExplorer defaultCards source={matches} pageSize={6}/></section>
+  <section className="home-match-section" aria-labelledby="daily-matches-heading"><div className="section-heading-row"><div><div className="section-kicker">FİKSTÜR & SONUÇLAR</div><h2 className="section-heading" id="daily-matches-heading">Günün Maçları</h2></div><Link className="text-link dashboard-center-link" href="/matches">Maç Merkezi <ArrowUpRight size={16}/></Link></div><MatchExplorer defaultCards source={matches} pageSize={6}/></section>
   <div className="grid football-insights">
    <section className="card insight-card" aria-labelledby="ai-summary-heading"><div className="insight-heading"><span className="insight-icon"><BrainCircuit size={22}/></span><div><div className="section-kicker">MODELİN DEĞERLENDİRMESİ</div><h2 id="ai-summary-heading">AI Tahminleri</h2></div></div><p className="insight-description">Maç öncesi olasılıkları ve kanıta dayalı model seçimlerini inceleyin.</p>
     {predictions.error ? <p className="insight-empty" role="alert">Tahmin verisine ulaşılamadı. <button className="quiet-button" onClick={predictions.refresh}>Yeniden dene</button></p> : predictions.rows === null ? <p className="insight-empty" role="status">Tahmin kayıtları yükleniyor…</p> : !todaysPredictions?.length ? <p className="insight-empty">Bugün için kayıtlı tahmin yok. Model kaydı oluştuğunda burada gösterilecek.</p> : <div className="insight-stat-grid"><div><strong>{todaysPredictions.length}</strong><span>Bugün kaydedilen</span></div><div><strong>{pending}</strong><span>Sonuç bekleyen</span></div><div><strong>{new Set(todaysPredictions.map(row=>row.match_id)).size}</strong><span>Farklı maç</span></div></div>}
@@ -34,5 +36,5 @@ export function FootballHome() {
     <div className="insight-footer"><small>Günlük sonuç kayıtları (UTC). Bekleyen tahminler isabet hesabına katılmaz.</small><Link className="text-link" href="/analysis">Performansı incele</Link></div>
    </section>
   </div><p className="home-data-note">Maç ve tahmin verileri bağlı kaynaklardan alınır. Skor veya analiz bilgisi yoksa açıkça belirtilir. Veriler kendiliğinden canlı güncellenmez.</p>
- </>;
+ </DashboardSurface>;
 }
