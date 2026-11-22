@@ -63,8 +63,7 @@ def assess(validation: dict, watchdog: dict, *, now: datetime) -> dict:
     if isinstance(records, list) and any(not isinstance(row, dict) for row in records):
         blockers.add("RECORD_EVIDENCE_MISSING")
 
-    if watchdog.get("status") != "PASS" or watchdog.get("state") != "HEALTHY":
-        blockers.add("SCHEDULE_NOT_HEALTHY")
+    # A previously HEALTHY report cannot be replayed as current evidence.\n    # This is an advisory snapshot, not a deletion approval.\n    watchdog_at = _utc(watchdog.get("observed_at"))\n    if not watchdog_at or not timedelta(0) <= now - watchdog_at <= timedelta(minutes=10):\n        blockers.add("WATCHDOG_EVIDENCE_STALE")\n    if watchdog.get("status") != "PASS" or watchdog.get("state") != "HEALTHY":\n        blockers.add("SCHEDULE_NOT_HEALTHY")
     if watchdog.get("storage_evidence", {}).get("status") != "VERIFIED":
         blockers.add("WATCHDOG_STORAGE_NOT_VERIFIED")
     for mode in ("archive", "auto"):
