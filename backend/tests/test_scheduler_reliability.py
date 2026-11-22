@@ -17,6 +17,7 @@ from test_lifecycle import NOW, fixture, session
 
 def sources():
     return [{"id": i, "event": "schedule", "display_title": "Retention " + mode,
+             "run_attempt":1,"status":"completed", "run_started_at":NOW.isoformat(), "updated_at":NOW.isoformat(),
              "conclusion": "success", "created_at": NOW.isoformat()} for i,mode in enumerate(("archive","auto"),1)]
 
 

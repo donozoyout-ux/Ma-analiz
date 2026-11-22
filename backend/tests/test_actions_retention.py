@@ -113,7 +113,9 @@ def test_watchdog_bootstrap_then_successful_schedule():
     workflow={"state":"active","created_at":NOW.isoformat()}
     first=assess(workflow,[],{},now=NOW)
     assert first["status"]=="PASS" and len(first["warnings"])==2
-    runs=[{"event":"schedule","display_title":f"Retention {mode}","conclusion":"success","created_at":NOW.isoformat()} for mode in ("archive","auto")]
+    runs=[{"id":i,"run_attempt":1,"event":"schedule","display_title":f"Retention {mode}","status":"completed",
+           "conclusion":"success","created_at":NOW.isoformat(),"run_started_at":NOW.isoformat(),"updated_at":NOW.isoformat()}
+          for i,mode in enumerate(("archive","auto"),1)]
     assert assess(workflow,runs,{},now=NOW)["errors"]==[]
 
 

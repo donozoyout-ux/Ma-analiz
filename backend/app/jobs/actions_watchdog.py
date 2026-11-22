@@ -55,7 +55,8 @@ def publish(result):
 
 def unavailable(code):
     return publish({"status":"FAILED", "state":"INSUFFICIENT_EVIDENCE", "errors":[code], "warnings":[],
-        "storage_evidence":{"status":"NOT_VERIFIED"}, "LIVE_DELETE":"NOT_RUN", "SQL_ARCHIVE_WRITE":"NOT_RUN"})
+        "storage_evidence":{"status":"NOT_VERIFIED"}, "LIVE_DELETE":"NOT_RUN", "SQL_ARCHIVE_WRITE":"NOT_RUN",
+        "SQL_WRITE":"NOT_RUN", "R2_WRITE":"NOT_RUN", "SAFE_TO_DELETE":"NO"})
 
 
 def scheduled_runs(get, branch, *, max_pages=3):
