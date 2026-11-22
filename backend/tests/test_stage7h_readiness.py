@@ -22,7 +22,8 @@ def evidence():
     }
     checks = lambda: {"sql_audit_matches_scheduled_success": True,
                       "sql_audit_match_kind": "RUN_AND_ATTEMPT", "operation": {"outcome": "SKIPPED"}}
-    watchdog = {**flags, "status": "PASS", "state": "HEALTHY",
+    watchdog = {**{k: flags[k] for k in ("SQL_WRITE", "R2_WRITE", "LIVE_DELETE")},
+                "SQL_ARCHIVE_WRITE": "NOT_RUN", "status": "PASS", "state": "HEALTHY",
                 "storage_evidence": {"status": "VERIFIED"},
                 "checks": {"archive": checks(), "auto": checks()}}
     return validation, watchdog
@@ -65,3 +66,29 @@ def test_empty_or_unavailable_evidence_fails_closed():
 def test_naive_time_is_rejected():
     with pytest.raises(ValueError, match="AWARE_CLOCK_REQUIRED"):
         assess(*evidence(), now=NOW.replace(tzinfo=None))
+
+
+def test_real_watchdog_schema_without_delete_flags_is_accepted_but_never_approves():
+    validation, watchdog = evidence()
+    assert "OPERATIONAL_DELETE_ENABLED" not in watchdog
+    assert "AUTO_RETENTION_DELETE_ENABLED" not in watchdog
+    report = assess(validation, watchdog, now=NOW)
+    assert report["technical_ready"] is True
+    assert report["status"] == "SAFE_TO_DELETE_NO"
+    assert report["blockers"] == ["OPERATOR_APPROVAL_REQUIRED"]
+
+
+@pytest.mark.parametrize("mutation,expected", [
+    (lambda v, w: w.update(SQL_ARCHIVE_WRITE="UNKNOWN"), "READ_ONLY_FLAGS_NOT_VERIFIED"),
+    (lambda v, w: w.update(SQL_WRITE="UNVERIFIED"), "READ_ONLY_FLAGS_NOT_VERIFIED"),
+    (lambda v, w: v["plan"].pop("unknown_dependency_tables"), "UNKNOWN_DEPENDENCIES"),
+    (lambda v, w: v["plan"].update(unknown_dependency_tables=True), "UNKNOWN_DEPENDENCIES"),
+    (lambda v, w: w.update(status="FAILED"), "SCHEDULE_NOT_HEALTHY"),
+])
+def test_actual_report_contract_fail_closed_on_missing_or_bad_evidence(mutation,expected):
+    validation,watchdog=evidence()
+    mutation(validation,watchdog)
+    report=assess(validation,watchdog,now=NOW)
+    assert report["technical_ready"] is False
+    assert expected in report["blockers"]
+    assert report["status"]=="SAFE_TO_DELETE_NO"
