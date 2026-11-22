@@ -20,7 +20,7 @@ def proof():
     value["sql_scheduler_audit"]["scheduled_runs"] = {}
     for mode in ("archive", "auto"):
         row = value["sql_scheduler_audit"][mode]
-        row.update(schema_version=2, run_attempt=1, event="schedule", storage_status="SKIPPED",
+        row.update(schema_version=2, run_attempt=1, event="schedule", started_at=NOW.isoformat(), storage_status="SKIPPED",
                    execution_status="EXECUTED", archive_records_written=0, archive_failures=0)
         value["sql_scheduler_audit"]["scheduled_runs"][mode] = [deepcopy(row)]
     return value
@@ -49,6 +49,7 @@ def test_transient_delay_warns_without_claiming_execution_failure(mode, age):
 
 def test_pending_delayed_run_is_not_failed_or_success_and_cannot_reset_stale():
     runs = sources(); runs[0]["created_at"] = (NOW-timedelta(minutes=46)).isoformat()
+    runs[0]["run_started_at"]=runs[0]["created_at"]
     runs += [{**runs[0], "id":9, "created_at":(NOW-timedelta(minutes=3)).isoformat(), "status":"queued", "conclusion":None}]
     report = health(runs=runs, proof=proof())
     assert report["state"] == "ARCHIVE_STALE"
@@ -62,6 +63,7 @@ def test_excessive_queue_is_separate_from_failed_execution():
         "conclusion":None,"created_at":(NOW-timedelta(minutes=21)).isoformat()}]
     # Make the last successful auto older than the in-progress invocation.
     runs[1]["created_at"]=(NOW-timedelta(minutes=30)).isoformat()
+    runs[1]["run_started_at"]=runs[1]["created_at"]
     report=health(runs=runs,proof=proof())
     assert "AUTO_RUN_EXCEEDED_BUDGET" in report["errors"]
     assert "LATEST_AUTO_FAILED_OR_CANCELLED" not in report["errors"]
@@ -130,6 +132,7 @@ def test_manual_audit_does_not_mask_bounded_schedule_history(session,monkeypatch
     assert scheduled[0]["completed_at"]==(NOW+timedelta(seconds=10)).isoformat()
     data=proof();data["sql_scheduler_audit"]=audit
     runs=sources();runs[0]["id"]=123
+    runs[0]["updated_at"]=(NOW+timedelta(seconds=10)).isoformat()
     report=health(runs=runs,proof=data,now=NOW+timedelta(seconds=11))
     assert report["checks"]["archive"]["sql_audit_matches_scheduled_success"]
     assert report["checks"]["archive"]["operation"]["outcome"]=="SKIPPED"

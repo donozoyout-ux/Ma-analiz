@@ -1,0 +1,798 @@
+{
+  "observed_at": "2026-11-22T10:50:06.764479+00:00",
+  "total_count": 44,
+  "runs": [
+    {
+      "id": 45012974000,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "3a19847052eb33ea5ca8d1979a4a3917f2057a36",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T10:32:55Z",
+      "run_started_at": "2026-11-22T10:32:55Z",
+      "updated_at": "2026-11-22T10:33:56Z"
+    },
+    {
+      "id": 45012877379,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "8b1891f82fdaf316ec1251a5a76c8294079b66cf",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T10:31:44Z",
+      "run_started_at": "2026-11-22T10:31:44Z",
+      "updated_at": "2026-11-22T10:33:07Z"
+    },
+    {
+      "id": 45012857354,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "f5006fb2d43c545b96586504d27aedda9c5b1dae",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T10:31:30Z",
+      "run_started_at": "2026-11-22T10:31:30Z",
+      "updated_at": "2026-11-22T10:32:20Z"
+    },
+    {
+      "id": 45012227097,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "c6bdd2240f0a73b34206892650d8707b8f895ecf",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T10:23:42Z",
+      "run_started_at": "2026-11-22T10:23:42Z",
+      "updated_at": "2026-11-22T10:24:56Z"
+    },
+    {
+      "id": 45012207413,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "7e18de3867c6e03c42677822477eed73e8f768c8",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T10:23:27Z",
+      "run_started_at": "2026-11-22T10:23:27Z",
+      "updated_at": "2026-11-22T10:24:16Z"
+    },
+    {
+      "id": 45011628522,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "7a6230c65747e947013522307103d6266626cb1a",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T10:16:29Z",
+      "run_started_at": "2026-11-22T10:16:29Z",
+      "updated_at": "2026-11-22T10:17:19Z"
+    },
+    {
+      "id": 45011430138,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "1d9529d805b5fd5bec10ce5bd2a4dcff910eacdd",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T10:14:07Z",
+      "run_started_at": "2026-11-22T10:14:07Z",
+      "updated_at": "2026-11-22T10:14:56Z"
+    },
+    {
+      "id": 45011241985,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "4d76ada8011fdc50ca2868b677a819e46c5b6f82",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T10:11:55Z",
+      "run_started_at": "2026-11-22T10:11:55Z",
+      "updated_at": "2026-11-22T10:12:43Z"
+    },
+    {
+      "id": 45011097488,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "3818c1042da91b6adf3097f91238b7910425ced3",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-22T10:10:14Z",
+      "run_started_at": "2026-11-22T10:10:14Z",
+      "updated_at": "2026-11-22T10:11:03Z"
+    },
+    {
+      "id": 45009618881,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "dae3d305ee8cc72462d14a719de69bcd89255235",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:52:09Z",
+      "run_started_at": "2026-11-22T09:52:09Z",
+      "updated_at": "2026-11-22T09:53:30Z"
+    },
+    {
+      "id": 45009386579,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "fcb5cdacd1c4b53a3525efa8549765a0acdda184",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:49:15Z",
+      "run_started_at": "2026-11-22T09:49:15Z",
+      "updated_at": "2026-11-22T09:51:12Z"
+    },
+    {
+      "id": 45009343931,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "9b2db1a94de588b02c6a22d925ecf2f9b8993740",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:48:42Z",
+      "run_started_at": "2026-11-22T09:48:42Z",
+      "updated_at": "2026-11-22T09:50:28Z"
+    },
+    {
+      "id": 45009332132,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "10354d27fd84777d36107e42d2ef35adfa9b9f25",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "created_at": "2026-11-22T09:48:33Z",
+      "run_started_at": "2026-11-22T09:48:33Z",
+      "updated_at": "2026-11-22T09:48:43Z"
+    },
+    {
+      "id": 45009319825,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "a032a68b1d65bf1f3cb971633230992655cf8a7a",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:48:23Z",
+      "run_started_at": "2026-11-22T09:48:23Z",
+      "updated_at": "2026-11-22T09:49:11Z"
+    },
+    {
+      "id": 45008836710,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "21a73f5f5f82c937691a3ba8f51c02bd848850f6",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:42:20Z",
+      "run_started_at": "2026-11-22T09:42:20Z",
+      "updated_at": "2026-11-22T09:43:03Z"
+    },
+    {
+      "id": 45007811030,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "feature/stage7h-readiness-gate",
+      "head_sha": "3ed7364601b5c1865d6d4482011126aa6fdbcd0d",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:29:47Z",
+      "run_started_at": "2026-11-22T09:29:47Z",
+      "updated_at": "2026-11-22T09:30:31Z"
+    },
+    {
+      "id": 45007360595,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "dae3d305ee8cc72462d14a719de69bcd89255235",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:24:02Z",
+      "run_started_at": "2026-11-22T09:24:02Z",
+      "updated_at": "2026-11-22T09:24:45Z"
+    },
+    {
+      "id": 45007030357,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "codex/stage7g-scheduler-reliability",
+      "head_sha": "9def00e5e8e123e108d71bb9528090e76da8d538",
+      "display_title": "Retention tests-only (no storage)",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:20:09Z",
+      "run_started_at": "2026-11-22T09:20:09Z",
+      "updated_at": "2026-11-22T09:21:02Z"
+    },
+    {
+      "id": 45006989271,
+      "run_attempt": 1,
+      "event": "pull_request",
+      "head_branch": "codex/stage7g-scheduler-reliability",
+      "head_sha": "1b4fa1bc02dd774312aa7a7662016ca72517a636",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T09:19:40Z",
+      "run_started_at": "2026-11-22T09:19:40Z",
+      "updated_at": "2026-11-22T09:20:23Z"
+    },
+    {
+      "id": 44978081445,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "5217391afebdd2735a44c13da7c996c6c798453f",
+      "display_title": "Retention auto",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T02:52:43Z",
+      "run_started_at": "2026-11-22T02:52:43Z",
+      "updated_at": "2026-11-22T02:53:55Z"
+    },
+    {
+      "id": 44975402609,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "5217391afebdd2735a44c13da7c996c6c798453f",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-22T02:17:37Z",
+      "run_started_at": "2026-11-22T02:17:37Z",
+      "updated_at": "2026-11-22T02:19:02Z"
+    },
+    {
+      "id": 44959053836,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "5217391afebdd2735a44c13da7c996c6c798453f",
+      "display_title": "Retention auto",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T22:53:34Z",
+      "run_started_at": "2026-11-21T22:53:34Z",
+      "updated_at": "2026-11-21T22:54:41Z"
+    },
+    {
+      "id": 44955084514,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "6657bc58faa457b958fb7807a0c1c04328fd4ea0",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T22:07:31Z",
+      "run_started_at": "2026-11-21T22:07:31Z",
+      "updated_at": "2026-11-21T22:08:48Z"
+    },
+    {
+      "id": 44953180350,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "abf3945b6cdf89e018ccb66a2e03e82c8ce3331f",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T21:45:25Z",
+      "run_started_at": "2026-11-21T21:45:25Z",
+      "updated_at": "2026-11-21T21:46:08Z"
+    },
+    {
+      "id": 44952787603,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "313a594e2e0bdf064797acdaf2e196361d5ff7c5",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "cancelled",
+      "created_at": "2026-11-21T21:40:51Z",
+      "run_started_at": "2026-11-21T21:40:51Z",
+      "updated_at": "2026-11-21T21:41:25Z"
+    },
+    {
+      "id": 44938328297,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "c5e898dca0dbb934a1d080789121bc003b45041b",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T18:57:40Z",
+      "run_started_at": "2026-11-21T18:57:40Z",
+      "updated_at": "2026-11-21T18:58:54Z"
+    },
+    {
+      "id": 44938055670,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "65bb64c561aa9be2ce6dbd89b515a7b8c28e3fb7",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T18:54:30Z",
+      "run_started_at": "2026-11-21T18:54:30Z",
+      "updated_at": "2026-11-21T18:55:11Z"
+    },
+    {
+      "id": 44937507082,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "6003a015c3fb9a3f8dfe201316e7b58a0d677629",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-21T18:48:18Z",
+      "run_started_at": "2026-11-21T18:48:18Z",
+      "updated_at": "2026-11-21T18:48:51Z"
+    },
+    {
+      "id": 44935817256,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c2c85d156bae7c1bde8d47eaa3c255d362554a47",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T18:29:36Z",
+      "run_started_at": "2026-11-21T18:29:36Z",
+      "updated_at": "2026-11-21T18:30:58Z"
+    },
+    {
+      "id": 44933335342,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "0cffe7abed74038a489695273614306d5e3b4069",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T18:02:48Z",
+      "run_started_at": "2026-11-21T18:02:48Z",
+      "updated_at": "2026-11-21T18:04:01Z"
+    },
+    {
+      "id": 44931523049,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "11f5206bef8bd88834d9c8e0f540028b4612b593",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T17:42:36Z",
+      "run_started_at": "2026-11-21T17:42:36Z",
+      "updated_at": "2026-11-21T17:43:55Z"
+    },
+    {
+      "id": 44928703385,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "d9955b0f4c89e6a3cbd78319a262c0ccb9a585c6",
+      "display_title": "Retention auto",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T17:11:45Z",
+      "run_started_at": "2026-11-21T17:11:45Z",
+      "updated_at": "2026-11-21T17:13:09Z"
+    },
+    {
+      "id": 44927475175,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "d9955b0f4c89e6a3cbd78319a262c0ccb9a585c6",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T16:58:37Z",
+      "run_started_at": "2026-11-21T16:58:37Z",
+      "updated_at": "2026-11-21T17:00:41Z"
+    },
+    {
+      "id": 44927449780,
+      "run_attempt": 1,
+      "event": "schedule",
+      "head_branch": "main",
+      "head_sha": "6234585d64362423ebc78f89f305e1892b372a90",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T16:58:19Z",
+      "run_started_at": "2026-11-21T16:58:19Z",
+      "updated_at": "2026-11-21T16:59:29Z"
+    },
+    {
+      "id": 44925714895,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "6234585d64362423ebc78f89f305e1892b372a90",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T16:38:54Z",
+      "run_started_at": "2026-11-21T16:38:54Z",
+      "updated_at": "2026-11-21T16:39:59Z"
+    },
+    {
+      "id": 44895643123,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "c78e7e525a9f33d9a05f423e2ac286896a69d7e1",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T10:42:51Z",
+      "run_started_at": "2026-11-21T10:42:51Z",
+      "updated_at": "2026-11-21T10:43:57Z"
+    },
+    {
+      "id": 44893440548,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "1ee9c5dfc3052fefeb96a96cb807e7f7bfc350ef",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T10:15:09Z",
+      "run_started_at": "2026-11-21T10:15:09Z",
+      "updated_at": "2026-11-21T10:16:10Z"
+    },
+    {
+      "id": 44892341156,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "f8f25d01774a0a831a8908d788c8b3244d7c0872",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T10:01:44Z",
+      "run_started_at": "2026-11-21T10:01:44Z",
+      "updated_at": "2026-11-21T10:03:33Z"
+    },
+    {
+      "id": 44892302205,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "e04e934c3449206d37809b636696bcfabb594e35",
+      "display_title": "Retention auto",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T10:01:16Z",
+      "run_started_at": "2026-11-21T10:01:16Z",
+      "updated_at": "2026-11-21T10:02:24Z"
+    },
+    {
+      "id": 44892128200,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "e04e934c3449206d37809b636696bcfabb594e35",
+      "display_title": "Retention archive",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T09:59:14Z",
+      "run_started_at": "2026-11-21T09:59:14Z",
+      "updated_at": "2026-11-21T10:00:19Z"
+    },
+    {
+      "id": 44891800021,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "e04e934c3449206d37809b636696bcfabb594e35",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T09:54:45Z",
+      "run_started_at": "2026-11-21T09:54:45Z",
+      "updated_at": "2026-11-21T09:56:02Z"
+    },
+    {
+      "id": 44891581219,
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "head_branch": "main",
+      "head_sha": "e04e934c3449206d37809b636696bcfabb594e35",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-21T09:51:54Z",
+      "run_started_at": "2026-11-21T09:51:54Z",
+      "updated_at": "2026-11-21T09:52:46Z"
+    },
+    {
+      "id": 44891049207,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "ae388a0cf8f8d9b3bab8b680003469beeb02d6d7",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-21T09:45:07Z",
+      "run_started_at": "2026-11-21T09:45:07Z",
+      "updated_at": "2026-11-21T09:46:02Z"
+    },
+    {
+      "id": 44890606821,
+      "run_attempt": 1,
+      "event": "push",
+      "head_branch": "main",
+      "head_sha": "26cd50e32d28c2392868ac5c2eb383791eabd1f0",
+      "display_title": "Retention dry-run",
+      "status": "completed",
+      "conclusion": "failure",
+      "created_at": "2026-11-21T09:39:26Z",
+      "run_started_at": "2026-11-21T09:39:26Z",
+      "updated_at": "2026-11-21T09:40:25Z"
+    }
+  ],
+  "event_counts": {
+    "pull_request": 17,
+    "schedule": 7,
+    "push": 14,
+    "workflow_dispatch": 6
+  },
+  "job_timelines": {
+    "45009618881": [
+      {
+        "id": 137168818356,
+        "name": "validate",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-22T09:52:12Z",
+        "completed_at": "2026-11-22T09:52:57Z"
+      },
+      {
+        "id": 137169015231,
+        "name": "retention",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-22T09:52:58Z",
+        "completed_at": "2026-11-22T09:53:29Z"
+      }
+    ],
+    "44978081445": [
+      {
+        "id": 137072337531,
+        "name": "validate",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-22T02:52:45Z",
+        "completed_at": "2026-11-22T02:53:22Z"
+      },
+      {
+        "id": 137072478582,
+        "name": "retention",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-22T02:53:24Z",
+        "completed_at": "2026-11-22T02:53:54Z"
+      }
+    ],
+    "44927449780": [
+      {
+        "id": 136916557000,
+        "name": "validate",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-21T16:58:21Z",
+        "completed_at": "2026-11-21T16:58:52Z"
+      },
+      {
+        "id": 136916700977,
+        "name": "retention",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-21T16:58:54Z",
+        "completed_at": "2026-11-21T16:59:29Z"
+      }
+    ],
+    "44927475175": [
+      {
+        "id": 136916863014,
+        "name": "validate",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-21T16:59:31Z",
+        "completed_at": "2026-11-21T17:00:03Z"
+      },
+      {
+        "id": 136917017659,
+        "name": "retention",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-11-21T17:00:05Z",
+        "completed_at": "2026-11-21T17:00:40Z"
+      }
+    ],
+    "44952787603": [
+      {
+        "id": 136994179597,
+        "name": "validate",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-21T21:40:54Z",
+        "completed_at": "2026-11-21T21:41:24Z"
+      },
+      {
+        "id": 136994325703,
+        "name": "retention",
+        "status": "completed",
+        "conclusion": "cancelled",
+        "started_at": "2026-11-21T21:41:25Z",
+        "completed_at": "2026-11-21T21:41:24Z"
+      }
+    ]
+  },
+  "logs": [
+    {
+      "run_id": 45011345910,
+      "kind": "WATCHDOG_REPORT",
+      "report": {
+        "observed_at": "2026-11-22T10:13:48.913837+00:00",
+        "status": "FAILED",
+        "state": "AUTO_STALE",
+        "states": [
+          "AUTO_STALE"
+        ],
+        "checks": {
+          "archive": {
+            "delay_minutes": 30,
+            "delivery_note": "CREATION_TIME_IS_NOT_NOMINAL_CRON_TIME;_MISSING_OR_DELAYED_NOT_PROVEN_DROPPED",
+            "interval_minutes": 15,
+            "last_scheduled_created_at": "2026-11-22T09:52:09+00:00",
+            "last_success_age_seconds": 1299.913837,
+            "last_success_created_at": "2026-11-22T09:52:09+00:00",
+            "last_success_run_attempt": 1,
+            "last_success_run_id": 45009618881,
+            "latest_pending": false,
+            "latest_run_attempt": 1,
+            "latest_run_id": 45009618881,
+            "observed_gap_intervals": 1,
+            "operation": {
+              "archive_records_written": 0,
+              "new_r2_data_verified": false,
+              "outcome": "SKIPPED"
+            },
+            "sql_audit_match_kind": "RUN_AND_ATTEMPT",
+            "sql_audit_matches_scheduled_success": true,
+            "threshold_minutes": 45
+          },
+          "auto": {
+            "delay_minutes": 90,
+            "delivery_note": "CREATION_TIME_IS_NOT_NOMINAL_CRON_TIME;_MISSING_OR_DELAYED_NOT_PROVEN_DROPPED",
+            "interval_minutes": 60,
+            "last_scheduled_created_at": "2026-11-22T02:52:43+00:00",
+            "last_success_age_seconds": 26465.913837,
+            "last_success_created_at": "2026-11-22T02:52:43+00:00",
+            "last_success_run_attempt": 1,
+            "last_success_run_id": 44978081445,
+            "latest_pending": false,
+            "latest_run_attempt": 1,
+            "latest_run_id": 44978081445,
+            "observed_gap_intervals": 7,
+            "operation": {
+              "archive_records_written": null,
+              "new_r2_data_verified": false,
+              "outcome": "NOT_VERIFIED"
+            },
+            "sql_audit_match_kind": "LEGACY_RUN_ID_ONLY",
+            "sql_audit_matches_scheduled_success": true,
+            "threshold_minutes": 120
+          }
+        },
+        "errors": [
+          "AUTO_SQL_AUDIT_STALE",
+          "NO_RECENT_SUCCESSFUL_AUTO_SCHEDULE"
+        ],
+        "warnings": [
+          "AUTO_LEGACY_AUDIT_RUN_ID_ONLY"
+        ],
+        "storage_evidence": {
+          "capacity_status": "HEALTHY",
+          "incomplete_archive_ledgers": 0,
+          "last_real_readback_at": "2026-11-22T10:13:39.364992+00:00",
+          "last_sql_ledger_verified_at": "2026-11-21T08:48:54.195223+00:00",
+          "retention_status": "NO_ELIGIBLE_RECORDS",
+          "running_jobs": 0,
+          "status": "VERIFIED"
+        },
+        "history": {
+          "event": "schedule",
+          "runs_observed": 7,
+          "truncated": false
+        },
+        "SQL_WRITE": "NOT_RUN",
+        "R2_WRITE": "NOT_RUN",
+        "LIVE_DELETE": "NOT_RUN"
+      }
+    },
+    {
+      "run_id": 45009618881,
+      "kind": "RETENTION_SUMMARY",
+      "report": {
+        "mode": "archive",
+        "status": "SKIPPED",
+        "storage_status": "SKIPPED",
+        "execution_status": "EXECUTED",
+        "reason": "RETENTION_CHECK_COMPLETED_GHA_45009618881",
+        "slot": "2026-11-22T09:45:00+00:00",
+        "sql_audit": "RECORDED",
+        "archive_records_written": 0,
+        "archive_failures": 0,
+        "deleted": 0,
+        "LIVE_DELETE": "NOT_RUN"
+      }
+    },
+    {
+      "run_id": 44978081445,
+      "kind": "RETENTION_SUMMARY",
+      "report": {
+        "mode": "auto",
+        "status": "SKIPPED",
+        "storage_status": "DRY_RUN",
+        "execution_status": null,
+        "reason": "DRY_RUN_COMPLETED_GHA_44978081445",
+        "slot": "2026-11-22T02:00:00+00:00",
+        "sql_audit": "RECORDED",
+        "archive_records_written": null,
+        "archive_failures": 0,
+        "deleted": 0,
+        "LIVE_DELETE": "NOT_RUN"
+      }
+    }
+  ],
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "SAFE_TO_DELETE": "NO"
+}
