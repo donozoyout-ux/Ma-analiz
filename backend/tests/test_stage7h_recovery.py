@@ -155,9 +155,13 @@ def test_restored_foreign_keys_are_present_validated_and_enforced(recovery):
             with pytest.raises(IntegrityError) as error:
                 with sql.begin_nested(): sql.execute(statement)
             assert error.value.orig.sqlstate=="23503"
+        for model in (ArchiveJob,JobRun):
+            with pytest.raises(IntegrityError) as error:
+                with sql.begin_nested(): sql.execute(update(model).values(status="INVALID_STATUS"))
+            assert error.value.orig.sqlstate=="23514"
         sql.rollback()
     assert snapshot(h.dest)==h.expected
-    passed(h,"foreign_keys",constraint_count=len(fks),rejected_orphan_updates=3)
+    passed(h,"foreign_keys",constraint_count=len(fks),rejected_orphan_updates=3,rejected_invalid_status_updates=2)
 
 
 def test_restored_match_center_active_history_list_and_detail_http(recovery,monkeypatch):

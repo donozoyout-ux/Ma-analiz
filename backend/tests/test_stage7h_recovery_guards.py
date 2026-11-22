@@ -4,7 +4,7 @@ import subprocess
 
 import pytest
 
-from recovery_support import RecoveryFailure, RecoveryHarness, target
+from recovery_support import RecoveryFailure, RecoveryHarness, constraint, target
 
 
 def environment():
@@ -48,3 +48,23 @@ def test_missing_file_and_checksum_failure_cannot_reach_restore(tmp_path,monkeyp
     with pytest.raises(RecoveryFailure,match="^BACKUP_MISSING$"): h.restore(tmp_path/"absent", "a"*64,"unused",None,{})
     path=tmp_path/"synthetic.dump";path.write_bytes(b"changed")
     with pytest.raises(RecoveryFailure,match="^BACKUP_CHECKSUM_MISMATCH$"): h.restore(path,hashlib.sha256(b"original").hexdigest(),"unused",None,{})
+
+
+def status_check(definition):
+    return {"table_name":"archive_jobs","conname":"ck_archive_jobs_valid_archive_status","contype":"c","definition":definition,"convalidated":True}
+
+
+def test_equivalent_postgresql_array_cast_layouts_compare_equal():
+    original="CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying, 'VERIFIED'::character varying])::text[])))"
+    restored="CHECK (((status)::text = ANY (ARRAY[('PENDING'::character varying)::text, ('VERIFIED'::character varying)::text])))"
+    assert constraint(status_check(original))==constraint(status_check(restored))
+
+
+@pytest.mark.parametrize("alter",["status","predicate","validated"])
+def test_check_normalization_does_not_hide_changed_rules(alter):
+    row=status_check("CHECK (((status)::text = ANY ((ARRAY['PENDING'::character varying])::text[])))")
+    other=dict(row)
+    if alter=="status":other["definition"]=other["definition"].replace("PENDING","FAILED")
+    if alter=="predicate":other["definition"]="("+other["definition"]+" OR true)"
+    if alter=="validated":other["convalidated"]=False
+    assert constraint(row)!=constraint(other)

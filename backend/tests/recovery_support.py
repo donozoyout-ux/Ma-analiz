@@ -53,6 +53,26 @@ def digest(value):
     return hashlib.sha256(json.dumps(canonical(value), sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
+def constraint(row):
+    """Normalize only two known status checks' equivalent PG16 cast layouts.
+
+    pg_dump reparses varchar[]::text[] as per-element text casts. No arbitrary
+    SQL, casts, predicates or constraints are stripped from the comparison.
+    """
+    known = {("archive_jobs", "ck_archive_jobs_valid_archive_status"), ("job_runs", "ck_job_runs_valid_job_status")}
+    if row.get("contype") != "c" or (row.get("table_name"), row.get("conname")) not in known:
+        return row
+    value=row["definition"]
+    array=re.fullmatch(r"CHECK \(\(\(status\)::text = ANY \(\(ARRAY\[(.*)\]\)::text\[\]\)\)\)",value)
+    elements=re.fullmatch(r"CHECK \(\(\(status\)::text = ANY \(ARRAY\[(.*)\]\)\)\)",value)
+    match=array or elements
+    if not match: return row
+    pattern=r"'([A-Z_]+)'::character varying" if array else r"\('([A-Z_]+)'::character varying\)::text"
+    parts=[re.fullmatch(pattern,item) for item in match[1].split(", ")]
+    if not parts or not all(parts): return row
+    return {**row,"definition":"CHECK_STATUS_ALLOWED:"+",".join(sorted({p[1] for p in parts}))}
+
+
 def snapshot(engine):
     """All public tables/columns/rows, constraints and indexes, not sample counts."""
     metadata = MetaData();metadata.reflect(bind=engine, schema="public")
@@ -64,7 +84,7 @@ def snapshot(engine):
             data[table.name] = {"count":len(rows),"sha256":digest(rows)}
             columns[table.name] = [{"name":c["name"], "type":str(c["type"]), "nullable":c["nullable"], "default":c.get("default")}
                                    for c in inspect(engine).get_columns(table.name,schema="public")]
-        constraints = [dict(row) for row in conn.execute(text("""
+        constraints = [constraint(dict(row)) for row in conn.execute(text("""
             SELECT r.relname AS table_name, c.conname, c.contype,
                    pg_get_constraintdef(c.oid) AS definition, c.convalidated, c.condeferrable, c.condeferred
             FROM pg_constraint c JOIN pg_class r ON r.oid=c.conrelid
