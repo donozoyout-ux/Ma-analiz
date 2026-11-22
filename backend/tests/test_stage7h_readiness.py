@@ -24,6 +24,7 @@ def evidence():
                       "sql_audit_match_kind": "RUN_AND_ATTEMPT", "operation": {"outcome": "SKIPPED"}}
     watchdog = {**{k: flags[k] for k in ("SQL_WRITE", "R2_WRITE", "LIVE_DELETE")},
                 "SQL_ARCHIVE_WRITE": "NOT_RUN", "status": "PASS", "state": "HEALTHY",
+                "observed_at": NOW.isoformat(),
                 "storage_evidence": {"status": "VERIFIED"},
                 "checks": {"archive": checks(), "auto": checks()}}
     return validation, watchdog
@@ -92,3 +93,31 @@ def test_actual_report_contract_fail_closed_on_missing_or_bad_evidence(mutation,
     assert report["technical_ready"] is False
     assert expected in report["blockers"]
     assert report["status"]=="SAFE_TO_DELETE_NO"
+
+
+@pytest.mark.parametrize("bad_time", [
+    None,
+    (NOW-timedelta(minutes=11)).isoformat(),
+    (NOW+timedelta(seconds=1)).isoformat(),
+    NOW.replace(tzinfo=None).isoformat(),
+    "invalid",
+])
+def test_old_future_missing_or_naive_healthy_watchdog_cannot_be_replayed(bad_time):
+    validation, watchdog = evidence()
+    if bad_time is None:
+        watchdog.pop("observed_at")
+    else:
+        watchdog["observed_at"] = bad_time
+    report=assess(validation,watchdog,now=NOW)
+    assert report["status"]=="SAFE_TO_DELETE_NO"
+    assert report["technical_ready"] is False
+    assert "WATCHDOG_EVIDENCE_STALE" in report["blockers"]
+
+
+def test_watchdog_evidence_exact_ten_minute_boundary_is_allowed_but_delete_not_approved():
+    validation,watchdog=evidence()
+    watchdog["observed_at"]=(NOW-timedelta(minutes=10)).isoformat()
+    report=assess(validation,watchdog,now=NOW)
+    assert report["technical_ready"] is True
+    assert report["status"]=="SAFE_TO_DELETE_NO"
+    assert report["blockers"]==["OPERATOR_APPROVAL_REQUIRED"]
