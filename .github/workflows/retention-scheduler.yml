@@ -60,7 +60,7 @@ jobs:
     # Isolated PR-only PostgreSQL. Does not receive production credentials.
     if: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -83,15 +83,26 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r backend/requirements.txt
-      - name: Isolated PostgreSQL 16 lifecycle contract (no production secrets)
+      - name: Isolated PostgreSQL 16 lifecycle and dump/restore contract (synthetic only)
         working-directory: backend
         env:
           TEST_POSTGRES_URL: postgresql+psycopg://stage7h_test:stage7h_local_only@127.0.0.1:5432/stage7h_ci
+          STAGE7H_RECOVERY_ENABLED: 'true'
+          STAGE7H_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          RECOVERY_REPORT_PATH: stage7h2-recovery.json
           AUTO_RETENTION_DELETE_ENABLED: 'false'
           OPERATIONAL_DELETE_ENABLED: 'false'
         run: |
           touch ../.env
-          python -m pytest -q tests/test_stage7h_postgres.py
+          python -m pytest -q tests/test_stage7h_postgres.py tests/test_stage7h_recovery.py
+      - name: Synthetic recovery evidence (no SQL dump or row data)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stage7h2-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/stage7h2-recovery.json
+          retention-days: 14
+          if-no-files-found: error
 
   retention:
     needs: validate
