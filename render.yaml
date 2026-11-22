@@ -50,6 +50,11 @@ services:
         value: "750"
       - key: POSTGRES_CRITICAL_MB
         value: "750"
+      # Beta must not enable any operational SQL cleanup gate.
+      - key: AUTO_RETENTION_DELETE_ENABLED
+        value: "false"
+      - key: OPERATIONAL_DELETE_ENABLED
+        value: "false"
       - key: ACTIVE_STATE_RETENTION_DAYS
         value: "14"
       - key: ODDS_RETENTION_DAYS

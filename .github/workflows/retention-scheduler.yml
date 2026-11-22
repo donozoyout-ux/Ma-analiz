@@ -50,11 +50,66 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: python -m pip install -r backend/requirements.txt
+      - name: Node for PR-only offline API/probe contract
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       - name: Local-adapter safety tests without production secrets
+        env:
+          STAGE7I6_NODE_CONTRACT: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
         run: |
           touch .env
           cd backend
           python -m pytest -q --ignore=tests/test_goaloo_live.py --ignore=tests/test_live_integrations.py --ignore=tests/test_backup_before_migration.py
+
+  postgres-contract:
+    # Isolated PR-only PostgreSQL. Does not receive production credentials.
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stage7h_test
+          POSTGRES_PASSWORD: stage7h_local_only
+          POSTGRES_DB: stage7h_ci
+        ports:
+          - 127.0.0.1:5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stage7h_test -d stage7h_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Isolated PostgreSQL 16 lifecycle and dump/restore contract (synthetic only)
+        working-directory: backend
+        env:
+          TEST_POSTGRES_URL: postgresql+psycopg://stage7h_test:stage7h_local_only@127.0.0.1:5432/stage7h_ci
+          STAGE7H_RECOVERY_ENABLED: 'true'
+          STAGE7H_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+          RECOVERY_REPORT_PATH: stage7h2-recovery.json
+          AUTO_RETENTION_DELETE_ENABLED: 'false'
+          OPERATIONAL_DELETE_ENABLED: 'false'
+        run: |
+          touch ../.env
+          python -m pytest -q tests/test_stage7h_postgres.py tests/test_stage7h_recovery.py
+      - name: Synthetic recovery evidence (no SQL dump or row data)
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: stage7h2-recovery-${{ github.run_id }}-${{ github.run_attempt }}
+          path: backend/stage7h2-recovery.json
+          retention-days: 14
+          if-no-files-found: error
 
   retention:
     needs: validate

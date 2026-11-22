@@ -97,12 +97,15 @@ def scheduler_audit(session):
     result = {}
     def safe_row(row):
         at = utc(row.get("completed_at"))
+        started = utc(row.get("started_at"))
+        version = row.get("schema_version", 1)
         run_id = str(row.get("run_id", ""))
         return {"completed_at": at.isoformat() if at else None,
+            "started_at": started.isoformat() if started else None,
             "run_id": run_id if run_id.isdigit() and len(run_id) <= 24 else None,
             "status": safe_code(row.get("status")), "LIVE_DELETE": safe_code(row.get("LIVE_DELETE")),
             "deleted": row.get("deleted") if type(row.get("deleted")) is int else None,
-            "schema_version": 2 if row.get("schema_version") == 2 else 1,
+            "schema_version": version if type(version) is int and version in {1, 2} else None,
             "event": row.get("event") if row.get("event") in {"schedule", "workflow_dispatch", "push", "local"} else None,
             "run_attempt": row.get("run_attempt") if type(row.get("run_attempt")) is int and 1 <= row["run_attempt"] <= 999999 else None,
             "storage_status": safe_code(row.get("storage_status")),
