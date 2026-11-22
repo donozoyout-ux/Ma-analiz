@@ -1,0 +1,152 @@
+{
+  "run_id": 45011430138,
+  "tested_commit": "1d9529d805b5fd5bec10ce5bd2a4dcff910eacdd",
+  "evidence": "REAL_CI_POSTGRESQL_16_SYNTHETIC_DATA",
+  "report": {
+    "stage": "7H.2",
+    "status": "PASS",
+    "evidence": "SYNTHETIC_POSTGRESQL_16_CONTAINER",
+    "checks": {
+      "roundtrip": {
+        "status": "PASS",
+        "all_tables_rows_uuids": "PASS",
+        "ledger_sha256_row_count_content": "PASS",
+        "archive_objects": 9
+      },
+      "foreign_keys": {
+        "status": "PASS",
+        "constraint_count": 9,
+        "rejected_orphan_updates": 3,
+        "rejected_invalid_status_updates": 2
+      },
+      "match_center": {
+        "status": "PASS",
+        "http_lists": 3,
+        "http_details": 2,
+        "history_without_operational_sql": "PASS"
+      },
+      "archive_missing": {
+        "status": "PASS",
+        "readback_status": "REJECTED"
+      },
+      "archive_corrupt": {
+        "status": "PASS",
+        "readback_status": "REJECTED"
+      },
+      "backup_missing": {
+        "status": "PASS",
+        "restore_status": "FAILED",
+        "target_empty": true
+      },
+      "backup_corrupt": {
+        "status": "PASS",
+        "restore_status": "FAILED",
+        "target_empty": true
+      },
+      "schema_only": {
+        "status": "PASS",
+        "restore_status": "FAILED",
+        "tool_exit_zero_is_insufficient": true
+      },
+      "checksum_mismatch": {
+        "status": "PASS",
+        "restore_status": "FAILED",
+        "target_empty": true
+      },
+      "nonempty_target": {
+        "status": "PASS",
+        "restore_status": "REJECTED",
+        "existing_data_unchanged": true
+      },
+      "repeat_empty_target": {
+        "status": "PASS",
+        "restore_status": "PASS",
+        "source_and_first_restore_unchanged": true
+      }
+    },
+    "PRODUCTION_SQL_WRITE": "NOT_RUN",
+    "PRODUCTION_R2_WRITE": "NOT_RUN",
+    "LIVE_DELETE": "NOT_RUN",
+    "AUTO_RETENTION_DELETE_ENABLED": false,
+    "OPERATIONAL_DELETE_ENABLED": false,
+    "server_major": 16,
+    "backup_sha256": "d3c690af99cfa35164d291623fdf92863d8db2ec300c265ec06c1cbb08e99c96",
+    "backup_bytes": 42884,
+    "tables": {
+      "active_matches": {
+        "count": 1,
+        "sha256": "5cca098ac247410f7c89f1f025a6648883d07f068ca3cc7ec3701d68670ec19a"
+      },
+      "active_odds": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "active_statistics": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "archive_jobs": {
+        "count": 9,
+        "sha256": "3b3e928ed56305d28009618b3464d8124b503edc5e4c04b33331183191858870"
+      },
+      "bookmakers": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "coupon_items": {
+        "count": 1,
+        "sha256": "8639c71642c494d1ddaeb6e8073d121ea6e5ed24850ef1027752e3fa840a282c"
+      },
+      "coupons": {
+        "count": 1,
+        "sha256": "73af43d813610cd50e3b11c703170fc44ff6b62f400aa3f45908a4bb80db9265"
+      },
+      "daily_metrics": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "historical_ingest_days": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "job_runs": {
+        "count": 1,
+        "sha256": "e324bff2d6423fe07de6417cd12c8efbaa4cf6efdf80ad6cbdaef019507e190a"
+      },
+      "lessons": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "match_analyses": {
+        "count": 1,
+        "sha256": "cbce744addd1884f6446c60d1a5d6cbfcf686409adb847dd0092be4da195369b"
+      },
+      "match_results": {
+        "count": 1,
+        "sha256": "df077aa199180c304fb2b648fbaf152644b38655bd295c49f6278adf62e0d640"
+      },
+      "notification_deliveries": {
+        "count": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "predictions": {
+        "count": 1,
+        "sha256": "a6ea56f7e58141de8a049dbca1a7d42d0c8edc56a0eec96333fbf27016de4932"
+      },
+      "system_settings": {
+        "count": 3,
+        "sha256": "3fb231c6876dcb0dbb88687199440b0cf13ef28a67fb9f447244b09b580ff568"
+      },
+      "users": {
+        "count": 1,
+        "sha256": "2664b2cbdabff73194d5f3f5a21fe8c2cd0dfabf06ebcac596dd18f2b5444c45"
+      }
+    },
+    "columns_sha256": "d3e08ce5b9321263f5be5a762126322a575f9b3e9531504f1791ccac611b531e",
+    "constraints_sha256": "ae60e6768b4b0cf737f6f4bc1bafe7d46b67043d7a5b3fa42125ca8a44640d11",
+    "indexes_sha256": "fbeb862ceec07e2717f5baf7554504ff4586dcf5d8fa65df5d427a1032e1547c",
+    "synthetic_object_count": 9,
+    "test_database_cleanup": "PASS"
+  },
+  "projection": "SAFE_NON_PAYLOAD_ARTIFACT_PROJECTION"
+}

@@ -26,3 +26,7 @@ PR-only `postgres-contract` job starts an ephemeral PostgreSQL 16 service in Git
 It exercises the **real PostgreSQL engine** (not SQLite) with genuine SQLAlchemy transactions and foreign-key enforcement: positive two-row cleanup with preserved archive ledger and history readback, missing R2 object blocking cleanup, rejected commit/rollback preserving SQL, and an unexpired record + disabled production gate. The test sets an explicit `enabled=True` only within the isolated CI fixture to exercise the cleanup code path; production flags remain disabled and no production cleanup is dispatched.
 
 This is a disposable test-database write/delete and does **not** prove point-in-time recovery of the production PostgreSQL database, actual R2 disaster recovery, schedule delivery reliability, or authorize any production deletion. CI service health and run outcome must be checked before claiming PostgreSQL acceptance.
+
+## Stage 7H.2 recovery extension
+
+The same PR-only service now also runs 11 real PostgreSQL 16 `pg_dump`/`pg_restore` recovery tests. Container identity/cluster guards, complete table/row/constraint/UUID comparison, archived Match Center HTTP reads and invalid-backup rejection are documented with CI evidence in [Stage 7H.2 recovery validation](stage7h2-recovery-validation.md). This adds synthetic recovery evidence; the production/PITR/R2 disaster-recovery limits above still apply.

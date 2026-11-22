@@ -11,7 +11,7 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
-from sqlalchemy import insert, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -221,7 +221,9 @@ def test_valid_schema_only_dump_is_not_a_successful_data_recovery(recovery):
     path=h.directory/"schema_only.dump";payload=h.dump(h.source_name,schema_only=True);path.write_bytes(payload)
     with pytest.raises(RecoveryFailure,match="^RESTORE_CONTENT_MISMATCH$"):
         h.restore(path,hashlib.sha256(payload).hexdigest(),name,engine,h.expected)
-    passed(h,"schema_only",restore_status="FAILED",tool_exit_zero_is_insufficient=True)
+    mismatch=h.report.pop("last_restore_mismatch")
+    assert mismatch["tables"]
+    passed(h,"schema_only",restore_status="FAILED",tool_exit_zero_is_insufficient=True,missing_data_tables=mismatch["tables"])
 
 
 def test_backup_checksum_mismatch_blocks_before_restore(recovery):
