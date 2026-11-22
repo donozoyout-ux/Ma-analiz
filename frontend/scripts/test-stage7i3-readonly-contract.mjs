@@ -4,8 +4,9 @@ import { assessLiveReadOnlyEvidence as assess } from "./stage7i3-readonly-contra
 
 const id="123e4567-e89b-42d3-a456-426614174000";
 const aid="123e4567-e89b-42d3-a456-426614174001";
+const policy={name:"OpenLigaDB",licence:"ODbL-1.0",attribution:"SYNTHETIC OpenLigaDB fixture",licence_url:"https://www.openligadb.de/lizenz"};
 const when="2026-11-22T11:00:00+00:00";
-const item={id, home_team:"Ev", away_team:"Deplasman",start_time:when,storage:"POSTGRESQL",result:null};
+const item={id, home_team:"Ev", away_team:"Deplasman",start_time:when,storage:"POSTGRESQL",status:"SCHEDULED",source:policy,result:null};
 const history={...item,id:aid,storage:"R2",archive_verified_at:when};
 function evidence(){
   return {

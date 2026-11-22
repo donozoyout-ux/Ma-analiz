@@ -5,8 +5,9 @@ import {assessLiveReadOnlyEvidence as assess} from "./stage7i3-readonly-contract
 
 const id="123e4567-e89b-42d3-a456-426614174000";
 const older="123e4567-e89b-42d3-a456-426614174001";
+const policy={name:"OpenLigaDB",licence:"ODbL-1.0",attribution:"SYNTHETIC OpenLigaDB fixture",licence_url:"https://www.openligadb.de/lizenz"};
 const at="2026-11-22T14:40:00+00:00";
-const match=(id,storage)=>({id,home_team:"Ev",away_team:"Dep",storage,start_time:at,result:null,
+const match=(id,storage)=>({id,home_team:"Ev",away_team:"Dep",storage,start_time:at,status:"SCHEDULED",source:policy,result:null,
  ...(storage==="R2"?{archive_verified_at:at}:{})});
 const responses={
  "/":{status:200,body:"<html>OK</html>"},
@@ -24,8 +25,7 @@ function fakeFetch(log,patch={}){
   const key=url.pathname+url.search;
   const reply=Object.hasOwn(patch,key)?patch[key]:responses[key];
   if(!reply) throw Error("Unexpected request");
-  return {ok:reply.status>=200&&reply.status<300,status:reply.status,
-   headers:{get:()=>null},json:async()=>structuredClone(reply.body)};
+  return new Response(typeof reply.body === "string" ? reply.body : JSON.stringify(reply.body),{status:reply.status});
  };
 }
 test("GET-only and pinned HTTPS origin, no credentials, never claims analysis",async()=>{
