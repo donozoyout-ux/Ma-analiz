@@ -48,7 +48,7 @@ def test_even_perfect_evidence_never_authorizes_delete():
     (lambda v, w: w.update(state="ARCHIVE_STALE"), "SCHEDULE_NOT_HEALTHY"),
     (lambda v, w: w["checks"]["auto"].update(sql_audit_match_kind="LEGACY_RUN_ID_ONLY"), "SCHEDULE_AUDIT_NOT_VERIFIED"),
     (lambda v, w: v.update(LIVE_DELETE="UNKNOWN"), "READ_ONLY_FLAGS_NOT_VERIFIED"),
-    (lambda v, w: w.update(AUTO_RETENTION_DELETE_ENABLED=True), "DELETE_GATES_NOT_VERIFIED"),
+    (lambda v, w: v.update(AUTO_RETENTION_DELETE_ENABLED=True), "DELETE_GATES_NOT_VERIFIED"),
 ])
 def test_missing_or_untrusted_evidence_fails_closed(mutation, expected):
     validation, watchdog = evidence()
