@@ -1,104 +1,133 @@
-# Maç Analiz — Android TWA & APK Yapılandırma Rehberi
+# Maç Analiz — Android APK (TWA) Derleme ve Kurulum Rehberi
 
-Bu dizin, **Maç Analiz** uygulamasının Android Trusted Web Activity (TWA) altyapısını ve Google Bubblewrap yapılandırmasını içerir.
+Bu dizin, **Maç Analiz** uygulamasının Android Trusted Web Activity (TWA) projesini, Gradle Wrapper derleyicisini ve derleme araçlarını içerir.
 
-## Mimari Özellikleri
-
-- **Paket Kimliği (Package ID):** `com.macanaliz.app` (sabit ve tutarlı)
-- **TWA Kütüphaneleri:** `com.google.androidbrowserhelper:androidbrowserhelper:2.5.0` & `androidx.browser:browser:1.8.0`
-- **Tasarım:** Premium Beyaz (#FFFFFF) & Kırmızı (#DC2626)
-- **Web Güncellemeleri:** Canlı web deploy'ları (Next.js) APK yeniden derlemeye gerek kalmadan otomatik olarak uygulamaya yansır.
-- **Push Bildirim Desteği:** TWA DelegationService ve Web Push (VAPID) üzerinden tam entegre.
-- **Güvenli Çevrimdışı Mod:** Canlı API yanıtları (skorlar, oranlar, analizler) yanıltıcı veri sunmamak için çevrimdışı önbelleklenmez; zarif beyaz-kırmızı `offline.html` hata sayfası gösterilir.
+- **Uygulama Adı:** Maç Analiz
+- **Paket Kimliği (Package ID):** `com.macanaliz.app`
+- **Hedef Canlı Web Adresi:** `https://ma-analiz-2.onrender.com`
+- **Tasarım:** Premium Beyaz (`#FFFFFF`) zemin & Maç Analiz Kırmızısı (`#DC2626`)
+- **Bildirim Durumu:** Bu APK sürümünde push bildirimleri ve izinleri kapsam dışıdır (yalnızca hafif, güvenli ve hızlı web uygulaması).
 
 ---
 
-## 1. Gerekli Sistem Araçları (Derleme Önkoşulları)
+## 1. Gerekli Sistem Araçları (Yerel Derleme İçin)
 
-APK derlemek için sistemde aşağıdaki araçların kurulu olması gerekir:
+Yerel Windows veya Linux makinenizde APK derlemek için şu iki araç gereklidir:
 
 1. **Java Development Kit (JDK 17 veya 21):**
-   - Android Gradle Plugin 8.x, Java 17+ gerektirir.
-   - Kurulum: `winget install EclipseAdoptium.Temurin.17.JDK` veya `https://adoptium.net/`
-   - Ortam Değişkeni: `JAVA_HOME`
+   - Android Gradle Plugin 8.2+ Java 17+ gerektirir.
+   - Windows kurulumu:
+     ```powershell
+     winget install EclipseAdoptium.Temurin.17.JDK
+     ```
+   - Ortam Değişkeni: `JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17...`
 
-2. **Android SDK Command-Line Tools & Build Tools:**
-   - `platforms;android-34`
-   - `build-tools;34.0.0`
-   - Kurulum: Android Studio veya `sdkmanager` CLI
-   - Ortam Değişkeni: `ANDROID_HOME` veya `ANDROID_SDK_ROOT`
+2. **Android SDK & Build Tools:**
+   - Platform: `android-34`
+   - Build-Tools: `34.0.0`
+   - Kurulum: Android Studio üzerinden "SDK Platforms -> Android 14.0 (UpsideDownCake)" ve "SDK Build-Tools 34.0.0" seçilerek kurulur.
+   - Ortam Değişkeni: `ANDROID_HOME=$env:LOCALAPPDATA\Android\Sdk`
 
-3. **Google Bubblewrap CLI (Alternatif Hızlı Derleme):**
-   ```bash
-   npm install -g @bubblewrap/cli
-   ```
+> **NOT:** Eğer yerel bilgisayarınızda Android SDK veya JDK 17 kurulu değilse, **bölüm 6**'daki GitHub Actions otomatik derleyicisini kullanabilirsiniz.
 
 ---
 
-## 2. İmzalama Anahtarı (Keystore) Oluşturma
+## 2. Debug APK Derleme (Yerel Bilgisayarda)
 
-Güvenli bir üretim anahtarı oluşturmak için aşağıdaki komutu çalıştırın:
+Gradle Wrapper dosyaları projeye eklenmiştir:
 
-```bash
-keytool -genkey -v -keystore android/macanaliz.keystore \
-  -alias macanaliz \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000 \
-  -storepass "GUVENLI_PAROLA" \
-  -keypass "GUVENLI_PAROLA" \
-  -dname "CN=Mac Analiz, OU=Mobile, O=Mac Analiz, L=Istanbul, ST=Istanbul, C=TR"
+```powershell
+cd android
+
+# Windows üzerinde:
+.\gradlew.bat assembleDebug
+
+# Linux / macOS üzerinde:
+chmod +x gradlew
+./gradlew assembleDebug
 ```
 
-> **ÖNEMLİ:** Keystore dosyasını ve parolalarını asla açık git reposuna commit etmeyin. CI/CD ortamında `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` ortam değişkenlerini kullanın.
+### APK Çıktı Konumu
+Başarılı derleme sonucunda APK dosyası şuraya üretilir:
+`android/app/build/outputs/apk/debug/app-debug.apk`
 
 ---
 
-## 3. Digital Asset Links Doğrulama (Adres Çubuğunu Gizleme)
+## 3. APK'yı Android Telefona Kurma Adımları
 
-TWA uygulamasının Android'de tam ekran ve adres çubuğu olmadan çalışması için web sitesi ile Android uygulaması arasında Digital Asset Links doğrulaması yapılmalıdır:
+Üretilen `app-debug.apk` dosyasını telefonunuza yüklemek için 2 yöntem vardır:
 
-1. Keystore SHA-256 parmak izini alın:
+### Yöntem A: USB Kablosu ve ADB ile (Hızlı)
+1. Telefonunuzda **Ayarlar > Geliştirici Seçenekleri > USB Hata Ayıklama**'yı açın.
+2. Telefonu USB ile bilgisayara bağlayın.
+3. Şu komutu çalıştırın:
+   ```powershell
+   adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+### Yöntem B: Doğrudan Telefona İndirip Kurma (Dosya Transferi)
+1. `app-debug.apk` dosyasını Google Drive, WhatsApp, Telegram veya USB kablosu ile telefonunuza aktarın.
+2. Telefonda dosyaya dokunun.
+3. "Bilinmeyen uygulamaları yükle" uyarısı çıkarsa izin verin ve **Yükle** butonuna basın.
+4. Ana ekranda kırmızı logolu beyaz **Maç Analiz** ikonu belirecektir.
+
+---
+
+## 4. TWA Doğrulaması ve Adres Çubuğu Uyarısı
+
+> **ÖNEMLİ:** Android TWA (Trusted Web Activity) mimarisinde, uygulamanın tarayıcı adres çubuğu olmadan **tam ekran (native app gibi)** çalışabilmesi için `https://ma-analiz-2.onrender.com/.well-known/assetlinks.json` adresi ile APK'nın imza parmak izinin birebir eşleşmesi gerekir.
+>
+> Eğer canlı sitedeki `assetlinks.json` henüz operatörün imzasıyla güncellenmediyse:
+> - Uygulama **sorunsuz açılır** ve `https://ma-analiz-2.onrender.com` sitesini yükler.
+> - Ancak üst kısımda güvenli Chrome CCT adres çubuğu görünür.
+> - Adres çubuğunu tamamen gizlemek için aşağıdaki 5. adımı izleyerek imza parmak izinizi canlı siteye ekleyin.
+
+---
+
+## 5. İleride Yayınlanacak Release APK İçin Güvenli İmzalama
+
+Gerçek bir release APK oluşturmak ve Google Play Store'a yüklemek için:
+
+1. **Keystore Üretin (Yerel Makinede):**
+   ```bash
+   keytool -genkey -v -keystore android/macanaliz.keystore \
+     -alias macanaliz \
+     -keyalg RSA \
+     -keysize 2048 \
+     -validity 10000 \
+     -storepass "OPERATOR_PAROLASI" \
+     -keypass "OPERATOR_PAROLASI" \
+     -dname "CN=Mac Analiz, OU=Mobile, O=Mac Analiz, L=Istanbul, ST=Istanbul, C=TR"
+   ```
+   > ⚠️ **GÜVENLİK UYARISI:** `macanaliz.keystore` dosyasını ve parolasını **asla git reposuna commit etmeyin**. Projedeki `.gitignore` dosyası `*.keystore` uzantılarını korumaya almıştır.
+
+2. **SHA-256 Parmak İzini Alın:**
    ```bash
    keytool -list -v -keystore android/macanaliz.keystore -alias macanaliz
    ```
-2. Çıktıdaki `SHA256: XX:XX:XX...` parmak izini kopyalayın.
-3. `frontend/public/.well-known/assetlinks.json` dosyasındaki `sha256_cert_fingerprints` listesine ekleyin.
-4. Web uygulamasını deploy edin. Google DAL test aracı ile doğrulayın:
-   `https://digitalassetlinks.googleapis.com/v1/statements:check?source.web.site=https://ma-analiz-2.onrender.com&relation=delegate_permission/common.handle_all_urls&target.android_app.package_name=com.macanaliz.app&target.android_app.certificate.sha256_fingerprint=PARMAK_IZI`
+   Çıktıdaki `SHA256: XX:XX:XX...` değerini kopyalayın.
 
----
+3. **`assetlinks.json` Dosyasına Ekleyin:**
+   [`frontend/public/.well-known/assetlinks.json`](file:///c:/Users/PC/Desktop/Maçanaliz/frontend/public/.well-known/assetlinks.json) dosyasındaki placeholder yerine yapıştırın ve siteyi deploy edin.
 
-## 4. APK Derleme Komutları
+4. **Release APK Derleyin:**
+   ```powershell
+   $env:ANDROID_KEYSTORE_PATH = "macanaliz.keystore"
+   $env:ANDROID_KEYSTORE_PASSWORD = "OPERATOR_PAROLASI"
+   $env:ANDROID_KEY_ALIAS = "macanaliz"
+   $env:ANDROID_KEY_PASSWORD = "OPERATOR_PAROLASI"
 
-### Seçenek A: Gradle ile Derleme (Önerilen)
-```bash
-cd android
-# Debug APK:
-./gradlew assembleDebug
-
-# Üretim İmzalı APK:
-./gradlew assembleRelease
-```
-Üretilen APK konumu: `android/app/build/outputs/apk/release/app-release.apk`
-
-### Seçenek B: Bubblewrap CLI ile Derleme
-```bash
-cd android
-bubblewrap build
-```
-
----
-
-## 5. Android Cihaz Üzerinde Son Testler
-
-1. **Yükleme:**
-   ```bash
-   adb install -r android/app/build/outputs/apk/release/app-release.apk
+   cd android
+   .\gradlew.bat assembleRelease
    ```
-2. **Doğrulama Adımları:**
-   - **Splash & İkon:** Açılışta kırmızı logolu beyaz splash ekranı görünmeli.
-   - **Tam Ekran (Adres Çubuğu Yok):** Asset Links başarılıysa üstte URL çubuğu görünmez.
-   - **Çevrimdışı Testi:** Cihazı uçak moduna alın; `İnternet Bağlantısı Kesildi` ekranı gelmeli, API sahte veri sunmamalıdır.
-   - **Push Bildirim İzni:** Yönetim > Bildirimler sekmesinden "Bildirimleri Etkinleştir" butonuna basarak Android 13+ bildirim izninin açıldığını test edin.
-   - **Test Bildirimi:** "Test Bildirimi Gönder" butonuna basarak gol uyarısının bildirim çubuğunda ses ve titreşimle belirdiğini doğrulayın.
+   Çıktı konumu: `android/app/build/outputs/apk/release/app-release.apk`
+
+---
+
+## 6. GitHub Actions ile Otomatik APK Derleme ve İndirme
+
+Yerel bilgisayarda Android SDK kurulu olmasa bile, projenin `.github/workflows/android-apk-build.yml` iş akışı sayesinde GitHub üzerinde otomatik olarak derlenebilir:
+
+1. PR #18 veya `feature/android-app-push` dalına commit gönderildiğinde workflow otomatik tetiklenir.
+2. Veya GitHub reposunda **Actions > Android APK Build (TWA) > Run workflow** butonuna tıklanarak manuel başlatılabilir.
+3. Derleme tamamlandığında (yaklaşık 2-3 dakika), sayfanın altındaki **Artifacts** bölümünden `mac-analiz-debug-apk.zip` dosyasını tek tıkla bilgisayarınıza indirebilirsiniz.

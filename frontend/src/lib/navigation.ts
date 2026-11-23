@@ -3,7 +3,7 @@ export const sections = {
  predictions: { title: "AI Tahminleri", href: "/predictions", tabs: [{ id: "predictions", label: "Yapay zekâ tahminleri" }, { id: "coupons", label: "Kupon simülasyonu" }] },
  analysis: { title: "İstatistik & Analiz", href: "/analysis", tabs: [{ id: "performance", label: "Tahmin performansı" }, { id: "lessons", label: "Eğitim merkezi" }] },
  archive: { title: "Veri Arşivi", href: "/archive", tabs: [{ id: "archive", label: "Geçmiş maçlar" }, { id: "storage", label: "Veri deposu" }] },
- management: { title: "Yönetim & Ayarlar", href: "/management", tabs: [{ id: "system", label: "Sistem durumu" }, { id: "settings", label: "Ayarlar" }, { id: "notifications", label: "Bildirimler" }] },
+ management: { title: "Yönetim & Ayarlar", href: "/management", tabs: [{ id: "system", label: "Sistem durumu" }, { id: "settings", label: "Ayarlar" }] },
 } as const;
 export type SectionKey = keyof typeof sections;
 export function selectedTab(section: SectionKey, value?: string | string[]) {

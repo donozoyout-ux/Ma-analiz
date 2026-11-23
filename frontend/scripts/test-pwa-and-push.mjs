@@ -48,8 +48,6 @@ test("Service Worker strictly DOES NOT cache live API responses offline", async 
   assert.ok(swCode.includes("addEventListener('install'"), "SW must have install event");
   assert.ok(swCode.includes("addEventListener('activate'"), "SW must have activate event");
   assert.ok(swCode.includes("addEventListener('fetch'"), "SW must have fetch event");
-  assert.ok(swCode.includes("addEventListener('push'"), "SW must have push event");
-  assert.ok(swCode.includes("addEventListener('notificationclick'"), "SW must have notificationclick event");
 
   // CRITICAL REQUIREMENT: Live API responses must never be cached offline!
   assert.ok(
@@ -59,12 +57,6 @@ test("Service Worker strictly DOES NOT cache live API responses offline", async 
   assert.ok(
     swCode.includes("503") || swCode.includes("offline: true"),
     "SW must return offline status without saving live API responses to cache"
-  );
-
-  // Check click routing
-  assert.ok(
-    swCode.includes("targetUrl") && swCode.includes("notification.data"),
-    "SW must route notification clicks to deep link target URL"
   );
 });
 
@@ -78,7 +70,7 @@ test("Offline page is present with Turkish UI and retry capabilities", async () 
   assert.ok(offlineHtml.includes("#DC2626"), "Uses brand red color");
 });
 
-test("Android TWA configuration matches web manifest and package ID", async () => {
+test("Android TWA configuration matches web manifest, package ID, and notifications disabled", async () => {
   const twaRaw = await readFile(new URL("../../android/twa-manifest.json", import.meta.url), "utf8");
   const twa = JSON.parse(twaRaw);
 
@@ -86,6 +78,6 @@ test("Android TWA configuration matches web manifest and package ID", async () =
   assert.equal(twa.host, "ma-analiz-2.onrender.com");
   assert.equal(twa.themeColor.toUpperCase(), "#FFFFFF");
   assert.equal(twa.backgroundColor.toUpperCase(), "#FFFFFF");
-  assert.equal(twa.enableNotifications, true);
+  assert.equal(twa.enableNotifications, false);
   assert.equal(twa.startUrl, "/?source=twa");
 });

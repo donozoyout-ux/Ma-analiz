@@ -9,7 +9,7 @@
   "navigationDividerColor": "#E2E8F0",
   "navigationDividerColorDark": "#000000",
   "backgroundColor": "#FFFFFF",
-  "enableNotifications": true,
+  "enableNotifications": false,
   "startUrl": "/?source=twa",
   "iconUrl": "https://ma-analiz-2.onrender.com/icon-512.png",
   "maskableIconUrl": "https://ma-analiz-2.onrender.com/icon-maskable-512.png",
