@@ -1,140 +1,34 @@
-/* Stage 7E Motion UI — visual-only layer. No data or API behavior changes. */
-:root {
-  --motion-lime: #b8ff47;
-  --motion-ease: cubic-bezier(.22, 1, .36, 1);
-  --motion-glow: rgba(184, 255, 71, .16);
-}
-body { font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif; }
-.title,.section-title,.section-heading,.brand-copy strong,.insight-heading h2 { font-family:var(--font-space),var(--font-inter),sans-serif; }
-.football-score strong,.center-score > strong,.football-kpi-value,.kpi-value { font-family:var(--font-bebas),var(--font-space),sans-serif; font-weight:400; letter-spacing:.035em; }
-.football-score strong { font-size:32px; line-height:1.05; }
-.center-score > strong { font-size:clamp(48px,7vw,76px); line-height:1.05; }
-.workspace-navigation { position:relative; }
-.nav-motion-indicator { position:absolute; top:0; left:0; width:3px; border-radius:8px; background:var(--turquoise); box-shadow:0 0 12px #43ddd052; pointer-events:none; transition:transform .24s var(--motion-ease),height .24s var(--motion-ease),opacity .16s ease; }
-.streamlined-sidebar .nav-link.active::before { display:none; }
-@media (prefers-reduced-motion: no-preference) {
-  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack) {
-    animation: motion-enter .3s var(--motion-ease);
-  }
-  @keyframes motion-enter {
-    from { opacity: 0; transform: translateY(9px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .football-match-card, .match-tile, .football-kpi, .insight-card,
-  .kpi-card, .page-card, .match-hero, .filter-panel {
-    transition: transform .24s var(--motion-ease),
-      box-shadow .24s var(--motion-ease), border-color .24s ease,
-      background-color .24s ease;
-  }
-  .football-score strong, .center-score > strong,
-  .football-kpi-value, .kpi-value {
-    transition: color .22s ease, text-shadow .22s ease;
-  }
-  .nav-link, .section-tab, .primary-button, .quiet-button,
-  .icon-link, .text-link, .mobile-menu-toggle, .center-submit {
-    transition: transform .18s var(--motion-ease),
-      box-shadow .2s ease, background-color .2s ease,
-      border-color .2s ease, color .2s ease;
-  }
-  .nav-link svg, .section-tab svg, .icon-link svg {
-    transition: transform .18s var(--motion-ease);
-  }
-  .nav-link.active::before {
-    animation: motion-indicator .26s var(--motion-ease) both;
-  }
-  @keyframes motion-indicator {
-    from { opacity: .35; transform: scaleY(.4); }
-    to { opacity: 1; transform: scaleY(1); }
-  }
-  .match-skeleton { animation-duration: 1.7s; }
-}
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .football-match-card:hover, .match-tile:hover {
-    transform: translateY(-5px);
-    border-color: rgba(184, 255, 71, .52);
-    box-shadow: 0 20px 46px rgba(0, 0, 0, .32),
-      0 0 0 1px rgba(184, 255, 71, .12), 0 0 28px var(--motion-glow);
-  }
-  .football-kpi:hover, .insight-card:hover, .kpi-card:hover, .page-card:hover {
-    transform: translateY(-3px);
-    border-color: rgba(184, 255, 71, .27);
-    box-shadow: 0 16px 32px rgba(0,0,0,.2);
-  }
-  .football-match-card:hover .football-score strong,
-  .match-hero:hover .center-score > strong {
-    color: var(--motion-lime);
-    text-shadow: 0 0 18px rgba(184,255,71,.22);
-  }
-  .nav-link:hover, .section-tab:hover {
-    transform: translateX(3px);
-    border-color: rgba(184, 255, 71, .2);
-    background: rgba(184, 255, 71, .08);
-  }
-  .nav-link:hover svg { transform: translateX(2px); }
-  .primary-button:hover:not(:disabled), .quiet-button:hover:not(:disabled), .center-submit:hover:not(:disabled),
-  .mobile-menu-toggle:hover:not(:disabled) {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,.22), 0 0 18px rgba(184,255,71,.1);
-  }
-  .icon-link:hover:not(:disabled) { transform: translateY(-2px) scale(1.04); }
-  .text-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-  .brand-mark:hover { box-shadow: 0 0 24px var(--motion-glow); }
-  .primary-button:hover:active:not(:disabled),.quiet-button:hover:active:not(:disabled),
-  .center-submit:hover:active:not(:disabled),.icon-link:hover:active:not(:disabled),
-  .mobile-menu-toggle:hover:active:not(:disabled) { transform:scale(.97); }
-}
-.nav-link.active, .section-tab.active, .icon-link.selected {
-  border-color: rgba(67,221,208,.3);
-  color:var(--turquoise);
-}
-.nav-link.active::before { background: var(--motion-lime); }
-:where(.nav-link, .section-tab, .primary-button,.quiet-button,.icon-link,.mobile-menu-toggle,.text-link,.skip-link):focus-visible,
-:where(.football-match-card,.match-tile) a:focus-visible {
-  outline:2px solid var(--motion-lime); outline-offset:3px;
-}
-:where(.football-match-card, .match-tile):focus-within {
-  border-color: rgba(184,255,71,.58);
-  box-shadow: 0 0 0 2px rgba(184,255,71,.16);
-}
-:where(button, a):active:not(:disabled) { filter: brightness(.94); }
+/* One motion controller/layer across all pages; static by default. */
+:root { --motion-ease:cubic-bezier(.22,1,.36,1); }
+.card::after,.football-match-card::after { content:""; position:absolute; pointer-events:none; width:180px; height:180px; left:-90px; top:-90px; border-radius:50%; background:radial-gradient(circle,#d7193212,transparent 70%); opacity:0; transform:translate3d(var(--light-x,0px),var(--light-y,0px),0); }
+.card:focus-within,.football-match-card:focus-within { border-color:#DF8391; box-shadow:0 0 0 2px #d7193212; }
 @media(prefers-reduced-motion:no-preference) {
+ .main>:where(header,section,.grid,.explorer-stack,.match-detail-stack),.premium-dashboard>:where(.dashboard-context,header,section,.grid) { animation:premium-enter .4s var(--motion-ease) both; }
+ .results-swap { animation:premium-enter .22s ease both; }
+ @keyframes premium-enter { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+ .card,.football-match-card { transition:transform .28s var(--motion-ease),box-shadow .28s ease,border-color .2s ease; }
+ .card::after,.football-match-card::after { transition:opacity .22s ease; }
+ .nav-motion-indicator { transition:transform .24s var(--motion-ease),height .24s var(--motion-ease),opacity .16s ease; }
+ :is(.nav-link,.section-tab,.primary-button,.quiet-button,.icon-link,.text-link,.mobile-menu-toggle) { transition:transform .18s var(--motion-ease),box-shadow .2s ease,background-color .2s ease,border-color .2s ease,color .2s ease; }
+ input,select { transition:background-color .2s ease,border-color .2s ease; }
  button:active:not(:disabled),a.nav-link:active,a.section-tab:active,a.text-link:active { transform:scale(.97); }
+ .match-skeleton { animation:match-loading 1.7s ease infinite; }
+ @keyframes match-loading { to { background-position:-200% 0; } }
 }
-button:disabled,button:disabled:hover { transform:none;box-shadow:none;filter:none; }
-@media(hover:none) { .football-match-card:hover,.match-tile:hover { transform:none;box-shadow:none; }.nav-link:hover { transform:none; } }
-@media(max-width:600px) { .football-score strong { font-size:30px; }.football-match-card { min-width:0; }.football-teams > a { overflow-wrap:anywhere; } }
-@media (prefers-reduced-motion: reduce) {
-  *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
-  .main > :where(header, section, .grid, .explorer-stack, .match-detail-stack),
-  .nav-link.active::before, .match-skeleton {
-    animation: none !important;
-  }
-  .football-match-card, .match-tile, .football-kpi, .insight-card,
-  .kpi-card, .page-card, .match-hero, .filter-panel,
-  .nav-link, .section-tab, .primary-button, .quiet-button, .icon-link,
-  .mobile-menu-toggle, .center-submit {
-    transform: none !important;
-    transition: none !important;
-  }
+@media(hover:hover) and (pointer:fine) and (prefers-reduced-motion:no-preference) {
+ [data-tilt-active] { transform:perspective(1000px) translateY(-4px) rotateX(var(--tilt-x,0deg)) rotateY(var(--tilt-y,0deg)); border-color:#E9C4CB; box-shadow:var(--shadow-x,0px) var(--shadow-y,20px) 34px -16px #15171c24,0 4px 8px #d7193205; }
+ [data-tilt-active]::after { opacity:1; }
+ .football-match-card:hover .football-score strong { color:var(--premium-red); }
+ .nav-link:hover,.section-tab:hover { color:var(--premium-red); background:#FFF5F6; }.nav-link:hover { transform:translateX(3px); }
+ :is(.quiet-button,.icon-link,.mobile-menu-toggle):hover:not(:disabled) { transform:translateY(-2px); border-color:#E9A7B1; color:var(--premium-red); background:#FFF5F6; box-shadow:0 4px 10px #15171c08; }
+ :is(.primary-button,.home-refresh,.center-submit):hover:not(:disabled) { background:#BF142A; color:white; border-color:#BF142A; box-shadow:0 6px 16px #d7193224; }
+ :is(.quiet-button,.primary-button,.icon-link,.mobile-menu-toggle):hover:active:not(:disabled) { transform:scale(.97); }
+ .text-link:hover,.record-link:hover,.football-teams>a:hover { color:#B51027; text-decoration:underline; text-underline-offset:4px; }
 }
-
-/* Stage 7F — shareable match detail controls */
-.match-detail-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.match-share-actions { display: grid; justify-items: end; gap: 5px; min-width: 0; }
-.match-share-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.match-share-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; }
-.match-share-feedback { color: var(--muted); font-size: 12px; line-height: 1.5; max-width: 360px; text-align: right; }
-.match-share-feedback:empty { display: none; }
-@media (max-width: 620px) {
-  .match-detail-toolbar { align-items: stretch; flex-direction: column; }
-  .match-share-actions { justify-items: stretch; }
-  .match-share-buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .match-share-button { white-space: normal; }
-  .match-share-feedback { text-align: left; }
+button:disabled,button:disabled:hover { transform:none; box-shadow:none; filter:none; }
+@media(any-pointer:coarse),(hover:none),(pointer:coarse) { [data-tilt-active] { transform:none; }.card::after,.football-match-card::after { display:none; } }
+@media(prefers-reduced-motion:reduce) {
+ *,*::before,*::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+ .card,.football-match-card,.nav-link,.section-tab,.primary-button,.quiet-button,.icon-link,.mobile-menu-toggle { transform:none!important; }
+ .card::after,.football-match-card::after { display:none; }
 }

@@ -13,7 +13,8 @@
     "probe:read-only": "node scripts/run-stage7i4-live-probe.mjs --live",
     "test:dashboard-browser": "node scripts/test-dashboard-browser.mjs",
     "test:beta-integration-browser": "node scripts/test-beta-integration-browser.mjs",
-    "test:beta-integration": "python ../backend/tests/run_beta_integration.py"
+    "test:beta-integration": "python ../backend/tests/run_beta_integration.py",
+    "test:premium-pages-browser": "node scripts/test-premium-pages-browser.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
