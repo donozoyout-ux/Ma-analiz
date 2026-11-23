@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace "com.macanaliz.app"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.macanaliz.app"
+        minSdk 21
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Digital Asset Links Statement (points to strings.xml or assetlinks verification)
+        resValue "string", "asset_statements", """
+            [{
+                "relation": ["delegate_permission/common.handle_all_urls"],
+                "target": {
+                    "namespace": "web",
+                    "site": "https://ma-analiz-2.onrender.com"
+                }
+            }]
+        """
+    }
+
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "../macanaliz.keystore"
+            def keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "macanaliz123"
+            def keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "macanaliz"
+            def keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "macanaliz123"
+
+            if (file(keystorePath).exists()) {
+                storeFile file(keystorePath)
+                storePassword keystorePassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            def keystorePath = System.getenv("ANDROID_KEYSTORE_PATH") ?: "../macanaliz.keystore"
+            if (file(keystorePath).exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.browser:browser:1.8.0'
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

@@ -77,6 +77,13 @@ class Settings(BaseSettings):
     similarity_moderate_threshold: int = 100
     similarity_strong_threshold: int = 500
 
+    # Push Notifications (Web Push / VAPID)
+    push_notifications_enabled: bool = False
+    push_rate_limit_per_minute: int = 60
+    vapid_public_key: str | None = None
+    vapid_private_key: SecretStr | None = None
+    vapid_claims_sub: str = "mailto:admin@macanaliz.com"
+
     @property
     def provider_id(self) -> str | None:
         return self.provider_name or self.match_provider  # Never select a paid vendor from credentials.
