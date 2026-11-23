@@ -83,6 +83,7 @@ test("Android TWA configuration matches web manifest and package ID", async () =
   const twa = JSON.parse(twaRaw);
 
   assert.equal(twa.packageId, "com.macanaliz.app");
+  assert.equal(twa.host, "ma-analiz-2.onrender.com");
   assert.equal(twa.themeColor.toUpperCase(), "#FFFFFF");
   assert.equal(twa.backgroundColor.toUpperCase(), "#FFFFFF");
   assert.equal(twa.enableNotifications, true);

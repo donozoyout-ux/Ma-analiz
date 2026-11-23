@@ -65,7 +65,7 @@ TWA uygulamasının Android'de tam ekran ve adres çubuğu olmadan çalışması
 2. Çıktıdaki `SHA256: XX:XX:XX...` parmak izini kopyalayın.
 3. `frontend/public/.well-known/assetlinks.json` dosyasındaki `sha256_cert_fingerprints` listesine ekleyin.
 4. Web uygulamasını deploy edin. Google DAL test aracı ile doğrulayın:
-   `https://digitalassetlinks.googleapis.com/v1/statements:check?source.web.site=https://mac-analiz.onrender.com&relation=delegate_permission/common.handle_all_urls&target.android_app.package_name=com.macanaliz.app&target.android_app.certificate.sha256_fingerprint=PARMAK_IZI`
+   `https://digitalassetlinks.googleapis.com/v1/statements:check?source.web.site=https://ma-analiz-2.onrender.com&relation=delegate_permission/common.handle_all_urls&target.android_app.package_name=com.macanaliz.app&target.android_app.certificate.sha256_fingerprint=PARMAK_IZI`
 
 ---
 

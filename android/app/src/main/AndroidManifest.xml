@@ -24,7 +24,7 @@
 
             <meta-data
                 android:name="android.support.customtabs.trusted.DEFAULT_URL"
-                android:value="https://mac-analiz.onrender.com/?source=twa" />
+                android:value="https://ma-analiz-2.onrender.com/?source=twa" />
 
             <meta-data
                 android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR"
@@ -67,7 +67,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data
                     android:scheme="https"
-                    android:host="mac-analiz.onrender.com" />
+                    android:host="ma-analiz-2.onrender.com" />
             </intent-filter>
 
         </activity>

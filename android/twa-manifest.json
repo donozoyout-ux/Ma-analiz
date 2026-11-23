@@ -1,6 +1,6 @@
 {
   "packageId": "com.macanaliz.app",
-  "host": "mac-analiz.onrender.com",
+  "host": "ma-analiz-2.onrender.com",
   "name": "Maç Analiz",
   "launcherName": "Maç Analiz",
   "themeColor": "#FFFFFF",
@@ -11,8 +11,8 @@
   "backgroundColor": "#FFFFFF",
   "enableNotifications": true,
   "startUrl": "/?source=twa",
-  "iconUrl": "https://mac-analiz.onrender.com/icon-512.png",
-  "maskableIconUrl": "https://mac-analiz.onrender.com/icon-maskable-512.png",
+  "iconUrl": "https://ma-analiz-2.onrender.com/icon-512.png",
+  "maskableIconUrl": "https://ma-analiz-2.onrender.com/icon-maskable-512.png",
   "appVersionName": "1.0.0",
   "appVersionCode": 1,
   "signingKey": {
@@ -32,7 +32,7 @@
     }
   },
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://mac-analiz.onrender.com/manifest.json",
+  "webManifestUrl": "https://ma-analiz-2.onrender.com/manifest.json",
   "fallbackType": "customtabs",
   "features": {
     "playBilling": {

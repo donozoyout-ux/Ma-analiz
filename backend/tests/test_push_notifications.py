@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
@@ -17,17 +19,23 @@ from app.push.store import SubscriptionStore
 
 
 @pytest.fixture
-def isolated_service():
-    store = SubscriptionStore()
-    dedup = DedupStore()
+def tmp_dir():
+    with tempfile.TemporaryDirectory() as td:
+        yield Path(td)
+
+
+@pytest.fixture
+def isolated_service(tmp_dir):
+    store = SubscriptionStore(storage_file=tmp_dir / "subs.json")
+    dedup = DedupStore(storage_file=tmp_dir / "dedup.json")
     vapid = VapidKeyManager()
     return PushNotificationService(store=store, dedup=dedup, vapid=vapid)
 
 
 @pytest.fixture
-def client(monkeypatch):
-    test_store = SubscriptionStore()
-    test_dedup = DedupStore()
+def client(tmp_dir):
+    test_store = SubscriptionStore(storage_file=tmp_dir / "api_subs.json")
+    test_dedup = DedupStore(storage_file=tmp_dir / "api_dedup.json")
     test_vapid = VapidKeyManager()
     service = PushNotificationService(store=test_store, dedup=test_dedup, vapid=test_vapid)
 
@@ -53,8 +61,10 @@ def test_endpoint_sanitization():
     assert sanitized.startswith("https://fcm.googleapis.com/")
 
 
-def test_dedup_store_prevents_duplicate_notifications():
-    dedup = DedupStore(ttl_seconds=3600)
+def test_dedup_store_prevents_duplicate_notifications(tmp_dir):
+    dedup_path = tmp_dir / "test_dedup.json"
+    dedup = DedupStore(ttl_seconds=3600, storage_file=dedup_path)
+
     # First time -> not duplicate (returns False)
     assert dedup.record_and_check("verified_goal", "match-123", "goal-1") is False
 
@@ -65,9 +75,49 @@ def test_dedup_store_prevents_duplicate_notifications():
     assert dedup.record_and_check("verified_goal", "match-123", "goal-2") is False
 
 
+def test_dedup_store_persists_across_restarts(tmp_dir):
+    dedup_path = tmp_dir / "restart_dedup.json"
+
+    # Instance 1 records an event
+    dedup1 = DedupStore(ttl_seconds=3600, storage_file=dedup_path)
+    assert dedup1.record_and_check("verified_match_result", "match-final-999", "whistle") is False
+
+    # Instance 2 (simulating process restart) loads the same storage file
+    dedup2 = DedupStore(ttl_seconds=3600, storage_file=dedup_path)
+    # Must immediately identify as duplicate!
+    assert dedup2.record_and_check("verified_match_result", "match-final-999", "whistle") is True
+
+
+def test_subscription_store_persists_across_restarts(tmp_dir):
+    subs_path = tmp_dir / "restart_subs.json"
+
+    # Instance 1 writes subscription
+    store1 = SubscriptionStore(storage_file=subs_path)
+    sub = PushSubscriptionCreate(
+        endpoint="https://push.example.com/persistent-device-1",
+        keys=PushSubscriptionKeys(p256dh="key-test-p256dh-abc-12345", auth="auth-secret-12345"),
+        client_token="client-token-secret-restart-123",
+        preferences=PushPreferences(
+            enabled=True,
+            favorite_teams=["Galatasaray"],
+        ),
+    )
+    sub_id, is_new = store1.add_or_update(sub)
+    assert is_new is True
+    assert store1.count() == 1
+
+    # Instance 2 (simulating process restart) loads from disk
+    store2 = SubscriptionStore(storage_file=subs_path)
+    assert store2.count() == 1
+    loaded = store2.get_by_token("client-token-secret-restart-123")
+    assert len(loaded) == 1
+    assert loaded[0].subscription_id == sub_id
+    assert loaded[0].preferences.favorite_teams == ["Galatasaray"]
+
+
 @pytest.mark.asyncio
 async def test_rejection_of_unverified_events(isolated_service):
-    # Unverified event (e.g. rumors, speculative scores) must fail closed
+    # Unverified event must fail closed
     unverified_event = NotificationEvent(
         event_type=NotificationType.VERIFIED_GOAL,
         match_id="m-99",
@@ -75,7 +125,7 @@ async def test_rejection_of_unverified_events(isolated_service):
         away_team="Team B",
         title="Unverified Goal",
         body="Possible goal",
-        verified=False,  # strictly False
+        verified=False,
     )
     result = await isolated_service.broadcast_event(unverified_event)
     assert result["status"] == "rejected"

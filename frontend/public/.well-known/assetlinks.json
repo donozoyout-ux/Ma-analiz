@@ -5,8 +5,7 @@
       "namespace": "android_app",
       "package_name": "com.macanaliz.app",
       "sha256_cert_fingerprints": [
-        "14:6D:E9:D6:0F:4B:D6:4E:85:49:6A:71:8F:E4:6B:32:38:14:65:73:29:3E:82:81:54:8B:28:C2:55:75:A8:41",
-        "A1:B2:C3:D4:E5:F6:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23"
+        "__OPERATOR_RELEASE_KEYSTORE_SHA256_FINGERPRINT_REQUIRED__"
       ]
     }
   }

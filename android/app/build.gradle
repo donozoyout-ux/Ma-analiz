@@ -21,7 +21,7 @@ android {
                 "relation": ["delegate_permission/common.handle_all_urls"],
                 "target": {
                     "namespace": "web",
-                    "site": "https://mac-analiz.onrender.com"
+                    "site": "https://ma-analiz-2.onrender.com"
                 }
             }]
         """
