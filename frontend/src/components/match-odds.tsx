@@ -63,7 +63,7 @@ export function MatchOdds({ matchId }: { matchId: string }) {
 
     <section className="card odds-section">
       <div className="section-head"><div><div className="section-kicker">SAĞLAYICI ORAN KAYITLARI</div><div className="section-title">Oran hareketleri</div><p className="page-intro">Açılış, en güncel ve kapanış fiyatları ayrı tutulur. Canlı fiyatlar kapanış hesabına katılmaz.</p></div></div>
-      {match.odds_summary.length === 0 ? <div className="empty">Bu maç için henüz oran kaydı yok.</div> : <div className="records-scroll"><table className="records-table"><thead><tr>{["Sağlayıcı", "Pazar", "Seçim", "Çizgi", "Açılış", "Güncel", "Kapanış", "Hareket"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>
+      {match.odds_summary.length === 0 ? <div className="empty">Bu maç için henüz oran kaydı yok.</div> : <div className="records-scroll" tabIndex={0} role="region" aria-label="Maç ve oran tablosu"><table className="records-table"><thead><tr>{["Sağlayıcı", "Pazar", "Seçim", "Çizgi", "Açılış", "Güncel", "Kapanış", "Hareket"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>
         {match.odds_summary.map((row, index) => <tr key={`${row.bookmaker}-${row.market}-${row.selection}-${row.line ?? ""}-${index}`}>
           <td>{row.bookmaker}</td><td>{marketLabel(row.market)}</td><td>{marketLabel(row.selection)}</td><td>{row.line ?? "—"}</td>
           <td title={row.opening?.captured_at ? formatDate(row.opening.captured_at) : ""}>{formatPrice(row.opening)}</td>
@@ -75,7 +75,7 @@ export function MatchOdds({ matchId }: { matchId: string }) {
 
     {match.live_odds.length > 0 && <section className="card">
       <div className="section-head"><div><div className="section-kicker">AYRI TUTULAN CANLI KAYITLAR</div><div className="section-title">Canlı oranlar</div></div></div>
-      <div className="records-scroll"><table className="records-table"><thead><tr>{["Sağlayıcı", "Pazar", "Seçim", "Çizgi", "Fiyat", "Kayıt zamanı"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{match.live_odds.map((row, index) => <tr key={`${row.bookmaker}-${row.market}-${row.selection}-${index}`}><td>{row.bookmaker}</td><td>{marketLabel(row.market)}</td><td>{marketLabel(row.selection)}</td><td>{row.line ?? "—"}</td><td>{Number(row.price).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}</td><td>{formatDate(row.captured_at)}</td></tr>)}</tbody></table></div>
+      <div className="records-scroll" tabIndex={0} role="region" aria-label="Maç ve oran tablosu"><table className="records-table"><thead><tr>{["Sağlayıcı", "Pazar", "Seçim", "Çizgi", "Fiyat", "Kayıt zamanı"].map((heading) => <th key={heading}>{heading}</th>)}</tr></thead><tbody>{match.live_odds.map((row, index) => <tr key={`${row.bookmaker}-${row.market}-${row.selection}-${index}`}><td>{row.bookmaker}</td><td>{marketLabel(row.market)}</td><td>{marketLabel(row.selection)}</td><td>{row.line ?? "—"}</td><td>{Number(row.price).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 3 })}</td><td>{formatDate(row.captured_at)}</td></tr>)}</tbody></table></div>
     </section>}
 
     <section className="card">

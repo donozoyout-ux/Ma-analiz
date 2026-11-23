@@ -7,7 +7,6 @@ import { type Match, istanbulDay, summarizeTodaysMatches } from "@/lib/matches";
 import { performanceSummary, type DailyPerformance, type PredictionSummary } from "@/lib/football-summary";
 import { MatchExplorer } from "./match-explorer";
 import { OverviewMetrics } from "./overview-metrics";
-import { DashboardSurface } from "./dashboard-surface";
 export function FootballHome() {
  const matches = useApiList<Match>("matches?limit=500");
  const predictions = useApiList<PredictionSummary>("predictions?limit=500");
@@ -19,7 +18,7 @@ export function FootballHome() {
  const todaysPredictions = predictions.rows?.filter(row => istanbulDay(row.created_at) === today);
  const pending = todaysPredictions?.filter(row => row.status === "PENDING").length;
  const refreshAll = () => { matches.refresh(); predictions.refresh(); performance.refresh(); };
- return <DashboardSurface>
+ return <div className="premium-dashboard">
   <div className="dashboard-context"><span>Çalışma alanı <span aria-hidden="true">/</span> <strong>Genel Bakış</strong></span><span className="dashboard-edition">MAÇ ANALİZ <span aria-hidden="true">●</span> FUTBOL ODAKLI</span></div>
   <header className="topbar football-heading"><div><div className="eyebrow"><span aria-hidden="true"/> OYUNU VERİYLE OKUYUN</div><h1 className="title">Futbol Analiz Merkezi<span aria-hidden="true">.</span></h1><p className="page-intro">Günün maçları, sahadaki veriler ve analizler.<br className="dashboard-intro-break"/> Futbola daha yakından bakın.</p></div><div className="heading-actions"><span className="today-chip"><CalendarDays size={17}/>{today ? new Date(`${today}T12:00:00+03:00`).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"}) : "Bugün"}</span><button className="quiet-button home-refresh" onClick={refreshAll}><RefreshCw size={16}/>Verileri yenile</button></div></header>
   <p className="scope-note home-scope" role="status"><strong>BETA / TEST SÜRÜMÜ</strong> — Maç verileri ve analizler doğrulama aşamasındadır. Kayıt yoksa sonuç veya tahmin üretilmez; eksik veriler açıkça gösterilir.</p>
@@ -36,5 +35,5 @@ export function FootballHome() {
     <div className="insight-footer"><small>Günlük sonuç kayıtları (UTC). Bekleyen tahminler isabet hesabına katılmaz.</small><Link className="text-link" href="/analysis">Performansı incele</Link></div>
    </section>
   </div><p className="home-data-note">Maç ve tahmin verileri bağlı kaynaklardan alınır. Skor veya analiz bilgisi yoksa açıkça belirtilir. Veriler kendiliğinden canlı güncellenmez.</p>
- </DashboardSurface>;
+ </div>;
 }

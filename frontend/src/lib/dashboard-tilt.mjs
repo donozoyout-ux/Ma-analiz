@@ -1,5 +1,6 @@
-// DOM-only controller: one pending frame for the dashboard, no React state or idle loop.
-export const TILT_SELECTOR = '.football-kpi, .football-match-card, .insight-card';
+// DOM-only controller: one pending frame for the application, no React state or idle loop.
+// Filters and scrollable records remain steady. Only leaf cards can tilt.
+export const TILT_SELECTOR = '.football-match-card, .card:not(.filter-panel):not(.match-list-panel):not(.records-card):not(.records-scroll):not(.list-toolbar)';
 export const TILT_MEDIA = '(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)';
 const properties = ['--tilt-x', '--tilt-y', '--shadow-x', '--shadow-y', '--light-x', '--light-y'];
 
@@ -49,7 +50,7 @@ export function attachDashboardTilt(root, view) {
     if (!enabled() || event.pointerType !== 'mouse' || event.buttons) { reset(); return; }
     const target = event.target;
     const next = target instanceof view.Element ? target.closest(TILT_SELECTOR) : null;
-    if (!next || !root.contains(next)) { reset(); return; }
+    if (!next || !root.contains(next) || next.querySelector?.('.card, .football-match-card, table')) { reset(); return; }
     if (next !== card) { reset(); card = /** @type {HTMLElement} */ (next); }
     point = {x: event.clientX, y: event.clientY};
     if (!frame) frame = view.requestAnimationFrame(paint);
@@ -59,6 +60,11 @@ export function attachDashboardTilt(root, view) {
     if (card && (!(event.relatedTarget instanceof view.Node) || !card.contains(event.relatedTarget))) reset();
   };
   const visibility = () => { if (root.ownerDocument.hidden) reset(); };
+  // Query-string tabs can replace a card without changing the pathname.
+  const observer = view.MutationObserver ? new view.MutationObserver(() => {
+    if (card && !root.contains(card)) reset();
+  }) : null;
+  observer?.observe(root, {childList:true, subtree:true});
   root.addEventListener('pointermove', move);
   root.addEventListener('pointerout', out);
   root.addEventListener('pointerleave', reset);
@@ -73,6 +79,7 @@ export function attachDashboardTilt(root, view) {
   root.ownerDocument.addEventListener('visibilitychange', visibility);
   return () => {
     disposed = true;
+    observer?.disconnect();
     reset();
     root.removeEventListener('pointermove', move);
     root.removeEventListener('pointerout', out);

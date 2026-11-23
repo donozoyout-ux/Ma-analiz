@@ -61,13 +61,13 @@ export function RecordsPanel({ endpoint, columns, empty }: { endpoint: string; c
     return () => controller.abort();
   }, [endpoint]);
 
-  if (error) return <div className="card empty">{apiErrorMessage(error)}</div>;
-  if (rows === null) return <div className="card empty" aria-live="polite">Doğrulanmış kayıtlar yükleniyor…</div>;
+  if (error) return <div className="card empty" role="alert">{apiErrorMessage(error)}</div>;
+  if (rows === null) return <div className="card empty" role="status">Doğrulanmış kayıtlar yükleniyor…</div>;
   if (rows.length === 0) return <div className="card empty">{empty}</div>;
 
   return (
     <div className="card records-card">
-      <div className="records-scroll"><table className="records-table">
+      <div className="records-scroll" tabIndex={0} role="region" aria-label="Kayıt tablosu"><table className="records-table">
         <thead><tr>{columns.map((column) => <th key={column}>{columnLabels[column] ?? column.replaceAll("_", " ").toLocaleUpperCase("tr-TR")}</th>)}</tr></thead>
         <tbody>{rows.map((row, index) => {
           const key = String(row.id ?? row.date ?? index);

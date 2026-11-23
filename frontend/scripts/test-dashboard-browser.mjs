@@ -173,7 +173,7 @@ try {
  // Client navigation must remove the route-specific white theme and its effect.
  await size(1440);await evaluate(`document.querySelector('.nav-link[href="/matches"]').click()`);
  await wait(`location.pathname==='/matches' && !document.querySelector('.premium-dashboard')`);await sleep(350);
- await check('other_page_keeps_original_theme',`getComputedStyle(document.body).backgroundColor==='rgb(8, 13, 23)' && !document.querySelector('[data-tilt-active]')`);
+ await check('shared_theme_survives_navigation',`getComputedStyle(document.body).backgroundColor==='rgb(247, 248, 250)' && !document.querySelector('[data-tilt-active]')`);
  await check('sidebar_indicator_tracks_active_route',`Math.abs(document.querySelector('.nav-motion-indicator').getBoundingClientRect().top-document.querySelector('.nav-link.active').getBoundingClientRect().top-8)<2`);
  assert.deepEqual(errors,[]); checks.push('no_unhandled_or_external_requests');
  const report={evidence:'LOCAL_PRODUCTION_BUILD_EMPTY_AND_SYNTHETIC_FIXTURES',checks,passed:checks.length,api_fixture_reads:apiReads,production_requests:0,SQL_WRITE:'NOT_RUN',R2_WRITE:'NOT_RUN',LIVE_DELETE:'NOT_RUN',SAFE_TO_DELETE:'NO',AUTO_RETENTION_DELETE_ENABLED:false,OPERATIONAL_DELETE_ENABLED:false};

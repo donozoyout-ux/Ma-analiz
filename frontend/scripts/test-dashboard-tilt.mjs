@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { attachDashboardTilt, TILT_MEDIA } from '../src/lib/dashboard-tilt.mjs';
+import { attachDashboardTilt, TILT_MEDIA, TILT_SELECTOR } from '../src/lib/dashboard-tilt.mjs';
 
 // DOM test doubles only; no browser package, network or API data needed.
 class Target extends EventTarget {
@@ -33,12 +33,19 @@ function fixture() {
     requestAnimationFrame: callback => { frames.set(++next,callback); return next; },
     cancelAnimationFrame: id => frames.delete(id),
   });
+  class Observer {
+    static current;
+    constructor(callback) { this.callback=callback; Observer.current=this; }
+    observe(target,options) { this.target=target; this.options=options; }
+    disconnect() { this.disconnected=true; }
+  }
+  view.MutationObserver=Observer;
   const dispose = attachDashboardTilt(root,view);
   const move = (values={}) => root.fire('pointermove',{target:child, pointerType:'mouse', buttons:0, clientX:300, clientY:100,...values});
   // target is a read-only Event property; define it for the delegated test event.
   root.fire = (type,values={}) => { const event=new Event(type); for(const [k,v] of Object.entries(values)) Object.defineProperty(event,k,{value:v}); root.dispatchEvent(event); };
   const flush = () => { const callbacks=[...frames.values()]; frames.clear(); callbacks.forEach(fn=>fn()); };
-  return {root,card,child,media,coarse,view,frames,dispose,move,flush};
+  return {root,card,child,media,coarse,view,frames,dispose,move,flush,observer:Observer.current};
 }
 test('many pointer events schedule a single frame and use the latest position', () => {
   const f=fixture(); for(let n=0;n<60;n++) f.move();
@@ -96,6 +103,19 @@ test('hidden document cancels pending work',()=>{
 test('cleanup removes every listener, style and pending frame; stale callback is harmless',()=>{
   const f=fixture(); f.move(); f.flush(); f.move(); const stale=[...f.frames.values()][0]; f.dispose(); stale();
   assert.equal(f.frames.size,0); assert.equal(f.card.values.size,0);
+  assert.equal(f.observer.disconnected,true);
   for(const target of [f.root,f.view,f.media,f.coarse,f.root.ownerDocument]) assert.equal(target.listeners.size,0);
   f.move(); assert.equal(f.frames.size,0); f.dispose();
+});
+test('shared selection excludes filtering and scrolling records',()=>{
+  for(const name of ['filter-panel','match-list-panel','records-card','records-scroll','list-toolbar']) assert.ok(TILT_SELECTOR.includes(`:not(.${name})`));
+});
+test('container cards or cards containing a table stay steady',()=>{
+  const f=fixture(); f.card.querySelector=()=>f.child;
+  f.move();f.flush();assert.equal(f.frames.size,0);assert.equal(f.card.values.size,0);f.dispose();
+});
+test('new route/tab removal cancels an active frame without an idle loop',()=>{
+  const f=fixture();f.move();f.flush();f.move();f.root.contains=()=>false;f.observer.callback();
+  assert.equal(f.frames.size,0);assert.equal(f.card.values.size,0);
+  assert.deepEqual(f.observer.options,{childList:true,subtree:true});f.dispose();
 });
