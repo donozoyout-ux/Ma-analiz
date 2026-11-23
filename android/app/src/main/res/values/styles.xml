@@ -1,8 +1,9 @@
 <resources>
-    <style name="Theme.MacAnaliz" parent="Theme.MaterialComponents.Light.NoActionBar">
-        <item name="colorPrimary">@color/colorPrimary</item>
-        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
-        <item name="colorAccent">@color/colorAccent</item>
+    <!-- Platform theme: no external MaterialComponents dependency required. -->
+    <style name="Theme.MacAnaliz" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">@color/colorPrimary</item>
+        <item name="android:colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="android:colorAccent">@color/colorAccent</item>
         <item name="android:windowBackground">@color/backgroundColor</item>
     </style>
 
