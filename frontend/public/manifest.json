@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json.schemastore.org/web-manifest-combined.json",
+  "name": "Maç Analiz - Futbol Veri ve Analiz Platformu",
+  "short_name": "Maç Analiz",
+  "description": "Gerçek maç verileri, oran hareketleri, anlık bildirimler ve kanıta dayalı futbol analizi.",
+  "id": "/?source=pwa",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#FFFFFF",
+  "theme_color": "#FFFFFF",
+  "lang": "tr",
+  "dir": "ltr",
+  "categories": ["sports", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Maç Merkezi",
+      "short_name": "Maçlar",
+      "description": "Günün canlı maçları ve oran hareketleri",
+      "url": "/matches",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI Tahminleri",
+      "short_name": "Tahminler",
+      "description": "Yapay zekâ maç analizleri ve kuponlar",
+      "url": "/predictions",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Bildirim Ayarları",
+      "short_name": "Bildirimler",
+      "description": "Gol, maç başlangıcı ve AI bildirim ayarları",
+      "url": "/management?tab=notifications",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

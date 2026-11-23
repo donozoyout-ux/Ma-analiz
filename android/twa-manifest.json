@@ -1,0 +1,48 @@
+{
+  "packageId": "com.macanaliz.app",
+  "host": "mac-analiz.onrender.com",
+  "name": "Maç Analiz",
+  "launcherName": "Maç Analiz",
+  "themeColor": "#FFFFFF",
+  "navigationColor": "#FFFFFF",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#E2E8F0",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FFFFFF",
+  "enableNotifications": true,
+  "startUrl": "/?source=twa",
+  "iconUrl": "https://mac-analiz.onrender.com/icon-512.png",
+  "maskableIconUrl": "https://mac-analiz.onrender.com/icon-maskable-512.png",
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "signingKey": {
+    "path": "./macanaliz.keystore",
+    "alias": "macanaliz"
+  },
+  "splashScreenFadeOutDuration": 300,
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "shareTarget": {
+    "action": "/matches",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://mac-analiz.onrender.com/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": false
+    },
+    "locationDelegation": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  }
+}

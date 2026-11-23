@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>İnternet Bağlantısı Yok | Maç Analiz</title>
+  <meta name="theme-color" content="#FFFFFF" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #F8FAFC;
+      color: #0F172A;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+    .offline-card {
+      background: #FFFFFF;
+      border: 1px solid #E2E8F0;
+      border-radius: 1.25rem;
+      max-width: 440px;
+      width: 100%;
+      padding: 2.25rem 1.75rem;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+    }
+    .badge-icon {
+      width: 4.5rem;
+      height: 4.5rem;
+      margin: 0 auto 1.25rem;
+      background: #FEF2F2;
+      border: 2px solid #FEE2E2;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #DC2626;
+    }
+    .badge-icon svg {
+      width: 2.25rem;
+      height: 2.25rem;
+    }
+    .brand-tag {
+      display: inline-block;
+      font-size: 0.6875rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #DC2626;
+      background: #FFF1F2;
+      padding: 0.25rem 0.625rem;
+      border-radius: 9999px;
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-size: 1.375rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #0F172A;
+      margin-bottom: 0.75rem;
+    }
+    p {
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      color: #64748B;
+      margin-bottom: 1.75rem;
+    }
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      width: 100%;
+      padding: 0.875rem 1.25rem;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      color: #FFFFFF;
+      background-color: #DC2626;
+      border: none;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+    }
+    .retry-btn:hover {
+      background-color: #B91C1C;
+    }
+    .retry-btn:active {
+      transform: scale(0.98);
+    }
+    .footer-hint {
+      margin-top: 1.25rem;
+      font-size: 0.75rem;
+      color: #94A3B8;
+    }
+    .live-warning {
+      margin-top: 1rem;
+      padding: 0.625rem;
+      background-color: #F8FAFC;
+      border: 1px dashed #CBD5E1;
+      border-radius: 0.5rem;
+      font-size: 0.75rem;
+      color: #475569;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <div class="offline-card" role="alert">
+    <div class="badge-icon" aria-hidden="true">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 4.243a9.003 9.003 0 01-5.636-2.636m0 0L5.636 11.5M2.808 2.808l18.384 18.384M8.464 15.536a5 5 0 01-.176-5.835"/>
+      </svg>
+    </div>
+    <span class="brand-tag">MAÇ ANALİZ ÇEVRİMDIŞI</span>
+    <h1>İnternet Bağlantısı Kesildi</h1>
+    <p>
+      Canlı maç skorları, oran hareketleri ve AI analizleri yalnızca gerçek zamanlı veriyle sunulur. Yanıltıcı eski veri göstermemek için canlı API çevrimdışı önbelleğe alınmaz.
+    </p>
+    <button class="retry-btn" onclick="retryConnection()" id="retryButton">
+      <svg style="width:1.125rem;height:1.125rem;" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      Bağlantıyı Yeniden Dene
+    </button>
+    <div class="live-warning">
+      🔒 Güvenlik Notu: Sahte skor ve yanıltıcı tahmin riskini önlemek için canlı API verileri çevrimdışı saklanmaz.
+    </div>
+    <div class="footer-hint" id="statusHint">
+      İnternet bağlantınız geri geldiğinde sayfa otomatik olarak yenilenecektir.
+    </div>
+  </div>
+
+  <script>
+    function retryConnection() {
+      const btn = document.getElementById('retryButton');
+      btn.innerText = 'Kontrol Ediliyor...';
+      btn.disabled = true;
+      if (navigator.onLine) {
+        window.location.reload();
+      } else {
+        setTimeout(() => {
+          btn.innerHTML = '<svg style="width:1.125rem;height:1.125rem;" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg> Bağlantıyı Yeniden Dene';
+          btn.disabled = false;
+        }, 1200);
+      }
+    }
+
+    window.addEventListener('online', () => {
+      document.getElementById('statusHint').innerText = 'Bağlantı algılandı! Yenileniyor...';
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>
