@@ -88,7 +88,7 @@ def test_daily_api_only_returns_requested_competition(monkeypatch):
             return [{"league_id": "uefa.cl", "provider_match_id": "1"}]
 
     monkeypatch.setattr(api, "OpenLigaDBProvider", FakeProvider)
-    monkeypatch.setattr(api, "_LAST_SOURCE_CALL", 0.0)
+    api._LAST_SOURCE_CALL.clear()
     api._CACHE.clear()
     data = api.european_matches("champions-league", date(2026, 11, 24))
     assert data["odds_available"] is False
@@ -97,7 +97,10 @@ def test_daily_api_only_returns_requested_competition(monkeypatch):
     with pytest.raises(HTTPException) as unknown:
         api.european_matches("not-a-competition", date(2026, 11, 24))
     assert unknown.value.status_code == 404
-    with pytest.raises(HTTPException) as quota:
-        api.european_matches("europa-league", date(2026, 11, 24))
-    assert quota.value.status_code == 429
+    # Separate UEFA competitions have separate source request budgets.
+    # Same competition on another date still respects the 60-second guard.
     api._CACHE.clear()
+    with pytest.raises(HTTPException) as quota:
+        api.european_matches("champions-league", date(2026, 11, 25))
+    assert quota.value.status_code == 429
+    api._LAST_SOURCE_CALL.clear()
