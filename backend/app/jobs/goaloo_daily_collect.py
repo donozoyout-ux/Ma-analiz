@@ -112,13 +112,16 @@ def main(argv=None) -> int:
             with OpenLigaDBProvider(base_url=cfg.openligadb_base_url,
                     timeout_seconds=cfg.openligadb_timeout_seconds,
                     requests_per_minute=cfg.openligadb_requests_per_minute) as openliga:
-                with GoalooProvider(base_url=cfg.goaloo_base_url, odds_base_url=cfg.goaloo_odds_base_url,
-                        league_ids=("8",), season_ids=("2026-2027",),
-                        requests_per_minute=6) as goaloo:
+                goaloo = GoalooProvider(base_url=cfg.goaloo_base_url,
+                    odds_base_url=cfg.goaloo_odds_base_url,
+                    league_ids=("8",), season_ids=("2026-2027",), requests_per_minute=6)
+                try:
                     result = collect_one_day(args.date, openliga=openliga, goaloo=goaloo,
                         session=session, store=R2ObjectStore(settings=cfg) if args.live else None,
                         dry_run=not args.live, live_approved=args.live,
                         max_odds_requests=args.max_odds_requests)
+                finally:
+                    goaloo.close()
         print(json.dumps(result, ensure_ascii=False, default=str))
         return 0
     except (ProviderFailure, ImportSafetyError, ValueError) as exc:
