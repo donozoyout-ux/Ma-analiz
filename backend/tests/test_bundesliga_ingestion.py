@@ -334,6 +334,40 @@ def test_pipeline_refuses_live_write_when_disabled(session):
         )
 
 
+def test_live_ingest_requires_explicit_matchday_before_io(session, store):
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    with pytest.raises(PipelineSafetyError, match="MATCHDAY_REQUIRED"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 24),
+            dry_run=False,
+            settings=settings,
+            session=session,
+            store=store,
+        )
+    assert session.scalars(select(ActiveMatch)).all() == []
+
+
+def test_live_ingest_requires_archive_store_before_io(session):
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    with pytest.raises(PipelineSafetyError, match="ARCHIVE_STORE_REQUIRED"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 24),
+            matchday=11,
+            dry_run=False,
+            settings=settings,
+            session=session,
+        )
+    assert session.scalars(select(ActiveMatch)).all() == []
+
+
 # --- PHASE C: ISOLATED PIPELINE & RECORD TESTS ---
 
 
