@@ -1,0 +1,74 @@
+[
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "league_id": 8,
+    "league_name": "German Bundesliga",
+    "season": "2026-2027",
+    "home_team": "Bayern Munchen",
+    "away_team": "VfB Stuttgart",
+    "start_time": "2026-08-28 18:30:00+00:00",
+    "match_date": "2026-08-28",
+    "status": "FINISHED",
+    "score": [
+      5,
+      1
+    ],
+    "half_time_score": null,
+    "round": null,
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data from Goaloo",
+    "raw_source_updated_at": "2026-11-24 23:01:22"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018789",
+    "league_id": 8,
+    "league_name": "German Bundesliga",
+    "season": "2026-2027",
+    "home_team": "SV Elversberg",
+    "away_team": "Bayer Leverkusen",
+    "start_time": "2026-08-29 13:30:00+00:00",
+    "match_date": "2026-08-29",
+    "status": "FINISHED",
+    "score": [
+      3,
+      2
+    ],
+    "half_time_score": null,
+    "round": null,
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data from Goaloo",
+    "raw_source_updated_at": "2026-11-24 23:01:22"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018790",
+    "league_id": 8,
+    "league_name": "German Bundesliga",
+    "season": "2026-2027",
+    "home_team": "FC Koln",
+    "away_team": "TSG Hoffenheim",
+    "start_time": "2026-08-29 13:30:00+00:00",
+    "match_date": "2026-08-29",
+    "status": "FINISHED",
+    "score": [
+      3,
+      2
+    ],
+    "half_time_score": null,
+    "round": null,
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data from Goaloo",
+    "raw_source_updated_at": "2026-11-24 23:01:22"
+  }
+]

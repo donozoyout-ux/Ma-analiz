@@ -1,0 +1,83 @@
+[
+  {
+    "source": "openligadb",
+    "provider_match_id": "83156",
+    "league_id": "de.bl1",
+    "league_name": "1. Fu\u00dfball-Bundesliga 2026/2027",
+    "season": "2026-2027",
+    "home_team": "FC Bayern M\u00fcnchen",
+    "away_team": "VfB Stuttgart",
+    "start_time": "2026-08-28 18:30:00+00:00",
+    "match_date": "2026-08-28",
+    "status": "FINISHED",
+    "score": [
+      5,
+      1
+    ],
+    "half_time_score": [
+      1,
+      0
+    ],
+    "round": "1. Spieltag",
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+    "raw_source_updated_at": "2026-09-02T15:36:25.313"
+  },
+  {
+    "source": "openligadb",
+    "provider_match_id": "83158",
+    "league_id": "de.bl1",
+    "league_name": "1. Fu\u00dfball-Bundesliga 2026/2027",
+    "season": "2026-2027",
+    "home_team": "RB Leipzig",
+    "away_team": "Borussia M\u00f6nchengladbach",
+    "start_time": "2026-08-29 13:30:00+00:00",
+    "match_date": "2026-08-29",
+    "status": "FINISHED",
+    "score": [
+      3,
+      0
+    ],
+    "half_time_score": [
+      1,
+      0
+    ],
+    "round": "1. Spieltag",
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+    "raw_source_updated_at": "2026-08-29T17:27:03.903"
+  },
+  {
+    "source": "openligadb",
+    "provider_match_id": "83161",
+    "league_id": "de.bl1",
+    "league_name": "1. Fu\u00dfball-Bundesliga 2026/2027",
+    "season": "2026-2027",
+    "home_team": "1. FSV Mainz 05",
+    "away_team": "SC Paderborn 07",
+    "start_time": "2026-08-29 13:30:00+00:00",
+    "match_date": "2026-08-29",
+    "status": "FINISHED",
+    "score": [
+      0,
+      0
+    ],
+    "half_time_score": [
+      0,
+      0
+    ],
+    "round": "1. Spieltag",
+    "venue": null,
+    "country": "Germany",
+    "sport": "football",
+    "licence": "ODbL-1.0",
+    "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+    "raw_source_updated_at": "2026-08-29T17:25:32.37"
+  }
+]

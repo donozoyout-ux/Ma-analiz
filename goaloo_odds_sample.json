@@ -1,0 +1,62 @@
+[
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "provider_bookmaker_id": "8",
+    "bookmaker": "Bet365",
+    "market": "1X2",
+    "selection": "HOME",
+    "odds": 1.22,
+    "snapshot_type": "OPENING",
+    "period": "PREMATCH",
+    "captured_at": "2026-11-24 18:39:45.632960+00:00"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "provider_bookmaker_id": "8",
+    "bookmaker": "Bet365",
+    "market": "1X2",
+    "selection": "DRAW",
+    "odds": 7.0,
+    "snapshot_type": "OPENING",
+    "period": "PREMATCH",
+    "captured_at": "2026-11-24 18:39:45.632960+00:00"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "provider_bookmaker_id": "8",
+    "bookmaker": "Bet365",
+    "market": "1X2",
+    "selection": "AWAY",
+    "odds": 10.0,
+    "snapshot_type": "OPENING",
+    "period": "PREMATCH",
+    "captured_at": "2026-11-24 18:39:45.633961+00:00"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "provider_bookmaker_id": "8",
+    "bookmaker": "Bet365",
+    "market": "1X2",
+    "selection": "HOME",
+    "odds": 1.22,
+    "snapshot_type": "LATEST",
+    "period": "PREMATCH",
+    "captured_at": "2026-11-24 18:39:45.633961+00:00"
+  },
+  {
+    "source": "goaloo",
+    "provider_match_id": "3018786",
+    "provider_bookmaker_id": "8",
+    "bookmaker": "Bet365",
+    "market": "1X2",
+    "selection": "DRAW",
+    "odds": 7.0,
+    "snapshot_type": "LATEST",
+    "period": "PREMATCH",
+    "captured_at": "2026-11-24 18:39:45.633961+00:00"
+  }
+]
