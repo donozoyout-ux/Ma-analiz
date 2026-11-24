@@ -20,8 +20,11 @@ export function MatchCenter({initialSource="all"}:{initialSource?:MatchFilters["
  const apply = (next:MatchFilters) => {setFilters(next);setDraft(next);setCursors([undefined]);setPage(0);};
  const reload = () => {setCursors([undefined]);setPage(0);refresh();};
  return <div className="explorer-stack match-center">
-  <SourceBulletin />
-  <p className="scope-note">Aşağıdaki kayıtlar PostgreSQL ve doğrulanmış R2 arşividir; üstteki internet kaynak bülteninden ayrıdır.</p>
+  {initialSource !== "history" ? <>
+    <SourceBulletin />
+    <p className="scope-note">Kaynakta bugün, canlı ve yaklaşan karşılaşmalar üstte gösterilir. Önceki sonuçlar ve doğrulanmış SQL/R2 kayıtları için <Link href="/archive">geçmiş maç arşivine git</Link>. Oranlar ve istatistikler yalnız doğrulanmış kaynaklardan gösterilir.</p>
+  </> : <p className="scope-note">Bu bölüm yalnız PostgreSQL ve doğrulanmış R2 arşivini gösterir. Güncel maçlar için <Link href="/matches">Maç Merkezi</Link> sayfasını kullan.</p>}
+  {initialSource === "history" && <>
   <form className="card filter-panel" onSubmit={event=>{event.preventDefault();apply(draft);}}>
    <div className="filter-heading"><span><Search size={17}/> Maçları bul</span><button className="quiet-button" type="button" onClick={()=>apply(defaults)}>Sıfırla</button></div>
    <div className="filter-grid center-filter-grid">
@@ -47,5 +50,6 @@ export function MatchCenter({initialSource="all"}:{initialSource?:MatchFilters["
   <nav className="match-pagination" aria-label="Maç sayfaları"><button className="quiet-button" disabled={page===0||!rows} onClick={()=>setPage(page-1)}>Önceki</button><span aria-live="polite">Sayfa {page+1}</span><button className="quiet-button" disabled={!rows||!data?.next_cursor} onClick={()=>{setCursors([...cursors.slice(0,page+1),data!.next_cursor!]);setPage(page+1);}}>Sonraki</button></nav>
   <p className="scope-note">{data ? `Okuma zamanı: ${formatMatchTime(data.as_of)} · ` : ""}Saatler Türkiye saatidir. Aktif havuz sınırlıdır; tarih seçilmezse son 31 gün taranır. Arşivde yalnız bu sayfa için doğrulanan parçalar okunur. Kayıtlar UUID ile tekilleştirilir; arşiv kopyası SQL kaydı henüz temizlenmeden de bulunabilir. Canlı skor garantisi veya otomatik yenileme yoktur.</p>
   <p className="scope-note">Bundesliga kayıtları mevcut kaynak politikalarıyla gösterilir. Premier League karantinada, Süper Lig için uygun kaynak mevcut değil; başka lig verileriyle doldurulmaz.</p>
+  </>}
  </div>;
 }
