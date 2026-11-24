@@ -71,8 +71,11 @@ def run_bundesliga_ingest_pipeline(
     # No production-shaped write may silently use the historical demo matchday
     # or omit archival storage. Keep these checks before any provider/SQL I/O.
     if not is_dry_run:
-        if matchday is None or not isinstance(matchday, int) or isinstance(matchday, bool) or not 1 <= matchday <= 34:
-            raise PipelineSafetyError("MATCHDAY_REQUIRED: explicit Bundesliga matchday 1..34 is required")
+        if matchday is not None and (not isinstance(matchday, int) or isinstance(matchday, bool) or not 1 <= matchday <= 34):
+            raise PipelineSafetyError("INVALID_MATCHDAY: Bundesliga matchday must be 1..34")
+        # Automatic day scope is restricted to current or past dates, never to arbitrary future guesses.
+        if matchday is None and (target_day > datetime.now(ISTANBUL).date() or target_day.year not in (2026, 2027)):
+            raise PipelineSafetyError("INVALID_DAY_SCOPE: automatic daily ingest must be in the pilot season and not future-dated")
         if store is None:
             raise PipelineSafetyError("ARCHIVE_STORE_REQUIRED: SQL-only Bundesliga ingest is forbidden")
 
@@ -97,6 +100,7 @@ def run_bundesliga_ingest_pipeline(
         "dry_run": False,
         "target_day": target_day.isoformat(),
         "target_matchday": matchday,
+        "scope_mode": "DAILY" if matchday is None else "MATCHDAY",
         "league": "de.bl1",
         "season": "2026-2027",
         "attribution": ATTRIBUTION,
@@ -114,7 +118,12 @@ def run_bundesliga_ingest_pipeline(
         quota.record_request(1)
 
         season_year = target_day.year if target_day.month >= 7 else target_day.year - 1
-        fetched = p.get_matchdata_by_group("bl1", season_year, matchday)
+        if matchday is None:
+            # Daily mode does not assume that a fixed historical matchday is current.
+            # Provider filters kickoff dates in Europe/Istanbul.
+            fetched = p.get_matches(target_day)
+        else:
+            fetched = p.get_matchdata_by_group("bl1", season_year, matchday)
         unique_matches, _ = deduplicate_scope(fetched)
 
         quota.check_matches_quota(len(unique_matches))
@@ -254,7 +263,8 @@ def run_bundesliga_ingest_pipeline(
                 season="2026-2027",
                 league="de.bl1",
                 rows=archive_rows,
-                part=f"openligadb-bundesliga-md{matchday}",
+                part=(f"openligadb-bundesliga-day{target_day:%Y%m%d}" if matchday is None
+                      else f"openligadb-bundesliga-md{matchday}"),
             )
             quota.record_r2_write(1, receipt.size)
             report["archive_receipt"] = {
