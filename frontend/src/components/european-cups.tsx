@@ -11,6 +11,7 @@ type Catalog = { competitions: Cup[]; odds_available: boolean; attribution: stri
 type DayResponse = { matches: CupMatch[]; league_name: string; attribution: string; odds_available: boolean };
 
 const FALLBACK_CUPS: Cup[] = [
+  { slug: "bundesliga", name: "Bundesliga", league_id: "de.bl1", shortcut: "bl1", season: "2026-2027" },
   { slug: "champions-league", name: "UEFA Champions League", league_id: "uefa.cl", shortcut: "ucl", season: "2026-2027" },
   { slug: "europa-league", name: "UEFA Europa League", league_id: "uefa.el", shortcut: "uel2026", season: "2026-2027" },
   { slug: "conference-league", name: "UEFA Conference League", league_id: "uefa.ecl", shortcut: "uecl2026", season: "2026-2027" },
@@ -18,7 +19,7 @@ const FALLBACK_CUPS: Cup[] = [
 
 export function EuropeanCups() {
   const [cups, setCups] = useState(FALLBACK_CUPS);
-  const [slug, setSlug] = useState("champions-league");
+  const [slug, setSlug] = useState("bundesliga");
   const [day, setDay] = useState(() => istanbulDay(new Date()));
   const [rows, setRows] = useState<CupMatch[] | null>(null);
   const [error, setError] = useState("");
@@ -29,7 +30,7 @@ export function EuropeanCups() {
     fetch("/api/v1/competitions/europe", { signal: controller.signal })
       .then(response => response.ok ? response.json() as Promise<Catalog> : Promise.reject())
       .then(value => {
-        if (Array.isArray(value.competitions) && value.competitions.length === 3) setCups(value.competitions);
+        if (Array.isArray(value.competitions) && value.competitions.length === 3) setCups([FALLBACK_CUPS[0], ...value.competitions]);
       })
       .catch(() => {});
     return () => controller.abort();
@@ -38,7 +39,8 @@ export function EuropeanCups() {
   useEffect(() => {
     const controller = new AbortController();
     setRows(null); setError("");
-    fetch(`/api/v1/competitions/europe/${slug}/matches?day=${encodeURIComponent(day)}`,
+    const apiPath = slug === "bundesliga" ? "competitions/bundesliga/matches" : `competitions/europe/${slug}/matches`;
+    fetch(`/api/v1/${apiPath}?day=${encodeURIComponent(day)}`,
       { signal: controller.signal, cache: "no-store" })
       .then(async response => {
         if (response.status === 429) throw new Error("Kaynak çağrı sınırı doldu. Bir dakika sonra tekrar deneyebilirsin.");
@@ -58,7 +60,7 @@ export function EuropeanCups() {
 
   return <div className="explorer-stack">
     <div className="card filter-panel">
-      <div className="filter-heading"><span><CalendarDays size={17} /> Avrupa turnuvaları</span><span>2026–2027</span></div>
+      <div className="filter-heading"><span><CalendarDays size={17} /> Bundesliga ve Avrupa kupaları</span><span>2026–2027</span></div>
       <div className="filter-grid center-filter-grid">
         <label><span>Turnuva</span>
           <select aria-label="Avrupa turnuvası" value={slug} onChange={e => setSlug(e.target.value)}>
