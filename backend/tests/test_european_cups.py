@@ -104,3 +104,26 @@ def test_daily_api_only_returns_requested_competition(monkeypatch):
         api.european_matches("champions-league", date(2026, 11, 25))
     assert quota.value.status_code == 429
     api._LAST_SOURCE_CALL.clear()
+
+
+def test_bundesliga_day_endpoint_is_read_only_and_isolated(monkeypatch):
+    api._CACHE.clear()
+    api._LAST_SOURCE_CALL.clear()
+    class FakeProvider:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def get_matches(self, day):
+            assert day == date(2026, 11, 24)
+            return [{"league_id": "de.bl1", "provider_match_id": "83237",
+                     "home_team": "Home", "away_team": "Away"}]
+    monkeypatch.setattr(api, "OpenLigaDBProvider", FakeProvider)
+    response = api.bundesliga_matches(date(2026, 11, 24))
+    assert response["league_id"] == "de.bl1"
+    assert response["matches"][0]["provider_match_id"] == "83237"
+    assert response["odds_available"] is False
+    with pytest.raises(HTTPException) as invalid:
+        api.bundesliga_matches(date(2028, 1, 1))
+    assert invalid.value.status_code == 422
+    api._CACHE.clear()
+    api._LAST_SOURCE_CALL.clear()
