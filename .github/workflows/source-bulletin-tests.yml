@@ -7,6 +7,9 @@ on:
       - 'backend/tests/test_source_bulletin.py'
       - 'frontend/src/components/source-bulletin.tsx'
       - 'frontend/src/components/football-home.tsx'
+      - 'frontend/src/components/match-center.tsx'
+      - 'frontend/src/components/section-views/matches.tsx'
+      - 'frontend/src/components/section-views/archive.tsx'
       - 'frontend/src/components/overview-metrics.tsx'
       - '.github/workflows/source-bulletin-tests.yml'
   workflow_dispatch:
