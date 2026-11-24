@@ -1,0 +1,21 @@
+{
+  "odds_normalized": 246,
+  "odds_rejected": 6,
+  "match_matched": 53,
+  "match_needs_review": 248,
+  "match_no_match": 5,
+  "bookmakers": [
+    "Vcbet",
+    "1xBet",
+    "Mansion88",
+    "Interwetten",
+    "12bet",
+    "Sbobet",
+    "Crown",
+    "Ladbrokes",
+    "Easybet",
+    "18Bet",
+    "Macauslot",
+    "Bet365"
+  ]
+}
