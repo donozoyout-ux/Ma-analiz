@@ -65,6 +65,9 @@ def audit_goaloo_quotes(rows: list[dict[str, Any]]) -> dict:
                         # A static JSON export has no reliable per-quote source timestamp.
                         "observation_time_known": False,
                     })
+    for key in ("raw_numeric_field_count", "non_price_line_fields", "invalid_price_values",
+                "missing_or_invalid_prices", "invalid_bookmaker_rows"):
+        counts.setdefault(key, 0)
     counts["normalized_prices"] = len(normalized)
     counts["rejected_rows"] = len(rejected)
     counts["bookmakers"] = len({row["provider_bookmaker_id"] for row in normalized})
