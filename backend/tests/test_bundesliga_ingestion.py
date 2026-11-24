@@ -489,6 +489,44 @@ def test_pipeline_preserves_uuid_on_subsequent_runs(session, store, mock_openlig
     assert uuid_map_1 == uuid_map_2
 
 
+def test_r2_failure_preserves_sql_and_next_attempt_repairs_archive(session, store, mock_openligadb_matches, monkeypatch):
+    mock_http = MagicMock()
+    mock_http.get.return_value.status_code = 200
+    mock_http.get.return_value.json.return_value = mock_openligadb_matches
+    provider = OpenLigaDBProvider(client=mock_http, requests_per_minute=60)
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    real_put = store.put_object_if_absent
+
+    def fail_upload(*args, **kwargs):
+        raise IOError("Synthetic R2 outage")
+
+    monkeypatch.setattr(store, "put_object_if_absent", fail_upload)
+    with pytest.raises(RuntimeError, match="Archive failed"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 20), matchday=10, dry_run=False,
+            settings=settings, session=session, store=store, provider=provider,
+        )
+    persisted = session.scalars(select(ActiveMatch)).all()
+    assert len(persisted) == 2
+    ids = {m.provider_match_id: m.id for m in persisted}
+    assert len(session.scalars(select(MatchResult)).all()) == 1
+
+    monkeypatch.setattr(store, "put_object_if_absent", real_put)
+    repaired = run_bundesliga_ingest_pipeline(
+        target_day=date(2026, 11, 20), matchday=10, dry_run=False,
+        settings=settings, session=session, store=store, provider=provider,
+    )
+    assert repaired["status"] == "COMPLETED"
+    assert repaired["archive_receipt"]["row_count"] == 2
+    assert {m.provider_match_id: m.id for m in session.scalars(select(ActiveMatch)).all()} == ids
+    archive = session.scalars(select(ArchiveJob).where(ArchiveJob.r2_key == repaired["archive_receipt"]["key"])).one()
+    assert archive.status == "VERIFIED"
+
+
 # --- NOTIFICATION EVENT CONTRACT TESTS ---
 
 
