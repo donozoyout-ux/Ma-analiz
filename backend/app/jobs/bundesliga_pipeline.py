@@ -29,8 +29,8 @@ from app.notifications.events import (
 from app.providers.identity import deduplicate_scope, fixture_key
 from app.providers.openligadb import ATTRIBUTION, LICENCE, LICENCE_URL, OpenLigaDBProvider
 from app.storage.archive import SQLArchiveTracker, archive_partition
-from app.storage.quota import QuotaExceededError, get_quota_tracker
-from app.storage.r2 import ObjectStore
+from app.storage.quota import QuotaExceededError, get_quota_tracker, DurableQuotaTracker
+from app.storage.r2 import ObjectStore, parquet_bytes
 
 ISTANBUL = ZoneInfo("Europe/Istanbul")
 
@@ -87,7 +87,11 @@ def run_bundesliga_ingest_pipeline(
     if session is None:
         raise ValueError("Database session required for non-dry-run execution")
 
-    quota = get_quota_tracker(cfg)
+    # Production runs must use one durable PostgreSQL quota ledger shared across
+    # restarts and workers. SQLite in-memory remains isolated test-only.
+    db_engine = session.get_bind()
+    quota = (DurableQuotaTracker(cfg, db_engine)
+             if db_engine.dialect.name == "postgresql" else get_quota_tracker(cfg))
     own_provider = provider is None
     p = provider or OpenLigaDBProvider(
         base_url=getattr(cfg, "openligadb_base_url", "https://api.openligadb.de"),
@@ -114,8 +118,11 @@ def run_bundesliga_ingest_pipeline(
     }
 
     try:
-        quota.check_request_quota(1)
-        quota.record_request(1)
+        if isinstance(quota, DurableQuotaTracker):
+            quota.reserve_request(1)
+        else:
+            quota.check_request_quota(1)
+            quota.record_request(1)
 
         season_year = target_day.year if target_day.month >= 7 else target_day.year - 1
         if matchday is None:
@@ -126,8 +133,11 @@ def run_bundesliga_ingest_pipeline(
             fetched = p.get_matchdata_by_group("bl1", season_year, matchday)
         unique_matches, _ = deduplicate_scope(fetched)
 
-        quota.check_matches_quota(len(unique_matches))
-        quota.record_matches(len(unique_matches))
+        if isinstance(quota, DurableQuotaTracker):
+            quota.reserve_matches(len(unique_matches))
+        else:
+            quota.check_matches_quota(len(unique_matches))
+            quota.record_matches(len(unique_matches))
 
         now = datetime.now(timezone.utc)
         archive_rows: list[dict[str, Any]] = []
@@ -250,11 +260,21 @@ def run_bundesliga_ingest_pipeline(
                 "licence": LICENCE,
             })
 
+        # Reserve actual serialized archive bytes BEFORE committing SQL; never
+        # approximate payload length or let a quota error partially commit SQL.
+        if archive_rows:
+            payload_size = len(parquet_bytes(archive_rows))
+            if isinstance(quota, DurableQuotaTracker):
+                quota.reserve_r2_write(1, payload_size)
+            else:
+                quota.check_r2_write_quota(1, payload_size)
+                quota.record_r2_write(1, payload_size)
+
         session.commit()
 
-        # R2 Archival if store provided
-        if store is not None and archive_rows:
-            quota.check_r2_write_quota(1, len(archive_rows) * 100)
+        # SQL rows deliberately remain available when R2 fails: retries must
+        # repair the archive, never delete the source data.
+        if archive_rows:
             receipt = archive_partition(
                 store,
                 tracker=SQLArchiveTracker(session),
@@ -266,7 +286,6 @@ def run_bundesliga_ingest_pipeline(
                 part=(f"openligadb-bundesliga-day{target_day:%Y%m%d}" if matchday is None
                       else f"openligadb-bundesliga-md{matchday}"),
             )
-            quota.record_r2_write(1, receipt.size)
             report["archive_receipt"] = {
                 "key": receipt.key,
                 "size": receipt.size,
