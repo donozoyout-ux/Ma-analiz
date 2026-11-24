@@ -36,11 +36,21 @@ jobs:
               goaloo = g.get_matches_on_day(day, "8", "2026-2027")
               mappings = map_observed_rows(goaloo, official)
               verified = [x for x in mappings if x.status == "MATCHED"]
-              quotes = g.get_odds(verified[0].goaloo_id) if verified else []
-              print(json.dumps({"read_only":True,"day":str(day),
+              print(json.dumps({"stage":"FIXTURE_READ", "read_only":True,"day":str(day),
                   "openliga":len(official),"goaloo":len(goaloo),
-                  "unique_matched":len(verified),"odds_for_one_match":len(quotes),
-                  "goaloo_source_status":"OK"}, ensure_ascii=False))
+                  "unique_matched":len(verified)}, ensure_ascii=False), flush=True)
+              from app.providers.base import ProviderAccessRestricted
+              odds_state = "NO_MATCH"
+              quotes = []
+              if verified:
+                  try:
+                      quotes = g.get_odds(verified[0].goaloo_id)
+                      odds_state = "OK"
+                  except ProviderAccessRestricted:
+                      odds_state = "SOURCE_BLOCKED"
+              print(json.dumps({"stage":"ODDS_READ", "read_only":True,
+                    "odds_status":odds_state, "odds_for_one_match":len(quotes)},
+                    ensure_ascii=False), flush=True)
               if not official or not goaloo:
                   raise SystemExit("SOURCE_EMPTY_OR_BLOCKED: no usable source fixtures")
           finally:
