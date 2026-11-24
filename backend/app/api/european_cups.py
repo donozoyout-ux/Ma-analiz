@@ -18,7 +18,7 @@ router = APIRouter(tags=["European competitions"])
 _LOCK = threading.Lock()
 _CACHE: dict[tuple[str, str], tuple[float, list[dict]]] = {}
 _CACHE_SECONDS = 900
-_LAST_SOURCE_CALL = 0.0
+_LAST_SOURCE_CALL: dict[str, float] = {}
 _MIN_SOURCE_INTERVAL = 60.0
 
 
@@ -39,7 +39,6 @@ def european_matches(
     slug: str,
     day: date = Query(..., description="Europe/Istanbul local date YYYY-MM-DD"),
 ):
-    global _LAST_SOURCE_CALL
     entry = EUROPEAN_CUPS.get(slug)
     if entry is None:
         raise HTTPException(status_code=404, detail="COMPETITION_NOT_FOUND")
@@ -54,9 +53,11 @@ def european_matches(
         if cached and time.monotonic() - cached[0] < _CACHE_SECONDS:
             matches = cached[1]
         else:
-            if time.monotonic() - _LAST_SOURCE_CALL < _MIN_SOURCE_INTERVAL:
+            # Each OpenLigaDB league has its own rate budget. Switching UEFA
+            # competitions is not blocked by an unrelated league's request.
+            if time.monotonic() - _LAST_SOURCE_CALL.get(slug, 0.0) < _MIN_SOURCE_INTERVAL:
                 raise HTTPException(status_code=429, detail="SOURCE_REQUEST_THROTTLED")
-            _LAST_SOURCE_CALL = time.monotonic()
+            _LAST_SOURCE_CALL[slug] = time.monotonic()
             try:
                 with OpenLigaDBProvider(max_retries=1) as provider:
                     matches = provider.get_competition_matches(entry["shortcut"], day)
