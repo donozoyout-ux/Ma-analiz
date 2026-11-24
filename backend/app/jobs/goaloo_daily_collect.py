@@ -84,6 +84,7 @@ def collect_one_day(target_day: date, *, openliga, goaloo, session, store=None,
             # Access controls must not be bypassed or retried via another route.
             # Keep verified fixture observations available and report no odds.
             odds_status = "SOURCE_BLOCKED"
+            quotes.clear()  # fail closed: do not partially persist an incomplete batch
             break
     from app.providers.goaloo_match_identity import summary
     result = import_verified_odds(session, decisions, quotes, store=store,
