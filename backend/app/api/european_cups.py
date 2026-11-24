@@ -79,3 +79,41 @@ def european_matches(
         "odds_available": False,
         "matches": matches,
     }
+
+
+@router.get("/competitions/bundesliga/matches")
+def bundesliga_matches(
+    day: date = Query(..., description="Europe/Istanbul local date YYYY-MM-DD"),
+):
+    """Read-only Bundesliga fixture endpoint, no database or R2 side effects."""
+    slug = "bundesliga"
+    if not date(2026, 7, 1) <= day <= date(2027, 6, 30):
+        raise HTTPException(status_code=422, detail="SEASON_OUT_OF_SCOPE")
+    key = (slug, day.isoformat())
+    with _LOCK:
+        cached = _CACHE.get(key)
+        if cached and time.monotonic() - cached[0] < _CACHE_SECONDS:
+            matches = cached[1]
+        else:
+            if time.monotonic() - _LAST_SOURCE_CALL.get(slug, 0.0) < _MIN_SOURCE_INTERVAL:
+                raise HTTPException(status_code=429, detail="SOURCE_REQUEST_THROTTLED")
+            _LAST_SOURCE_CALL[slug] = time.monotonic()
+            try:
+                with OpenLigaDBProvider(max_retries=1) as provider:
+                    matches = provider.get_matches(day)
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail="OPENLIGADB_UNAVAILABLE") from exc
+            if len(matches) > 150:
+                raise HTTPException(status_code=503, detail="SOURCE_SCOPE_LIMIT")
+            _CACHE[key] = (time.monotonic(), matches)
+    return {
+        "league_id": "de.bl1",
+        "league_name": "Bundesliga",
+        "season": "2026-2027",
+        "date": day.isoformat(),
+        "timezone": "Europe/Istanbul",
+        "provider": "openligadb",
+        "attribution": ATTRIBUTION,
+        "odds_available": False,
+        "matches": matches,
+    }
