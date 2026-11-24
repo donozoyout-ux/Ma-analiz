@@ -50,7 +50,7 @@ def check_pipeline_safety_gates(settings: Settings) -> None:
 
 def run_bundesliga_ingest_pipeline(
     target_day: date,
-    matchday: int = 10,
+    matchday: int | None = None,
     *,
     dry_run: bool | None = None,
     settings: Settings | None = None,
@@ -68,9 +68,17 @@ def run_bundesliga_ingest_pipeline(
     if not is_dry_run and not is_enabled:
         raise PipelineSafetyError("PIPELINE_DISABLED: bundesliga_ingest_enabled must be True for live execution")
 
+    # No production-shaped write may silently use the historical demo matchday
+    # or omit archival storage. Keep these checks before any provider/SQL I/O.
+    if not is_dry_run:
+        if matchday is None or not isinstance(matchday, int) or isinstance(matchday, bool) or not 1 <= matchday <= 34:
+            raise PipelineSafetyError("MATCHDAY_REQUIRED: explicit Bundesliga matchday 1..34 is required")
+        if store is None:
+            raise PipelineSafetyError("ARCHIVE_STORE_REQUIRED: SQL-only Bundesliga ingest is forbidden")
+
     if is_dry_run:
         from app.jobs.bundesliga_dryrun import run_bundesliga_dryrun
-        return run_bundesliga_dryrun(target_day, matchday, settings=cfg, session=session, provider=provider)
+        return run_bundesliga_dryrun(target_day, matchday if matchday is not None else 10, settings=cfg, session=session, provider=provider)
 
     # Isolated or Live Execution with Session
     if session is None:
