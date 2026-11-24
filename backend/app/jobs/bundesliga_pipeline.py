@@ -12,6 +12,7 @@ Safety Constraints:
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+import hashlib
 from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -263,7 +264,11 @@ def run_bundesliga_ingest_pipeline(
         # Reserve actual serialized archive bytes BEFORE committing SQL; never
         # approximate payload length or let a quota error partially commit SQL.
         if archive_rows:
-            payload_size = len(parquet_bytes(archive_rows))
+            archive_payload = parquet_bytes(archive_rows)
+            payload_size = len(archive_payload)
+            # Immutable content-addressed part: later status/score changes create
+            # new objects without overwriting prior verified history.
+            archive_revision = hashlib.sha256(archive_payload).hexdigest()[:16]
             if isinstance(quota, DurableQuotaTracker):
                 quota.reserve_r2_write(1, payload_size)
             else:
@@ -283,8 +288,9 @@ def run_bundesliga_ingest_pipeline(
                 season="2026-2027",
                 league="de.bl1",
                 rows=archive_rows,
-                part=(f"openligadb-bundesliga-day{target_day:%Y%m%d}" if matchday is None
-                      else f"openligadb-bundesliga-md{matchday}"),
+                part=((f"openligadb-bundesliga-day{target_day:%Y%m%d}" if matchday is None
+                       else f"openligadb-bundesliga-md{matchday}")
+                      + f"-sha{archive_revision}"),
             )
             report["archive_receipt"] = {
                 "key": receipt.key,
