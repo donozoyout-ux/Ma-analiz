@@ -200,6 +200,32 @@ class OpenLigaDBProvider:
         all_matches = self._parse_matches(payload)
         return [m for m in all_matches if m.get("match_date") == day]
 
+    def get_competition_window(self, league_shortcut: str, start_day: date, end_day: date) -> list[dict[str, Any]]:
+        """Fetch season once; filter an Istanbul-date window for a known league.
+
+        No odds or technical statistics. One bounded source request per league.
+        """
+        from app.providers.european_cups import EUROPEAN_CUPS
+        from datetime import timedelta
+        competition = ({"shortcut": "bl1", "league_id": "de.bl1", "name": "Bundesliga", "country": "Germany"}
+                       if league_shortcut == "bl1" else
+                       next(({"shortcut": item["shortcut"], "league_id": item["league_id"],
+                              "name": item["name"], "country": "Europe"}
+                             for item in EUROPEAN_CUPS.values() if item["shortcut"] == league_shortcut), None))
+        if competition is None:
+            raise ValueError("Unsupported competition shortcut")
+        if not (date(2026, 7, 1) <= start_day <= end_day <= date(2027, 6, 30)):
+            raise ValueError("Season out of scope")
+        if (end_day - start_day).days > 21:
+            raise ValueError("Source window too large")
+        payload = self._get(f"getmatchdata/{league_shortcut}/2026")
+        if not isinstance(payload, list) or len(payload) > 600:
+            raise ProviderInvalidResponse("Season fixture list invalid or too large")
+        matches = self._parse_matches(payload, league_id=competition["league_id"],
+                                      league_name=competition["name"], country=competition["country"])
+        return [m for m in matches if start_day <= m["match_date"] <= end_day
+                and m["season_year"] == 2026]
+
     def get_competition_matches(self, league_shortcut: str, day: date) -> list[dict[str, Any]]:
         """Read-only daily UEFA fixtures, restricted to the reviewed 2026/27 catalog.
 
