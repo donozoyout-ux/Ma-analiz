@@ -334,21 +334,48 @@ def test_pipeline_refuses_live_write_when_disabled(session):
         )
 
 
-def test_live_ingest_requires_explicit_matchday_before_io(session, store):
+def test_live_ingest_rejects_invalid_matchday_before_io(session, store):
     settings = Settings(
         bundesliga_ingest_enabled=True,
         bundesliga_ingest_dry_run=False,
         _env_file=None,
     )
-    with pytest.raises(PipelineSafetyError, match="MATCHDAY_REQUIRED"):
+    with pytest.raises(PipelineSafetyError, match="INVALID_MATCHDAY"):
         run_bundesliga_ingest_pipeline(
             target_day=date(2026, 11, 24),
+            matchday=99,
             dry_run=False,
             settings=settings,
             session=session,
             store=store,
         )
     assert session.scalars(select(ActiveMatch)).all() == []
+
+
+def test_daily_live_mode_uses_date_not_hardcoded_matchday(session, store, mock_openligadb_matches):
+    mock_http = MagicMock()
+    mock_http.get.return_value.status_code = 200
+    mock_http.get.return_value.json.return_value = mock_openligadb_matches
+    provider = OpenLigaDBProvider(client=mock_http, requests_per_minute=60)
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    report = run_bundesliga_ingest_pipeline(
+        target_day=date(2026, 11, 20),
+        dry_run=False,
+        settings=settings,
+        session=session,
+        store=store,
+        provider=provider,
+    )
+    assert report["status"] == "COMPLETED"
+    assert report["scope_mode"] == "DAILY"
+    assert report["inserted_matches"] == 1
+    assert "day20261120" in report["archive_receipt"]["key"]
+    mock_http.get.assert_called_once()
+    assert "getmatchdata/bl1/2026" in mock_http.get.call_args.args[0]
 
 
 def test_live_ingest_requires_archive_store_before_io(session):
