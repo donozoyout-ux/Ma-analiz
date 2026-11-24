@@ -6,6 +6,9 @@ on:
       - 'backend/app/providers/european_cups.py'
       - 'backend/app/providers/openligadb.py'
       - 'backend/tests/test_european_cups.py'
+      - 'frontend/src/app/europe/**'
+      - 'frontend/src/components/european-cups.tsx'
+      - 'frontend/src/components/section-views/matches.tsx'
       - '.github/workflows/uefa-cups-tests.yml'
   workflow_dispatch:
 permissions:
@@ -31,3 +34,24 @@ jobs:
           AUTO_RETENTION_DELETE_ENABLED: 'false'
           OPERATIONAL_DELETE_ENABLED: 'false'
         run: python -m pytest tests/test_european_cups.py tests/test_bundesliga_ingestion.py -q
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck frontend
+        run: npm run typecheck
+      - name: Test frontend
+        run: npm test
