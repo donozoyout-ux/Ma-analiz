@@ -1,5 +1,6 @@
 """Real SQLite transaction + in-memory R2 archive tests, with no live secrets."""
 from datetime import datetime, timedelta, timezone
+import os
 from decimal import Decimal
 from uuid import uuid4
 
@@ -16,7 +17,7 @@ from app.storage.r2 import InMemoryObjectStore
 
 @pytest.fixture
 def session():
-    engine = create_engine("sqlite+pysqlite:///:memory:")
+    engine = create_engine(os.environ.get("TEST_POSTGRES_URL", "sqlite+pysqlite:///:memory:"))
     Base.metadata.create_all(engine)
     with Session(engine) as s:
         start = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
@@ -28,6 +29,7 @@ def session():
                           expires_at=start+timedelta(days=200)))
         s.commit()
         yield s
+    Base.metadata.drop_all(engine)
     engine.dispose()
 
 
