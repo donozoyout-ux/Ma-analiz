@@ -60,7 +60,7 @@ class OpenLigaDBProvider:
         self.max_retries = max_retries
         self._lock = threading.Lock()
         self._last_request_time: float = 0.0
-        self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=True)
+        self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=False)
         self._own_client = client is None
         self.last_latency_ms: float | None = None
         self.last_successful_request: str | None = None
@@ -85,11 +85,12 @@ class OpenLigaDBProvider:
 
     def _get(self, path: str) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
-        self._throttle()
         attempt = 0
         backoff = 1.0
 
         while attempt < self.max_retries:
+            # Every retry is a new external request and must obey throttling.
+            self._throttle()
             attempt += 1
             t0 = time.monotonic()
             try:
@@ -108,6 +109,8 @@ class OpenLigaDBProvider:
                     time.sleep(retry_after)
                     backoff *= 2
                     continue
+                elif 300 <= resp.status_code < 400:
+                    raise ProviderAccessRestricted("OpenLigaDB redirect refused")
                 elif resp.status_code in (401, 403):
                     raise ProviderAccessRestricted(f"OpenLigaDB access denied HTTP {resp.status_code}")
                 elif resp.status_code >= 500:

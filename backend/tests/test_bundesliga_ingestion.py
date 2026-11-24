@@ -334,10 +334,109 @@ def test_pipeline_refuses_live_write_when_disabled(session):
         )
 
 
+def test_live_ingest_rejects_invalid_matchday_before_io(session, store):
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    with pytest.raises(PipelineSafetyError, match="INVALID_MATCHDAY"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 24),
+            matchday=99,
+            dry_run=False,
+            settings=settings,
+            session=session,
+            store=store,
+        )
+    assert session.scalars(select(ActiveMatch)).all() == []
+
+
+def test_daily_live_mode_uses_date_not_hardcoded_matchday(session, store, mock_openligadb_matches):
+    mock_http = MagicMock()
+    mock_http.get.return_value.status_code = 200
+    mock_http.get.return_value.json.return_value = mock_openligadb_matches
+    provider = OpenLigaDBProvider(client=mock_http, requests_per_minute=60)
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    report = run_bundesliga_ingest_pipeline(
+        target_day=date(2026, 11, 20),
+        dry_run=False,
+        settings=settings,
+        session=session,
+        store=store,
+        provider=provider,
+    )
+    assert report["status"] == "COMPLETED"
+    assert report["scope_mode"] == "DAILY"
+    assert report["inserted_matches"] == 1
+    assert "day20261120" in report["archive_receipt"]["key"]
+    mock_http.get.assert_called_once()
+    assert "getmatchdata/bl1/2026" in mock_http.get.call_args.args[0]
+
+
+def test_live_ingest_requires_archive_store_before_io(session):
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    with pytest.raises(PipelineSafetyError, match="ARCHIVE_STORE_REQUIRED"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 24),
+            matchday=11,
+            dry_run=False,
+            settings=settings,
+            session=session,
+        )
+    assert session.scalars(select(ActiveMatch)).all() == []
+
+
+def test_daily_command_is_read_only_by_default(monkeypatch, capsys):
+    from app.jobs import bundesliga_daily
+
+    class FakeProvider:
+        attribution = ATTRIBUTION
+
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get_matches(self, day):
+            assert day == date(2026, 11, 24)
+            return []
+
+    monkeypatch.setattr(bundesliga_daily, "OpenLigaDBProvider", FakeProvider)
+    assert bundesliga_daily.main(["--date", "2026-11-24"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "DRY_RUN"
+    assert payload["sql_writes"] == 0 and payload["r2_writes"] == 0
+
+
+def test_daily_command_live_mode_requires_config_gate(monkeypatch, capsys):
+    from app.jobs import bundesliga_daily
+
+    monkeypatch.setattr(bundesliga_daily, "get_settings", lambda: Settings(
+        bundesliga_ingest_enabled=False,
+        bundesliga_ingest_dry_run=True,
+        _env_file=None,
+    ))
+    assert bundesliga_daily.main(["--date", "2026-11-24", "--live"]) == 2
+    assert "LIVE_OPERATOR_GATE_DISABLED" in capsys.readouterr().out
+
+
 # --- PHASE C: ISOLATED PIPELINE & RECORD TESTS ---
 
 
-def test_pipeline_inserts_matches_and_verified_results(session, store, mock_openligadb_matches):
+def test_pipeline_inserts_matches_and_unverified_single_source_results(session, store, mock_openligadb_matches):
     mock_http = MagicMock()
     mock_http.get.return_value.status_code = 200
     mock_http.get.return_value.json.return_value = mock_openligadb_matches
@@ -362,7 +461,7 @@ def test_pipeline_inserts_matches_and_verified_results(session, store, mock_open
     assert report["status"] == "COMPLETED"
     assert report["inserted_matches"] == 2
     assert report["persisted_results"] == 1
-    assert len(report["events_generated"]) == 3  # 2 MATCH_SCHEDULED, 1 RESULT_VERIFIED
+    assert len(report["events_generated"]) == 2  # Scheduled events only; no fake verification
     assert report["archive_receipt"] is not None
     assert report["archive_receipt"]["row_count"] == 2
 
@@ -378,6 +477,7 @@ def test_pipeline_inserts_matches_and_verified_results(session, store, mock_open
     assert result.home_score == 1
     assert result.away_score == 1
     assert result.status == "FINAL"
+    assert result.verified_at is None  # Single source alone cannot certify a final score
     assert "OpenLigaDB" in result.result_source
 
 
@@ -425,6 +525,44 @@ def test_pipeline_preserves_uuid_on_subsequent_runs(session, store, mock_openlig
     uuid_map_2 = {m.provider_match_id: m.id for m in matches_run2}
 
     assert uuid_map_1 == uuid_map_2
+
+
+def test_r2_failure_preserves_sql_and_next_attempt_repairs_archive(session, store, mock_openligadb_matches, monkeypatch):
+    mock_http = MagicMock()
+    mock_http.get.return_value.status_code = 200
+    mock_http.get.return_value.json.return_value = mock_openligadb_matches
+    provider = OpenLigaDBProvider(client=mock_http, requests_per_minute=60)
+    settings = Settings(
+        bundesliga_ingest_enabled=True,
+        bundesliga_ingest_dry_run=False,
+        _env_file=None,
+    )
+    real_put = store.put_object_if_absent
+
+    def fail_upload(*args, **kwargs):
+        raise IOError("Synthetic R2 outage")
+
+    monkeypatch.setattr(store, "put_object_if_absent", fail_upload)
+    with pytest.raises(RuntimeError, match="Archive failed"):
+        run_bundesliga_ingest_pipeline(
+            target_day=date(2026, 11, 20), matchday=10, dry_run=False,
+            settings=settings, session=session, store=store, provider=provider,
+        )
+    persisted = session.scalars(select(ActiveMatch)).all()
+    assert len(persisted) == 2
+    ids = {m.provider_match_id: m.id for m in persisted}
+    assert len(session.scalars(select(MatchResult)).all()) == 1
+
+    monkeypatch.setattr(store, "put_object_if_absent", real_put)
+    repaired = run_bundesliga_ingest_pipeline(
+        target_day=date(2026, 11, 20), matchday=10, dry_run=False,
+        settings=settings, session=session, store=store, provider=provider,
+    )
+    assert repaired["status"] == "COMPLETED"
+    assert repaired["archive_receipt"]["row_count"] == 2
+    assert {m.provider_match_id: m.id for m in session.scalars(select(ActiveMatch)).all()} == ids
+    archive = session.scalars(select(ArchiveJob).where(ArchiveJob.r2_key == repaired["archive_receipt"]["key"])).one()
+    assert archive.status == "VERIFIED"
 
 
 # --- NOTIFICATION EVENT CONTRACT TESTS ---
