@@ -230,12 +230,12 @@ class DurableQuotaTracker:
             row = session.get(SystemSetting, key)
             used = dict(row.value) if row else {}
         limits = self._limits()
-        return {
-            "date": datetime.now(timezone.utc).date().isoformat(),
-            name: {
-                "used": int(used.get(name, 0)),
+        result = {"date": datetime.now(timezone.utc).date().isoformat()}
+        for name, limit in limits.items():
+            consumed = int(used.get(name, 0))
+            result[name] = {
+                "used": consumed,
                 "limit": limit,
-                "remaining": max(0, limit - int(used.get(name, 0))),
+                "remaining": max(0, limit - consumed),
             }
-            for name, limit in limits.items()
-        }
+        return result
