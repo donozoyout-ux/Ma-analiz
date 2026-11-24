@@ -219,30 +219,22 @@ def run_bundesliga_ingest_pipeline(
                         status="FINAL",
                         finished_at=start_dt + timedelta(minutes=105),
                         result_source=f"{ATTRIBUTION}; {LICENCE_URL}",
-                        verified_at=now,
+                        verified_at=None,  # Single-source final observation is not independently verified.
                     )
                     session.add(res_row)
                     report["persisted_results"] += 1
                 else:
-                    res_row.home_score = score[0]
-                    res_row.away_score = score[1]
-                    res_row.status = "FINAL"
-                    res_row.verified_at = now
-
-                # Generate RESULT_VERIFIED notification contract
-                event = create_match_event(
-                    event_type=MatchEventType.RESULT_VERIFIED,
-                    match_id=match_id,
-                    provider_match_id=p_id,
-                    home_team=m["home_team"],
-                    away_team=m["away_team"],
-                    start_time=start_dt.isoformat(),
-                    status="FINAL",
-                    home_score=score[0],
-                    away_score=score[1],
-                    occurred_at=now.isoformat(),
-                )
-                report["events_generated"].append(event.model_dump())
+                    # Never silently replace a score that another verification
+                    # workflow has already certified.
+                    if (res_row.verified_at is not None and
+                            (res_row.home_score, res_row.away_score) != tuple(score)):
+                        raise PipelineSafetyError("VERIFIED_RESULT_CONFLICT: manual review required")
+                    if res_row.verified_at is None:
+                        res_row.home_score = score[0]
+                        res_row.away_score = score[1]
+                        res_row.status = "FINAL"
+                # No RESULT_VERIFIED event: this source is only one observation.
+                # Verification is performed by the separate corroboration workflow.
 
             # Row for Parquet archival
             archive_rows.append({
