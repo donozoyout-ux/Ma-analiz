@@ -270,7 +270,9 @@ def test_r2_history_survives_sql_cleanup_and_validates_versions_at_cutoff(sessio
     repository=HistoricalRepository(store)
     assert repository.get_similarity_history(**args,before=NOW)[0]["home_score"]==1
     result.home_score=2;result.updated_at=NOW-timedelta(hours=40);session.commit();archive(session,store)
-    assert repository.get_similarity_history(**args,before=NOW-timedelta(hours=45))[0]["home_score"]==1
+    # Archive snapshots only become available when they are actually written.
+    # A historical query must never read a future archive revision.
+    assert repository.get_similarity_history(**args,before=NOW-timedelta(hours=45))==[]
     assert repository.get_similarity_history(**args,before=NOW)[0]["home_score"]==2
     later=NOW+timedelta(hours=49)
     report,_=lc.plan(session,store,now=later)
@@ -300,8 +302,14 @@ def test_bayern_end_to_end_offline_canonical_archive_and_operational_alias(sessi
     assert history["rows"][0]["canonical_league_id"]=="de.bl1"
     assert history["rows"][0]["attribution"].startswith("Data: OpenLigaDB")
     report=plan(session,store)
+    # The verified import was observed recently. Retention must not delete it
+    # before its 48-hour protection window expires, even when a manual gate
+    # is supplied with a valid empty plan.
+    assert report["pending_approval"]==0
+    assert any("WITHIN_RETENTION_WINDOW" in row["reasons"] for row in report["records"])
     lc.execute(session,store,approval=report["approval_digest"],enabled=True,now=NOW)
-    assert target_check(session,store)["status"]=="ARCHIVED_ONLY"
+    assert target_check(session,store)["status"]=="VERIFIED"
+    assert session.query(ActiveMatch).count()==1
 
 
 def test_scheduler_uses_gated_automatic_retention_path(monkeypatch):
