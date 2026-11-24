@@ -27,7 +27,7 @@ jobs:
         working-directory: backend
         run: python -m pytest -q tests/test_source_snapshot.py
   collect:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 12
