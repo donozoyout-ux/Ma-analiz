@@ -1,0 +1,59 @@
+name: Scheduled OpenLigaDB 2026-27 Source Snapshots
+on:
+  schedule:
+    - cron: '15 5 * * *'
+    - cron: '15 17 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'backend/app/jobs/source_snapshot.py'
+      - 'backend/tests/test_source_snapshot.py'
+      - '.github/workflows/scheduled-source-snapshots.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: No-secrets source snapshot contract
+        working-directory: backend
+        run: python -m pytest -q tests/test_source_snapshot.py
+  collect:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      BUNDESLIGA_INGEST_ENABLED: 'false'
+      BUNDESLIGA_INGEST_DRY_RUN: 'true'
+      OPERATIONAL_DELETE_ENABLED: 'false'
+      AUTO_RETENTION_DELETE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Collect allowed public fixtures and results (no SQL or R2 credentials)
+        working-directory: backend
+        run: python -m app.jobs.source_snapshot --output ../source-artifact
+      - name: Upload daily JSON with SHA-256 verification file
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-fixtures-${{ github.run_id }}
+          path: |
+            source-artifact/source-observations.json
+            source-artifact/source-observations.sha256
+          retention-days: 14
+          if-no-files-found: warn
