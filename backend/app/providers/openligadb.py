@@ -109,7 +109,7 @@ class OpenLigaDBProvider:
                     time.sleep(retry_after)
                     backoff *= 2
                     continue
-                elif resp.is_redirect:
+                elif 300 <= resp.status_code < 400:
                     raise ProviderAccessRestricted("OpenLigaDB redirect refused")
                 elif resp.status_code in (401, 403):
                     raise ProviderAccessRestricted(f"OpenLigaDB access denied HTTP {resp.status_code}")
