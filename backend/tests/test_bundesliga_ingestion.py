@@ -395,6 +395,44 @@ def test_live_ingest_requires_archive_store_before_io(session):
     assert session.scalars(select(ActiveMatch)).all() == []
 
 
+def test_daily_command_is_read_only_by_default(monkeypatch, capsys):
+    from app.jobs import bundesliga_daily
+
+    class FakeProvider:
+        attribution = ATTRIBUTION
+
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get_matches(self, day):
+            assert day == date(2026, 11, 24)
+            return []
+
+    monkeypatch.setattr(bundesliga_daily, "OpenLigaDBProvider", FakeProvider)
+    assert bundesliga_daily.main(["--date", "2026-11-24"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "DRY_RUN"
+    assert payload["sql_writes"] == 0 and payload["r2_writes"] == 0
+
+
+def test_daily_command_live_mode_requires_config_gate(monkeypatch, capsys):
+    from app.jobs import bundesliga_daily
+
+    monkeypatch.setattr(bundesliga_daily, "get_settings", lambda: Settings(
+        bundesliga_ingest_enabled=False,
+        bundesliga_ingest_dry_run=True,
+        _env_file=None,
+    ))
+    assert bundesliga_daily.main(["--date", "2026-11-24", "--live"]) == 2
+    assert "LIVE_OPERATOR_GATE_DISABLED" in capsys.readouterr().out
+
+
 # --- PHASE C: ISOLATED PIPELINE & RECORD TESTS ---
 
 
