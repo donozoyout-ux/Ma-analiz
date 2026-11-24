@@ -24,6 +24,13 @@ def _register_builtins() -> None:
             timeout_seconds=cfg.provider_timeout_seconds,
             requests_per_minute=min(6, cfg.provider_requests_per_minute),
         ))
+    if "openligadb" not in _FACTORIES:
+        from app.providers.openligadb import OpenLigaDBProvider
+        register_provider("openligadb", lambda cfg: OpenLigaDBProvider(
+            base_url=getattr(cfg, "openligadb_base_url", "https://api.openligadb.de"),
+            timeout_seconds=getattr(cfg, "openligadb_timeout_seconds", 10.0),
+            requests_per_minute=getattr(cfg, "openligadb_requests_per_minute", 1),
+        ))
 
 
 def register_provider(name: str, factory: ProviderFactory) -> None:
@@ -41,7 +48,7 @@ def create_provider(settings: Settings | None = None) -> MatchProvider:
         raise ProviderNotConfigured("PAID_PROVIDER_DISABLED: Sportmonks is disabled; use a reviewed web source")
     if (name or "").lower() == "goaloo" and (len(cfg.enabled_league_ids) > 1 or len(cfg.enabled_season_ids) > 1):
         raise ProviderNotConfigured("SCRAPING_SCOPE_LIMIT: first rollout requires one league and one season; no automatic narrowing")
-    credentials_required = (name or "").lower() != "goaloo"
+    credentials_required = (name or "").lower() not in {"goaloo", "openligadb"}
     if not name or not cfg.provider_api_base_url or (credentials_required and not cfg.provider_api_token):
         raise ProviderNotConfigured("PROVIDER_NOT_CONFIGURED: set provider name, API base URL, and required credentials")
     if name.lower() == "mock":
@@ -66,7 +73,7 @@ def provider_health(settings: Settings | None = None) -> dict[str, Any]:
         return {"provider": "SPORTMONKS", "status": "PAID_PROVIDER_DISABLED",
                 "display_status": "DISABLED", "latency_ms": None, "error_code": "PAID_PROVIDER_DISABLED",
                 "last_successful_request": None, "coverage": coverage}
-    credentials_required = (provider_name or "").lower() != "goaloo"
+    credentials_required = (provider_name or "").lower() not in {"goaloo", "openligadb"}
     if not (provider_name and cfg.provider_api_base_url and (not credentials_required or cfg.provider_api_token)):
         return {"provider": (provider_name or "UNKNOWN").upper(), "status": "PROVIDER_NOT_CONFIGURED",
                 "display_status": "NOT CONFIGURED", "latency_ms": None,

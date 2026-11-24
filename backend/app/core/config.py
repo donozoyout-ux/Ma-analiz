@@ -33,6 +33,15 @@ class Settings(BaseSettings):
     sportmonks_max_retries: int = 3
     goaloo_base_url: str = "https://football.goaloo.com"
     goaloo_odds_base_url: str = "https://www.goaloo.com"
+    openligadb_base_url: str = "https://api.openligadb.de"
+    openligadb_timeout_seconds: float = 10.0
+    openligadb_requests_per_minute: int = 1
+    bundesliga_ingest_enabled: bool = False
+    bundesliga_ingest_dry_run: bool = True
+    bundesliga_daily_max_requests: int = 10
+    bundesliga_daily_max_r2_writes: int = 50
+    bundesliga_daily_max_archive_mb: int = 10
+    bundesliga_daily_max_matches: int = 50
     enabled_leagues: str = ""
     enabled_seasons: str = ""
     historical_start_date: date | None = None
@@ -91,6 +100,8 @@ class Settings(BaseSettings):
             return self.sportmonks_base_url or self.provider_base_url
         if (self.provider_id or "").lower() == "goaloo":
             return self.provider_base_url or self.goaloo_base_url
+        if (self.provider_id or "").lower() == "openligadb":
+            return self.openligadb_base_url
         return self.provider_base_url
 
     @property
