@@ -398,7 +398,7 @@ def test_live_ingest_requires_archive_store_before_io(session):
 # --- PHASE C: ISOLATED PIPELINE & RECORD TESTS ---
 
 
-def test_pipeline_inserts_matches_and_verified_results(session, store, mock_openligadb_matches):
+def test_pipeline_inserts_matches_and_unverified_single_source_results(session, store, mock_openligadb_matches):
     mock_http = MagicMock()
     mock_http.get.return_value.status_code = 200
     mock_http.get.return_value.json.return_value = mock_openligadb_matches
@@ -423,7 +423,7 @@ def test_pipeline_inserts_matches_and_verified_results(session, store, mock_open
     assert report["status"] == "COMPLETED"
     assert report["inserted_matches"] == 2
     assert report["persisted_results"] == 1
-    assert len(report["events_generated"]) == 3  # 2 MATCH_SCHEDULED, 1 RESULT_VERIFIED
+    assert len(report["events_generated"]) == 2  # Scheduled events only; no fake verification
     assert report["archive_receipt"] is not None
     assert report["archive_receipt"]["row_count"] == 2
 
@@ -439,6 +439,7 @@ def test_pipeline_inserts_matches_and_verified_results(session, store, mock_open
     assert result.home_score == 1
     assert result.away_score == 1
     assert result.status == "FINAL"
+    assert result.verified_at is None  # Single source alone cannot certify a final score
     assert "OpenLigaDB" in result.result_source
 
 
