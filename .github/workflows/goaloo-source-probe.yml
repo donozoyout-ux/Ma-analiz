@@ -1,0 +1,49 @@
+name: Goaloo Live Source Read-Only Probe
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/goaloo-source-probe.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Verify official OpenLigaDB and permitted Goaloo public source
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import json
+          from datetime import date
+          from app.providers.openligadb import OpenLigaDBProvider
+          from app.providers.goaloo import GoalooProvider
+          from app.jobs.goaloo_daily_collect import map_observed_rows
+
+          day = date(2026, 11, 28)
+          o = OpenLigaDBProvider(requests_per_minute=1)
+          g = GoalooProvider(league_ids=("8",), season_ids=("2026-2027",), requests_per_minute=6)
+          try:
+              official = o.get_matches(day)
+              goaloo = g.get_matches_on_day(day, "8", "2026-2027")
+              mappings = map_observed_rows(goaloo, official)
+              verified = [x for x in mappings if x.status == "MATCHED"]
+              quotes = g.get_odds(verified[0].goaloo_id) if verified else []
+              print(json.dumps({"read_only":True,"day":str(day),
+                  "openliga":len(official),"goaloo":len(goaloo),
+                  "unique_matched":len(verified),"odds_for_one_match":len(quotes),
+                  "goaloo_source_status":"OK"}, ensure_ascii=False))
+              if not official or not goaloo:
+                  raise SystemExit("SOURCE_EMPTY_OR_BLOCKED: no usable source fixtures")
+          finally:
+              o.close()
+              g.close()
+          PY
