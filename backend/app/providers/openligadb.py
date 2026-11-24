@@ -200,6 +200,26 @@ class OpenLigaDBProvider:
         all_matches = self._parse_matches(payload)
         return [m for m in all_matches if m.get("match_date") == day]
 
+    def get_competition_matches(self, league_shortcut: str, day: date) -> list[dict[str, Any]]:
+        """Read-only daily UEFA fixtures, restricted to the reviewed 2026/27 catalog.
+
+        Exact OpenLigaDB shortcuts are used, not an assumed or guessed season alias.
+        No SQL/R2 writes and no odds or statistics are generated here.
+        """
+        from app.providers.european_cups import EUROPEAN_CUPS
+        competition = next((item for item in EUROPEAN_CUPS.values()
+                            if item["shortcut"] == league_shortcut), None)
+        if competition is None:
+            raise ValueError("Unsupported European competition")
+        if not date(2026, 7, 1) <= day <= date(2027, 6, 30):
+            raise ValueError("Only pilot season 2026/27 is supported")
+        payload = self._get(f"getmatchdata/{league_shortcut}/2026")
+        if not isinstance(payload, list):
+            raise ProviderInvalidResponse("Expected a list of European fixtures")
+        matches = self._parse_matches(payload, league_id=competition["league_id"],
+                                      league_name=competition["name"], country="Europe")
+        return [m for m in matches if m["match_date"] == day and m["season_year"] == 2026]
+
     def get_match(self, match_id: str) -> dict[str, Any] | None:
         if not match_id.isdigit():
             return None
@@ -233,7 +253,8 @@ class OpenLigaDBProvider:
                 })
         return results
 
-    def _parse_matches(self, payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _parse_matches(self, payload: list[dict[str, Any]], *, league_id: str = "de.bl1",
+                       league_name: str = "Bundesliga", country: str = "Germany") -> list[dict[str, Any]]:
         observed_at = datetime.now(timezone.utc)
         parsed: list[dict[str, Any]] = []
 
@@ -281,8 +302,8 @@ class OpenLigaDBProvider:
             parsed.append({
                 "provider": "openligadb",
                 "provider_match_id": str(match_id),
-                "league_id": "de.bl1",
-                "league_name": "Bundesliga",
+                "league_id": league_id,
+                "league_name": league_name,
                 "season": season_str,
                 "season_year": season_year,
                 "home_team": home_team.strip(),
@@ -296,7 +317,7 @@ class OpenLigaDBProvider:
                 "half_time_score": half_time_score,
                 "round": group_name,
                 "venue": None,
-                "country": "Germany",
+                "country": country,
                 "sport": "football",
                 "licence": LICENCE,
                 "attribution": ATTRIBUTION,
