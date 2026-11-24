@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.analysis.engine import (SimilarityThresholds, form_analyzer, goals_analyzer,
     historical_similarity, h2h_analyzer, no_bet_reasons)
+from app.analysis.technical import technical_summary
 from app.analysis.ai import create_ai_provider
 from app.analysis.pipeline import analyze_match
 from app.analysis.persistence import persist_paper_prediction, record_analysis
@@ -24,9 +25,9 @@ def _serialize(model) -> dict:
 def _verified_history(db: Session, *, cutoff: datetime) -> list[dict]:
     rows = db.execute(select(ActiveMatch, MatchResult).join(
         MatchResult, MatchResult.match_id == ActiveMatch.id
-    ).where(MatchResult.status == "FINISHED", MatchResult.verified_at.is_not(None),
+    ).where(MatchResult.status.in_(("FINISHED", "FINAL")), MatchResult.verified_at.is_not(None),
             MatchResult.verified_at <= cutoff, ActiveMatch.start_time <= cutoff)).all()
-    return [{"provider_match_id": match.provider_match_id, "home_team": match.home_team, "away_team": match.away_team,
+    return [{"provider": match.provider, "provider_match_id": match.provider_match_id, "home_team": match.home_team, "away_team": match.away_team,
              "home_score": result.home_score, "away_score": result.away_score,
              "status": "FINISHED", "verified_at": (result.verified_at.replace(tzinfo=timezone.utc)
                                                         if result.verified_at.tzinfo is None else result.verified_at),
@@ -36,7 +37,7 @@ def _verified_history(db: Session, *, cutoff: datetime) -> list[dict]:
 def _statistics_for_match(match: ActiveMatch, history: list[dict], *, as_of: datetime) -> dict:
     unique: dict[str, dict] = {}
     for row in history:
-        event_key = str(row.get("provider_match_id") or (
+        event_key = str((row.get("provider"), row.get("provider_match_id")) if row.get("provider_match_id") else (
             row.get("home_team"), row.get("away_team"), row.get("start_time")))
         if event_key not in unique or row.get("history_source") == "R2":
             unique[event_key] = row
@@ -45,12 +46,14 @@ def _statistics_for_match(match: ActiveMatch, history: list[dict], *, as_of: dat
         "status": "R2_VERIFIED" if any(row.get("history_source") == "R2" for row in history)
                   else "PARTIAL" if history else "HISTORICAL_EVIDENCE_INSUFFICIENT",
         "as_of": as_of,
-        "home": {"form_5": form_analyzer(match.home_team, history, as_of=as_of, limit=5).to_dict(),
+        "home": {"technical": technical_summary(match.home_team, history, as_of=as_of),
+                 "form_5": form_analyzer(match.home_team, history, as_of=as_of, limit=5).to_dict(),
                  "form_10": form_analyzer(match.home_team, history, as_of=as_of, limit=10).to_dict(),
                  "form_15": form_analyzer(match.home_team, history, as_of=as_of, limit=15).to_dict(),
                  "home_last_5": form_analyzer(match.home_team, history, as_of=as_of, limit=5, venue="home").to_dict(),
                  "goals": goals_analyzer(match.home_team, history, as_of=as_of)},
-        "away": {"form_5": form_analyzer(match.away_team, history, as_of=as_of, limit=5).to_dict(),
+        "away": {"technical": technical_summary(match.away_team, history, as_of=as_of),
+                 "form_5": form_analyzer(match.away_team, history, as_of=as_of, limit=5).to_dict(),
                  "form_10": form_analyzer(match.away_team, history, as_of=as_of, limit=10).to_dict(),
                  "form_15": form_analyzer(match.away_team, history, as_of=as_of, limit=15).to_dict(),
                  "away_last_5": form_analyzer(match.away_team, history, as_of=as_of, limit=5, venue="away").to_dict(),
@@ -68,9 +71,22 @@ def _r2_history(match: ActiveMatch, *, as_of: datetime, odds_rows: list[ActiveOd
     start = kickoff - timedelta(days=365 * 5)
     try:
         repository = HistoricalRepository(R2ObjectStore())
-        rows = repository.get_similarity_history(league=match.league_id, season=match.season,
-            start=start, end=kickoff, before=as_of,
-            bookmaker=(next((row.bookmaker for row in odds_rows or [] if row.market == "1X2" and row.selection == "HOME"), None)))
+        from app.providers.identity import LEAGUES, REVIEWED_IMPORT_KEY
+        canonical_league = LEAGUES.get((match.provider, match.league_id), match.league_id)
+        rows = []
+        for league in dict.fromkeys((canonical_league, match.league_id)):
+            rows.extend(repository.get_similarity_history(league=league, season=match.season,
+                start=start, end=kickoff, before=as_of,
+                bookmaker=(next((row.bookmaker for row in odds_rows or [] if row.market == "1X2" and row.selection == "HOME"), None))))
+        for row in rows:
+            row["canonical_league_id"] = canonical_league
+            row["league_id"] = match.league_id  # reviewed competition ID mapping only
+            if (row.get("identity_review") == REVIEWED_IMPORT_KEY and row.get("operational_provider") == match.provider):
+                snapshot = json.loads(row["sql_snapshot_json"])
+                # This fixture's persisted, reviewed aliases survive SQL cleanup.
+                # Never turn this into a fuzzy or global club-name transformation.
+                for field in ("provider", "provider_match_id", "home_team", "away_team"):
+                    row[field] = snapshot[field]
     except R2NotConfigured:
         return {"status": "R2_NOT_CONFIGURED", "rows": [], "similarity": None}
     except Exception as exc:
@@ -104,7 +120,7 @@ def _run_analysis(db: Session, match: ActiveMatch, *, as_of: datetime | None = N
         # R2 is the authoritative historical copy when both stores contain a fixture.
         merged_history = {}
         for row in pg_history + r2["rows"]:
-            key = str(row.get("provider_match_id") or row.get("id") or "")
+            key = str((row.get("provider"), row.get("provider_match_id") or row.get("id")))
             if key:
                 merged_history[key] = row
         result = analyze_match(match_data, statistics_history=list(merged_history.values()),

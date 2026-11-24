@@ -1,7 +1,2 @@
-import { Archive } from "lucide-react";
-import { HealthPanel } from "@/components/health";
-import { StoragePanel } from "@/components/storage-panel";
-import { OverviewMetrics } from "@/components/overview-metrics";
-import { RecordsPanel } from "@/components/records-panel";
-import { DashboardCharts } from "@/components/dashboard-charts";
-export default function Dashboard(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Overview</div><h1 className="title">System dashboard</h1></div><div className="clock">LIVE SYSTEM STATUS</div></header><div className="status-strip"><span className="dot"/>Metrics appear only when their PostgreSQL source is connected; no sample results are shown.</div><OverviewMetrics/><section className="grid two-col"><div className="card"><div className="section-head"><div className="section-title">Activity & performance</div><div className="section-note">Daily · 7 days · 30 days</div></div><DashboardCharts/></div><div className="card"><div className="section-head"><div className="section-title">System health</div><div className="section-note">Live readiness</div></div><HealthPanel/></div></section><section className="grid two-col" style={{marginTop:14}}><div className="card"><div className="section-head"><div className="section-title">Storage</div><div className="section-note">PostgreSQL · R2</div></div><StoragePanel/></div><div><div className="section-head"><div className="section-title">Latest matches</div><div className="section-note">Upcoming & active</div></div><RecordsPanel endpoint="matches?limit=5" columns={["start_time","home_team","away_team"]} empty="No active matches are available."/></div></section></>}
+import { FootballHome } from "@/components/football-home";
+export default function Dashboard() { return <FootballHome />; }

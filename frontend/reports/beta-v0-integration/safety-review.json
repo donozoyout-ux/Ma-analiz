@@ -1,0 +1,23 @@
+{
+  "main": "dae3d305ee8cc72462d14a719de69bcd89255235",
+  "pr14": "e3f41b27a3d22a8bb887877f4a2f6c6bcdc9cfe4",
+  "pr15": "8ffcb9192178ab68ba49bf6e1041c0e8bd41f30e",
+  "integration_merge_head": "1ab8318364943e941900acf60284143e83fa0324",
+  "production_retention_job_unchanged": true,
+  "production_retention_blocked_on_pr": true,
+  "schedule_and_concurrency_unchanged": true,
+  "pr_validation_has_no_production_secrets": true,
+  "postgres_16_service_pr_only": true,
+  "scheduler_diff_inherited_exactly_from_pr14": true,
+  "render_diff_inherited_exactly_from_pr14": true,
+  "render_start_command_unchanged": true,
+  "migration_diff": [],
+  "AUTO_RETENTION_DELETE_ENABLED": false,
+  "OPERATIONAL_DELETE_ENABLED": false,
+  "SAFE_TO_DELETE": "NO",
+  "LIVE_DELETE": "NOT_RUN",
+  "production_env_access": "NOT_RUN",
+  "production_SQL_WRITE": "NOT_RUN",
+  "production_R2_WRITE": "NOT_RUN",
+  "workflow_dispatch": "NOT_RUN"
+}

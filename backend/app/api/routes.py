@@ -8,6 +8,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.api.connections import schema_report, r2_check
 from app.db.session import engine, get_db
 from app.analysis.odds import project_odds_snapshots
 from app.analysis.scanning import (_r2_history, _run_analysis, _statistics_for_match, _verified_history, scan_upcoming_matches)
@@ -44,18 +45,25 @@ def health() -> dict[str, Any]:
     settings = get_settings()
     database = ("NOT_CONFIGURED" if settings.database_url_missing else
                 "ERROR" if not settings.database_url_valid else "UNAVAILABLE")
+    database_schema = "NOT_VERIFIED"
     worker, archive = "UNKNOWN", "NO_VERIFIED_ARCHIVES"
     if engine is not None and settings.database_url_valid:
         try:
             with engine.connect() as connection:
+                connection.execute(text("SET TRANSACTION READ ONLY"))
+                connection.execute(text("SET LOCAL statement_timeout = '5s'"))
                 connection.execute(text("SELECT 1"))
+                database = "CONNECTED"
+                database_schema = schema_report(connection)["schema"]
                 latest_job = connection.execute(select(JobRun.status).order_by(JobRun.started_at.desc()).limit(1)).scalar_one_or_none()
                 latest_archive = connection.execute(select(ArchiveJob.status).order_by(ArchiveJob.created_at.desc()).limit(1)).scalar_one_or_none()
             database = "CONNECTED"
             worker = latest_job or "NO_JOB_RUNS"
             archive = latest_archive or "NO_ARCHIVES"
         except Exception:
-            database = "UNAVAILABLE"
+            # A missing table must not overwrite a successful SELECT 1.
+            if database != "CONNECTED":
+                database = "UNAVAILABLE"
             worker = "UNKNOWN"
             archive = "UNKNOWN"
     provider_info = provider_health()
@@ -71,16 +79,9 @@ def health() -> dict[str, Any]:
                      else _component_status(goaloo_configured))
     sportmonks_status = provider_component if selected_provider == "sportmonks" else _component_status(sportmonks_configured)
 
-    r2_configured = settings.r2_configured
-    r2_status = ("NOT_CONFIGURED" if settings.r2_missing_env else
-                 "ERROR" if settings.r2_invalid_env else "CONFIGURED")
-    if r2_configured:
-        try:
-            store = R2ObjectStore()
-            store.client.list_objects_v2(Bucket=store.bucket, Prefix="", MaxKeys=1)
-            r2_status = "CONNECTED"
-        except Exception:
-            r2_status = "UNAVAILABLE"
+    # Public response exposes only an allowlisted status, never diagnostic details.
+    r2_status = {"ACCESSIBLE": "CONNECTED", "NOT_CONFIGURED": "NOT_CONFIGURED",
+                 "INVALID_CONFIGURATION": "ERROR"}.get(r2_check(settings)["status"], "UNAVAILABLE")
 
     groq_configured = settings.groq_configured
     groq_status = ("NOT_CONFIGURED" if settings.groq_missing_env else
@@ -96,12 +97,13 @@ def health() -> dict[str, Any]:
 
     telegram_configured = bool(settings.telegram_bot_token and settings.telegram_chat_id)
     return {
-        "status": "ok" if database == "CONNECTED" else "degraded",
+        "status": "ok" if database == "CONNECTED" and database_schema == "READY" else "degraded",
         "provider": provider_info["status"],
         "provider_status": provider_component,
         "provider_health": provider_info,
         "odds_provider": provider_info["status"],
         "database": database,
+        "database_schema": database_schema,
         "r2": r2_status,
         "worker": worker,
         "archive": archive,
@@ -161,7 +163,31 @@ def storage() -> dict:
 def list_matches(db: Session = Depends(get_db), limit: int = 100) -> list[dict]:
     now = datetime.now(timezone.utc)
     rows = db.scalars(select(ActiveMatch).where(ActiveMatch.expires_at > now).order_by(ActiveMatch.start_time).limit(max(1, min(limit, 500)))).all()
-    return [_serialize(row) for row in rows]
+    ids = [row.id for row in rows]
+    results = {row.match_id: row for row in db.scalars(select(MatchResult).where(
+        MatchResult.match_id.in_(ids),
+        (MatchResult.verified_at.is_(None) | (MatchResult.verified_at <= now)),
+    )).all()} if ids else {}
+    ranked = select(MatchAnalysis.id.label("id"), func.row_number().over(
+        partition_by=MatchAnalysis.match_id,
+        order_by=(MatchAnalysis.analysis_timestamp.desc(), MatchAnalysis.id.desc()),
+    ).label("position")).where(MatchAnalysis.match_id.in_(ids),
+        MatchAnalysis.analysis_timestamp <= now).subquery()
+    analyses = {row.match_id: row for row in db.scalars(select(MatchAnalysis).join(
+        ranked, ranked.c.id == MatchAnalysis.id).where(ranked.c.position == 1)).all()} if ids else {}
+    output = []
+    for row in rows:
+        item = _serialize(row)
+        result, analysis = results.get(row.id), analyses.get(row.id)
+        item["result"] = ({"home_score": result.home_score, "away_score": result.away_score,
+                           "status": result.status, "verified_at": result.verified_at,
+                           "result_source": result.result_source} if result else None)
+        item["analysis_summary"] = ({"analysis_status": analysis.analysis_status,
+                                     "signal": analysis.final_decision,
+                                     "analysis_timestamp": analysis.analysis_timestamp,
+                                     "model_version": analysis.model_version} if analysis else None)
+        output.append(item)
+    return output
 
 
 @router.get("/matches/{match_id}")

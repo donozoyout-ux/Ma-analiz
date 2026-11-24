@@ -1,0 +1,14 @@
+{
+  "observed_at": "2026-11-21T21:43:22.383Z",
+  "evidence": "RECORDED_VERIFIED_PRODUCTION_READBACK_UI_TEST",
+  "desktop": "PASS",
+  "mobile_390": "PASS",
+  "detail": "PASS",
+  "history": "PASS",
+  "empty_filter": "PASS",
+  "network_error_and_retry": "PASS",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "R2_DELETE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN"
+}

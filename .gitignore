@@ -11,3 +11,5 @@ dist/
 *.egg-info/
 
 *.tsbuildinfo
+backend/.collector/
+backend/.trusted-fixture/

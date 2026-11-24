@@ -1,0 +1,220 @@
+{
+  "observed_at": "2026-11-21T18:23:22.696755+00:00",
+  "workflows": {
+    "retention-scheduler.yml": {
+      "state": "active",
+      "created_at": "2026-11-21T12:39:22.000+03:00",
+      "total_count": 15,
+      "sample_limit": 100,
+      "runs": [
+        {
+          "id": 44933335342,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T18:02:48Z",
+          "run_started_at": "2026-11-21T18:02:48Z",
+          "updated_at": "2026-11-21T18:04:01Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44933335342"
+        },
+        {
+          "id": 44931523049,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T17:42:36Z",
+          "run_started_at": "2026-11-21T17:42:36Z",
+          "updated_at": "2026-11-21T17:43:55Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44931523049"
+        },
+        {
+          "id": 44928703385,
+          "event": "schedule",
+          "display_title": "Retention auto",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T17:11:45Z",
+          "run_started_at": "2026-11-21T17:11:45Z",
+          "updated_at": "2026-11-21T17:13:09Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44928703385"
+        },
+        {
+          "id": 44927475175,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T16:58:37Z",
+          "run_started_at": "2026-11-21T16:58:37Z",
+          "updated_at": "2026-11-21T17:00:41Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44927475175"
+        },
+        {
+          "id": 44927449780,
+          "event": "schedule",
+          "display_title": "Retention archive",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T16:58:19Z",
+          "run_started_at": "2026-11-21T16:58:19Z",
+          "updated_at": "2026-11-21T16:59:29Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44927449780"
+        },
+        {
+          "id": 44925714895,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T16:38:54Z",
+          "run_started_at": "2026-11-21T16:38:54Z",
+          "updated_at": "2026-11-21T16:39:59Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44925714895"
+        },
+        {
+          "id": 44895643123,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T10:42:51Z",
+          "run_started_at": "2026-11-21T10:42:51Z",
+          "updated_at": "2026-11-21T10:43:57Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44895643123"
+        },
+        {
+          "id": 44893440548,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T10:15:09Z",
+          "run_started_at": "2026-11-21T10:15:09Z",
+          "updated_at": "2026-11-21T10:16:10Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44893440548"
+        },
+        {
+          "id": 44892341156,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T10:01:44Z",
+          "run_started_at": "2026-11-21T10:01:44Z",
+          "updated_at": "2026-11-21T10:03:33Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44892341156"
+        },
+        {
+          "id": 44892302205,
+          "event": "workflow_dispatch",
+          "display_title": "Retention auto",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T10:01:16Z",
+          "run_started_at": "2026-11-21T10:01:16Z",
+          "updated_at": "2026-11-21T10:02:24Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44892302205"
+        },
+        {
+          "id": 44892128200,
+          "event": "workflow_dispatch",
+          "display_title": "Retention archive",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T09:59:14Z",
+          "run_started_at": "2026-11-21T09:59:14Z",
+          "updated_at": "2026-11-21T10:00:19Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44892128200"
+        },
+        {
+          "id": 44891800021,
+          "event": "workflow_dispatch",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T09:54:45Z",
+          "run_started_at": "2026-11-21T09:54:45Z",
+          "updated_at": "2026-11-21T09:56:02Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891800021"
+        },
+        {
+          "id": 44891581219,
+          "event": "workflow_dispatch",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-11-21T09:51:54Z",
+          "run_started_at": "2026-11-21T09:51:54Z",
+          "updated_at": "2026-11-21T09:52:46Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891581219"
+        },
+        {
+          "id": 44891049207,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-11-21T09:45:07Z",
+          "run_started_at": "2026-11-21T09:45:07Z",
+          "updated_at": "2026-11-21T09:46:02Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891049207"
+        },
+        {
+          "id": 44890606821,
+          "event": "push",
+          "display_title": "Retention dry-run",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-11-21T09:39:26Z",
+          "run_started_at": "2026-11-21T09:39:26Z",
+          "updated_at": "2026-11-21T09:40:25Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44890606821"
+        }
+      ]
+    },
+    "retention-watchdog.yml": {
+      "state": "active",
+      "created_at": "2026-11-21T12:39:22.000+03:00",
+      "total_count": 3,
+      "sample_limit": 100,
+      "runs": [
+        {
+          "id": 44927261704,
+          "event": "schedule",
+          "display_title": "Retention schedule watchdog",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-11-21T16:56:09Z",
+          "run_started_at": "2026-11-21T16:56:09Z",
+          "updated_at": "2026-11-21T16:56:17Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44927261704"
+        },
+        {
+          "id": 44891067934,
+          "event": "workflow_dispatch",
+          "display_title": "Retention schedule watchdog",
+          "status": "completed",
+          "conclusion": "success",
+          "created_at": "2026-11-21T09:45:20Z",
+          "run_started_at": "2026-11-21T09:45:20Z",
+          "updated_at": "2026-11-21T09:45:31Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44891067934"
+        },
+        {
+          "id": 44890806470,
+          "event": "workflow_dispatch",
+          "display_title": "Retention schedule watchdog",
+          "status": "completed",
+          "conclusion": "failure",
+          "created_at": "2026-11-21T09:42:00Z",
+          "run_started_at": "2026-11-21T09:42:00Z",
+          "updated_at": "2026-11-21T09:42:09Z",
+          "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44890806470"
+        }
+      ]
+    }
+  },
+  "AUTO_RETENTION_DELETE_ENABLED": "NOT_SET_DEFAULT_FALSE"
+}

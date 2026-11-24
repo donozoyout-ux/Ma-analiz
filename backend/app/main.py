@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import health, router
+from app.api.connections import router as connections_router
+from app.api.match_center import router as match_center_router
+from app.api.european_cups import router as european_cups_router
 from app.core.config import get_settings
 
 app = FastAPI(title="Maç Analiz API", version="0.1.0")
@@ -11,7 +14,7 @@ app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["GET", 
 
 
 @app.get("/health/live", include_in_schema=False)
-def liveness() -> dict[str, str]:
+async def liveness() -> dict[str, str]:
     """Process-only probe; deliberately performs no dependency checks."""
     return {"status": "ok"}
 
@@ -19,3 +22,8 @@ def liveness() -> dict[str, str]:
 app.get("/health")(health)
 app.include_router(router, prefix="/api/v1")
 app.include_router(router, prefix="/api")
+
+app.include_router(connections_router, prefix="/api/v1")
+app.include_router(match_center_router, prefix="/api/v1")
+
+app.include_router(european_cups_router, prefix="/api/v1")

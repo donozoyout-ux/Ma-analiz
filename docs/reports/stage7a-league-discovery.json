@@ -1,0 +1,54 @@
+{
+  "requests": [
+    {
+      "url": "https://api.openligadb.de/robots.txt",
+      "observed_at": "2026-11-21T10:06:39.175246+00:00",
+      "http_status": 404,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "url": "https://api.openligadb.de/getavailableleagues",
+      "observed_at": "2026-11-21T10:06:40.169634+00:00",
+      "http_status": 200,
+      "bytes": 125094,
+      "sha256": "1c2d565b8cee220c33abacd8de1c267d7abef5d5a283065722e7837f5c1bbe5b"
+    }
+  ],
+  "season": 2026,
+  "leagues": [
+    {
+      "leagueId": 4937,
+      "leagueName": "1. Fußball-Bundesliga 2026/2027",
+      "leagueShortcut": "bl1",
+      "leagueSeason": "2026",
+      "sport": {
+        "sportId": 1,
+        "sportName": "Fußball"
+      }
+    },
+    {
+      "leagueId": 5993,
+      "leagueName": "Permier League England",
+      "leagueShortcut": "pl1",
+      "leagueSeason": "2026",
+      "sport": {
+        "sportId": 1,
+        "sportName": "Fußball"
+      }
+    },
+    {
+      "leagueId": 5996,
+      "leagueName": "Premier League 2026/2027",
+      "leagueShortcut": "pl",
+      "leagueSeason": "2026",
+      "sport": {
+        "sportId": 1,
+        "sportName": "Fußball"
+      }
+    }
+  ],
+  "evidence_kind": "LIVE_SOURCE_METADATA",
+  "current_season_league_count": 87,
+  "selection_note": "Only reviewed Bundesliga and the two Premier League candidates retained. No Turkish Super Lig identity established in current-season catalogue. Discovery metadata only, not a match-season scrape."
+}

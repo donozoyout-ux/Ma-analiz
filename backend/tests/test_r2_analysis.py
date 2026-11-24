@@ -5,7 +5,7 @@ from app.storage.r2 import InMemoryObjectStore, parquet_bytes
 
 
 def _put(store, key, rows):
-    store.put_object(key, parquet_bytes(rows), content_type="application/vnd.apache.parquet")
+    store.put_parquet(key, rows)
 
 
 def test_r2_similarity_query_prunes_by_partition_and_joins_verified_result_and_odds():
@@ -84,3 +84,24 @@ def test_r2_future_odds_and_unverified_results_are_not_attached():
         start=start, end=start, before=before, bookmaker="B365")
     assert len(rows) == 1
     assert "historical_odds" not in rows[0]
+
+
+
+def test_r2_statistics_keep_source_identity_and_observation_cutoff():
+    store=InMemoryObjectStore()
+    start=datetime(2026,11,20,tzinfo=timezone.utc)
+    key="season=2026-2027/league=8/date=2026-11-20.parquet"
+    match={"provider":"goaloo","provider_match_id":"same-id","home_team":"H","away_team":"A",
+           "league_id":"8","season":"2026-2027","start_time":start}
+    _put(store,"matches/"+key,[match])
+    _put(store,"results/"+key,[{"provider":"goaloo","provider_match_id":"same-id","home_score":2,
+        "away_score":1,"status":"FINAL","verified_at":start}])
+    stat={"provider":"goaloo","provider_match_id":"same-id","name":"Shots","period":"ftstat",
+          "unit":"count","home_value":10,"away_value":4,"retrieved_at":start,
+          "source_url":"https://source.test/1"}
+    _put(store,"statistics/"+key,[stat,{**stat,"provider":"other-source","home_value":99},
+         {**stat,"name":"Possession","retrieved_at":datetime(2026,11,21,tzinfo=timezone.utc)}])
+    rows=HistoricalRepository(store).get_similarity_history(league="8",season="2026-2027",
+         start=start,end=start,before=start)
+    assert len(rows)==1 and len(rows[0]["technical_statistics"])==1
+    assert rows[0]["technical_statistics"][0]["home_value"]==10

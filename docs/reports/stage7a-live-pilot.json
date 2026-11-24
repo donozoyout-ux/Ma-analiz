@@ -1,0 +1,367 @@
+{
+  "stage": "7A",
+  "strategy": "WEB_SCRAPING_FIRST",
+  "evidence_kind": "LIVE_SOURCE_OBSERVATION",
+  "observed_at": "2026-11-21T10:10:25.988849+00:00",
+  "sql": "NOT_RUN",
+  "r2": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "writes_allowed": false,
+  "persistence_ready": false,
+  "auto_retention_delete_enabled_by_this_command": false,
+  "source_policies": {
+    "openfootball": {
+      "licence": "CC0-1.0",
+      "reviewed_on": "2026-11-21",
+      "licence_url": "https://raw.githubusercontent.com/openfootball/football.json/master/LICENSE.md",
+      "freshness": "Daily generation is not guaranteed daily upstream maintenance; no finished flag assumed"
+    },
+    "openligadb": {
+      "licence": "ODbL-1.0",
+      "reviewed_on": "2026-11-21",
+      "licence_url": "https://www.openligadb.de/lizenz",
+      "terms_url": "https://www.openligadb.de/nutzungsbedingungen",
+      "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+      "reuse": "Attribution; share-alike for public modified databases; no third-party image rights",
+      "freshness": "Community maintained; no editorial accuracy guarantee or immutable public history",
+      "access": "Free community access, no key; centrally cached and maximum one data request per league per 60s"
+    }
+  },
+  "leagues": {
+    "tr.sl": {
+      "date": "2026-11-21",
+      "name": "T\u00fcrkiye S\u00fcper Lig",
+      "max_matches_per_resource": 2,
+      "sources": [
+        {
+          "provider": "openligadb",
+          "status": "NOT_AVAILABLE",
+          "reason": "NO_REVIEWED_CURRENT_SEASON_LEAGUE_ID"
+        },
+        {
+          "provider": "openfootball",
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/tr.1.json",
+          "status": "UNAVAILABLE",
+          "error_code": "HTTP_404"
+        }
+      ],
+      "observations": [],
+      "identity_mapping": "REVIEW_REQUIRED_NO_MERGES",
+      "comparisons": [],
+      "production_final_results": []
+    },
+    "en.pl": {
+      "date": "2026-11-21",
+      "name": "\u0130ngiltere Premier League",
+      "max_matches_per_resource": 2,
+      "sources": [
+        {
+          "provider": "openfootball",
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json",
+          "status": "OBSERVED",
+          "selected_day_count": 10,
+          "emitted_count": 2
+        },
+        {
+          "provider": "openligadb",
+          "source_url": "https://api.openligadb.de/getmatchdata/pl/2026/11",
+          "status": "OBSERVED",
+          "selected_day_count": 7,
+          "emitted_count": 2
+        },
+        {
+          "provider": "openligadb",
+          "source_url": "https://api.openligadb.de/getmatchdata/pl1/2026/11",
+          "status": "NO_MATCH_ON_SELECTED_DAY",
+          "selected_day_count": 0,
+          "emitted_count": 0
+        }
+      ],
+      "observations": [
+        {
+          "provider": "openfootball",
+          "source_match_id": null,
+          "record_fingerprint": "c820ec79cf7e6d4cac15a8e5d6b50adf54a3991651a4debe4115ee94d2262393",
+          "identity_kind": "CONTENT_FINGERPRINT_NOT_SOURCE_ID",
+          "league": "en.pl",
+          "home_team": "AFC Bournemouth",
+          "away_team": "Nottingham Forest FC",
+          "start_time": null,
+          "source_date": "2026-11-21",
+          "source_time_raw": "15:00",
+          "source_status": "FIXTURE_ONLY",
+          "reported_score": null,
+          "final_confirmed": false,
+          "issues": [
+            "NO_EXPLICIT_FINISHED_FLAG",
+            "KICKOFF_TIMEZONE_NOT_DECLARED"
+          ],
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json",
+          "observed_at": "2026-11-21T10:10:28.040924+00:00",
+          "licence": "CC0-1.0",
+          "day_basis": "SOURCE_DATE_TIMEZONE_UNKNOWN",
+          "identity_scope": "en.1",
+          "attribution": "OpenFootball football.json (CC0-1.0)",
+          "source_final_confirmed": false,
+          "observation_key": "f5a52e24aa63b21228f3afa070a470ff2f847c3873f6c8ccb348ff5c7bfab35e",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        },
+        {
+          "provider": "openfootball",
+          "source_match_id": null,
+          "record_fingerprint": "fea27bbb64c3bed52ed3a36ad56ea04ea816ef7c298f2aa27de97fa260ace54c",
+          "identity_kind": "CONTENT_FINGERPRINT_NOT_SOURCE_ID",
+          "league": "en.pl",
+          "home_team": "Aston Villa FC",
+          "away_team": "Sunderland AFC",
+          "start_time": null,
+          "source_date": "2026-11-21",
+          "source_time_raw": "15:00",
+          "source_status": "FIXTURE_ONLY",
+          "reported_score": null,
+          "final_confirmed": false,
+          "issues": [
+            "NO_EXPLICIT_FINISHED_FLAG",
+            "KICKOFF_TIMEZONE_NOT_DECLARED"
+          ],
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json",
+          "observed_at": "2026-11-21T10:10:28.040924+00:00",
+          "licence": "CC0-1.0",
+          "day_basis": "SOURCE_DATE_TIMEZONE_UNKNOWN",
+          "identity_scope": "en.1",
+          "attribution": "OpenFootball football.json (CC0-1.0)",
+          "source_final_confirmed": false,
+          "observation_key": "88dcef154d818760210f120bfa89fe272a94e39c7ca10af4e721326bdc7e406b",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        },
+        {
+          "provider": "openligadb",
+          "source_match_id": "86635",
+          "identity_scope": "pl:2026",
+          "league": "en.pl",
+          "source_league_id": 5996,
+          "home_team": "Manchester City",
+          "away_team": "Fulham FC",
+          "home_source_id": 4244,
+          "away_source_id": 549,
+          "start_time": "2026-11-21T12:30:00+00:00",
+          "day_basis": "UTC",
+          "source_status": "NOT_FINISHED",
+          "reported_score": null,
+          "final_confirmed": false,
+          "source_final_confirmed": false,
+          "issues": [],
+          "source_updated_at_raw": "2026-09-22T04:15:32.977",
+          "observed_at": "2026-11-21T10:10:29.089773+00:00",
+          "source_url": "https://api.openligadb.de/getmatchdata/pl/2026/11",
+          "licence": "ODbL-1.0",
+          "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+          "observation_key": "47b7e75b1e30d8c2a033ea388461f17b9871fa379550e177b50e5078cc812b3a",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        },
+        {
+          "provider": "openligadb",
+          "source_match_id": "86628",
+          "identity_scope": "pl:2026",
+          "league": "en.pl",
+          "source_league_id": 5996,
+          "home_team": "AFC Bournemouth",
+          "away_team": "Nottingham Forest",
+          "home_source_id": 2942,
+          "away_source_id": 8793,
+          "start_time": "2026-11-21T15:00:00+00:00",
+          "day_basis": "UTC",
+          "source_status": "NOT_FINISHED",
+          "reported_score": null,
+          "final_confirmed": false,
+          "source_final_confirmed": false,
+          "issues": [],
+          "source_updated_at_raw": "2026-08-23T05:13:12.757",
+          "observed_at": "2026-11-21T10:10:29.089773+00:00",
+          "source_url": "https://api.openligadb.de/getmatchdata/pl/2026/11",
+          "licence": "ODbL-1.0",
+          "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+          "observation_key": "cd2426238aecf9f3e909e2b1e7149a02af2dcfed78d84a796a035139b188ce9b",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        }
+      ],
+      "identity_mapping": "REVIEW_REQUIRED_NO_MERGES",
+      "comparisons": [],
+      "production_final_results": []
+    },
+    "de.bl1": {
+      "date": "2026-11-20",
+      "name": "Almanya Bundesliga",
+      "max_matches_per_resource": 2,
+      "sources": [
+        {
+          "provider": "openfootball",
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+          "status": "OBSERVED",
+          "selected_day_count": 1,
+          "emitted_count": 1
+        },
+        {
+          "provider": "openligadb",
+          "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+          "status": "OBSERVED",
+          "selected_day_count": 1,
+          "emitted_count": 1
+        }
+      ],
+      "observations": [
+        {
+          "provider": "openfootball",
+          "source_match_id": null,
+          "record_fingerprint": "a8761a88290622fcda8641dcac49116888f6cf6ae184ed5bebabd8460fa4dac4",
+          "identity_kind": "CONTENT_FINGERPRINT_NOT_SOURCE_ID",
+          "league": "de.bl1",
+          "home_team": "FC Bayern M\u00fcnchen",
+          "away_team": "1. FC K\u00f6ln",
+          "start_time": null,
+          "source_date": "2026-11-20",
+          "source_time_raw": "20:30",
+          "source_status": "FIXTURE_ONLY",
+          "reported_score": null,
+          "final_confirmed": false,
+          "issues": [
+            "NO_EXPLICIT_FINISHED_FLAG",
+            "KICKOFF_TIMEZONE_NOT_DECLARED"
+          ],
+          "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+          "observed_at": "2026-11-21T10:11:29.383109+00:00",
+          "licence": "CC0-1.0",
+          "day_basis": "SOURCE_DATE_TIMEZONE_UNKNOWN",
+          "identity_scope": "de.1",
+          "attribution": "OpenFootball football.json (CC0-1.0)",
+          "source_final_confirmed": false,
+          "observation_key": "87f4d85174083840fd6a42a57757bb00957e215a0d87c7af8e18bbf111de5c48",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        },
+        {
+          "provider": "openligadb",
+          "source_match_id": "83237",
+          "identity_scope": "bl1:2026",
+          "league": "de.bl1",
+          "source_league_id": 4937,
+          "home_team": "FC Bayern M\u00fcnchen",
+          "away_team": "1. FC K\u00f6ln",
+          "home_source_id": 40,
+          "away_source_id": 65,
+          "start_time": "2026-11-20T19:30:00+00:00",
+          "day_basis": "UTC",
+          "source_status": "FINISHED",
+          "reported_score": [
+            1,
+            1
+          ],
+          "final_confirmed": false,
+          "source_final_confirmed": true,
+          "issues": [],
+          "source_updated_at_raw": "2026-11-20T22:23:56.397",
+          "observed_at": "2026-11-21T10:12:29.263456+00:00",
+          "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+          "licence": "ODbL-1.0",
+          "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+          "observation_key": "1529ec04354c92525bd6d177bbcb63a71b2484ceeb90e9d54189450cb9f87601",
+          "technical_statistics": "NOT_AVAILABLE",
+          "corners": "NOT_AVAILABLE",
+          "cards": "NOT_AVAILABLE",
+          "odds": "NOT_AVAILABLE",
+          "writes_allowed": false
+        }
+      ],
+      "identity_mapping": "REVIEW_REQUIRED_NO_MERGES",
+      "comparisons": [
+        {
+          "left": "87f4d85174083840fd6a42a57757bb00957e215a0d87c7af8e18bbf111de5c48",
+          "right": "1529ec04354c92525bd6d177bbcb63a71b2484ceeb90e9d54189450cb9f87601",
+          "status": "REVIEW_REQUIRED",
+          "conflicting_fields": [],
+          "mapping_accepted": false
+        }
+      ],
+      "production_final_results": []
+    }
+  },
+  "requests": [
+    {
+      "url": "https://raw.githubusercontent.com/robots.txt",
+      "observed_at": "2026-11-21T10:10:25.988849+00:00",
+      "http_status": 404,
+      "bytes": 14,
+      "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/tr.1.json",
+      "observed_at": "2026-11-21T10:10:26.983348+00:00",
+      "http_status": 404,
+      "bytes": 14,
+      "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/en.1.json",
+      "observed_at": "2026-11-21T10:10:27.984411+00:00",
+      "http_status": 200,
+      "bytes": 55359,
+      "sha256": "bb91f0ab3e8359df163bb9ec98549bfed85e200dd4c32f3bd606b5890d932dd2"
+    },
+    {
+      "url": "https://api.openligadb.de/robots.txt",
+      "observed_at": "2026-11-21T10:10:28.040924+00:00",
+      "http_status": 404,
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "url": "https://api.openligadb.de/getmatchdata/pl/2026/11",
+      "observed_at": "2026-11-21T10:10:29.039769+00:00",
+      "http_status": 200,
+      "bytes": 23818,
+      "sha256": "b4eafcf5c8c4285acdd4590b1e013a4de6100f7e74f914569d160a49294ce208"
+    },
+    {
+      "url": "https://api.openligadb.de/getmatchdata/pl1/2026/11",
+      "observed_at": "2026-11-21T10:11:29.044499+00:00",
+      "http_status": 200,
+      "bytes": 2,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+      "observed_at": "2026-11-21T10:11:29.215534+00:00",
+      "http_status": 200,
+      "bytes": 40409,
+      "sha256": "07fab65d4a1de8ce4c8472da9ccf4d1d2b145ecd5abdc5b6d4250a5c119d7681"
+    },
+    {
+      "url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+      "observed_at": "2026-11-21T10:12:29.040432+00:00",
+      "http_status": 200,
+      "bytes": 9339,
+      "sha256": "bd8ad4551834b2615f1223cf89bc195948851a92f556e474ae99c40b072b64b2"
+    }
+  ],
+  "resource_granularity": "One OpenFootball season file and explicit OpenLigaDB matchday per resource; analyse only the fixed day. No traversal or whole-season storage.",
+  "status": "READ_ONLY_PILOT_COMPLETE"
+}

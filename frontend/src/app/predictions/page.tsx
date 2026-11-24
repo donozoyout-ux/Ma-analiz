@@ -1,2 +1,8 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Predictions(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Models</div><h1 className="title">Predictions</h1></div></header><RecordsPanel endpoint="predictions" columns={["created_at","market","selection","probability","confidence","evidence_status"]} empty="No predictions meet the current evidence requirements."/></>}
+import { selectedTab } from "@/lib/navigation";
+import { SectionTabs } from "@/components/section-tabs";
+import View0 from "@/components/section-views/predictions";
+import View1 from "@/components/section-views/coupons";
+export default async function Page({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+ const active = selectedTab("predictions", (await searchParams).tab);
+ return <><SectionTabs section="predictions" active={active} />{active === "coupons" ? <View1 /> : <View0 />}</>;
+}

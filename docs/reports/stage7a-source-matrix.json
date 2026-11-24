@@ -1,0 +1,124 @@
+{
+  "reviewed_on": "2026-11-21",
+  "kind": "HUMAN_REVIEWED_SOURCE_SUITABILITY_MATRIX",
+  "scope": "Only fixed pilot resources; unavailable is not a claim that no other source exists",
+  "rows": [
+    {
+      "league": "tr.sl",
+      "source": "openfootball",
+      "licence": "CC0-1.0",
+      "commercial_reuse": "PERMITTED_WITH_CC0_LIMITATIONS",
+      "coverage": "NOT_AVAILABLE_IN_REVIEWED_RESOURCES",
+      "explicit_utc": "UNKNOWN",
+      "source_explicit_final": "NOT_OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    },
+    {
+      "league": "tr.sl",
+      "source": "openligadb",
+      "licence": "ODbL-1.0",
+      "commercial_reuse": "PERMITTED_WITH_ATTRIBUTION_AND_ODBL_OBLIGATIONS",
+      "coverage": "NOT_AVAILABLE_IN_REVIEWED_RESOURCES",
+      "explicit_utc": "UNKNOWN",
+      "source_explicit_final": "NOT_OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    },
+    {
+      "league": "en.pl",
+      "source": "openfootball",
+      "licence": "CC0-1.0",
+      "commercial_reuse": "PERMITTED_WITH_CC0_LIMITATIONS",
+      "coverage": "READ_ONLY_FIXTURE_CANDIDATE",
+      "explicit_utc": "UNKNOWN",
+      "source_explicit_final": "NOT_OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    },
+    {
+      "league": "en.pl",
+      "source": "openligadb",
+      "licence": "ODbL-1.0",
+      "commercial_reuse": "PERMITTED_WITH_ATTRIBUTION_AND_ODBL_OBLIGATIONS",
+      "coverage": "READ_ONLY_FIXTURE_CANDIDATE",
+      "explicit_utc": "OBSERVED",
+      "source_explicit_final": "NOT_OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    },
+    {
+      "league": "de.bl1",
+      "source": "openfootball",
+      "licence": "CC0-1.0",
+      "commercial_reuse": "PERMITTED_WITH_CC0_LIMITATIONS",
+      "coverage": "READ_ONLY_FIXTURE_CANDIDATE",
+      "explicit_utc": "UNKNOWN",
+      "source_explicit_final": "NOT_OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    },
+    {
+      "league": "de.bl1",
+      "source": "openligadb",
+      "licence": "ODbL-1.0",
+      "commercial_reuse": "PERMITTED_WITH_ATTRIBUTION_AND_ODBL_OBLIGATIONS",
+      "coverage": "READ_ONLY_FIXTURE_CANDIDATE",
+      "explicit_utc": "OBSERVED",
+      "source_explicit_final": "OBSERVED",
+      "production_verified_final": "NOT_RUN",
+      "technical_statistics": "NOT_AVAILABLE",
+      "corners": "NOT_AVAILABLE",
+      "cards": "NOT_AVAILABLE",
+      "odds": "NOT_AVAILABLE",
+      "automatic_identity_merge": false,
+      "live_evidence": "stage7a-live-pilot.json"
+    }
+  ],
+  "excluded_sources": [
+    {
+      "source": "football-data.co.uk",
+      "decision": "NO_DATA_FETCH_PRODUCT_AND_AUTOMATED_AI_REUSE_RESTRICTED",
+      "terms": "https://football-data.co.uk/data.php"
+    },
+    {
+      "source": "Goaloo",
+      "decision": "NO_NEW_FETCH_REUSE_NOT_CONFIRMED_AND_ODDS_AJAX_ROBOTS_RESTRICTED",
+      "prior_evidence": "scraping-2026-11-20-bundesliga.json"
+    },
+    {
+      "source": "Sportmonks / paid providers",
+      "decision": "DISABLED_NOT_REQUESTED"
+    }
+  ],
+  "licence_evidence": {
+    "openfootball": "https://raw.githubusercontent.com/openfootball/football.json/master/LICENSE.md",
+    "openligadb": "https://www.openligadb.de/lizenz",
+    "openligadb_access": "https://www.openligadb.de/nutzungsbedingungen"
+  }
+}

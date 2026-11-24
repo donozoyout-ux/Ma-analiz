@@ -7,6 +7,14 @@ from app.core.config import Settings, get_settings
 from app.storage.r2 import R2NotConfigured, R2ObjectStore
 
 
+def database_capacity(size: int) -> dict:
+    limit = 1_000_000_000  # conservative decimal 1 GB
+    ratio = size / limit
+    return {"bytes": size, "limit_bytes": limit, "used_percent": round(ratio * 100, 2),
+            "status": "CRITICAL" if ratio >= .9 else "HIGH" if ratio >= .8 else "WARNING" if ratio >= .7 else "HEALTHY",
+            "action": "ARCHIVE_AND_REVIEW_BLOCKERS_NEVER_FORCE_DELETE"}
+
+
 def postgres_status(size_bytes: int, settings: Settings) -> str:
     mb = size_bytes / (1024 * 1024)
     normal, warning, high, critical = (
@@ -36,6 +44,20 @@ class StorageMonitor:
             return None
         with self.engine.connect() as connection:
             return int(connection.execute(text("SELECT pg_database_size(current_database())")).scalar_one())
+
+    def historical_ingestion_status(self) -> str:
+        """Return a PostgreSQL-only guard status without contacting R2 or providers."""
+        if self.engine is None:
+            return "DATABASE_NOT_CONFIGURED"
+        if getattr(getattr(self.engine, "dialect", None), "name", None) != "postgresql":
+            return "NOT_APPLICABLE"
+        try:
+            size = self.get_database_size()
+            if size is None:
+                return "DATABASE_NOT_CONFIGURED"
+            return postgres_status(size, self.settings)
+        except Exception:
+            return "DATABASE_STORAGE_CHECK_FAILED"
 
     def get_table_sizes(self, limit: int = 10) -> list[dict]:
         if self.engine is None:
@@ -94,6 +116,7 @@ class StorageMonitor:
                 "bytes": db_bytes,
                 "mb": round(db_bytes / (1024 * 1024), 3) if db_bytes is not None else None,
                 "status": db_status,
+                "capacity": database_capacity(db_bytes) if db_bytes is not None else {"status": "NOT_RUN", "bytes": None, "limit_bytes": 1_000_000_000},
                 "thresholds_mb": {
                     "normal": self.settings.postgres_normal_mb,
                     "warning": self.settings.postgres_warning_mb,

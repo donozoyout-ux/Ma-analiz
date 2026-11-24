@@ -1,0 +1,215 @@
+"""Read-only final retention inspection. No repair, audit write, DELETE or VACUUM."""
+import argparse
+from contextlib import closing
+from datetime import datetime, timedelta, timezone
+import json
+import hashlib
+from pathlib import Path
+
+from sqlalchemy import bindparam, func, select, text
+
+from app.jobs import import_preflight, retention
+from app.models import (ActiveMatch, ActiveOdds, ActiveStatistic, Coupon, CouponItem, JobRun,
+                        MatchAnalysis, MatchResult, Prediction, SystemSetting)
+from app.storage import lifecycle as lc
+
+ANCHORS = {ActiveMatch: ActiveMatch.start_time, MatchResult: MatchResult.verified_at,
+    ActiveOdds: ActiveOdds.captured_at, ActiveStatistic: ActiveStatistic.observed_at,
+    Prediction: func.coalesce(Prediction.settled_at, Prediction.created_at),
+    MatchAnalysis: MatchAnalysis.analysis_timestamp, Coupon: func.coalesce(Coupon.settled_at, Coupon.created_at),
+    CouponItem: CouponItem.settled_at}
+PREFIXES = ("source-identity:", "review-source:", "review-evidence:", "review-audit:",
+            "operator-import:", "controlled-import:", "verified-import:")
+
+
+def inventory(session, now):
+    result = {}
+    for model, dataset in lc.DATASETS.items():
+        anchor = ANCHORS[model]
+        total, old, missing = session.execute(select(func.count(),
+            func.count().filter(anchor <= now - timedelta(hours=48)),
+            func.count().filter(anchor.is_(None))).select_from(model)).one()
+        result[dataset] = {"total": total, "over_48h": old, "missing_age_anchor": missing}
+    return result
+
+
+def inspect_records(session, store, *, now, max_pages=20, batch_size=25, child_limit=500):
+    """Bounded read-only traversal. An incomplete scan can never claim global eligibility."""
+    counts = inventory(session, now)
+    unknown = lc.unknown_dependencies(session)
+    details, after, complete = {}, None, False
+    pages = []
+    for _ in range(max_pages):
+        plan, _ = lc.plan(session, store, now=now, hours=48, limit=batch_size, after=after, child_limit=child_limit)
+        pages.append({"plan_sha256": plan["approval_digest"], "scope": plan["scope"]})
+        for row in plan["records"]:
+            item = dict(row)
+            if unknown:
+                item["eligible"] = False
+                item["reasons"] = sorted(set(item["reasons"] + ["UNKNOWN_FOREIGN_KEY_DEPENDENCY"]))
+            previous = details.get(item["record"])
+            if previous:
+                item["eligible"] &= previous["eligible"]
+                item["reasons"] = sorted(set(item["reasons"] + previous["reasons"]))
+            details[item["record"]] = item
+        if not plan["scope"]["truncated"]:
+            complete = True
+            break
+        cursor = plan["scope"]["next_after_match_id"]
+        if not cursor or cursor == after:
+            break
+        after = cursor
+    for dataset, info in counts.items():
+        rows = [r for r in details.values() if r["dataset"] == dataset]
+        info.update(scanned=len(rows), eligible=sum(r["eligible"] for r in rows),
+            retained=sum(not r["eligible"] for r in rows), not_scanned=info["total"] - len(rows))
+        if info["not_scanned"]:
+            complete = False
+    for row in details.values():
+        archive_errors = {"ARCHIVE_LEDGER_NOT_VERIFIED", "ARCHIVE_RECEIPT_MISMATCH", "ARCHIVE_CONTENT_MISMATCH",
+                          "SQL_SNAPSHOT_CHANGED", "ARCHIVE_READBACK_FAILED"}
+        row["archive_verification"] = "NOT_VERIFIED" if archive_errors.intersection(row["reasons"]) else "PASS"
+        row["source_identity"] = "NOT_VERIFIED" if any(r.startswith("SOURCE_IDENTITY_") for r in row["reasons"]) else "PASS"
+    eligible = sum(row["eligible"] for row in details.values())
+    return {"status": "INCOMPLETE_SCAN" if not complete else "ELIGIBLE_RECORDS_FOUND" if eligible else "NO_ELIGIBLE_RECORDS",
+        "scan_complete": complete, "policy_hours": 48, "as_of": now.isoformat(),
+        "over_48h": sum(c["over_48h"] for c in counts.values()), "eligible": eligible,
+        "retained": sum(not row["eligible"] for row in details.values()), "deleted": 0,
+        "unknown_dependency_tables": len(unknown), "datasets": counts, "records": list(details.values()),
+        "pages": pages, "archive_checks_on_pass": ["OBJECT_EXISTS", "SHA256", "SIZE", "ROW_COUNT",
+            "METADATA", "FULL_CONTENT", "SQL_SNAPSHOT", "SQL_LEDGER"],
+        **import_preflight.flags()}
+
+
+def protected_counts(session):
+    counts = retention.metadata_report(session)
+    return {"tables": counts["tables"], "warnings": counts["warnings"],
+        "metadata_prefix_counts": {p: session.scalar(select(func.count()).select_from(SystemSetting).where(
+            SystemSetting.key.like(p + "%"))) for p in PREFIXES},
+        "successful_cleanup_audits": session.scalar(select(func.count()).select_from(JobRun).where(
+            JobRun.job_type == "retention_cleanup", JobRun.status == "SUCCESS"))}
+
+
+def scheduler_audit(session):
+    from app.jobs.actions_retention import safe_code
+    from app.providers.result_sources import utc
+    item = session.get(SystemSetting, "scheduler:github-actions-retention")
+    result = {}
+    def safe_row(row):
+        at = utc(row.get("completed_at"))
+        started = utc(row.get("started_at"))
+        version = row.get("schema_version", 1)
+        run_id = str(row.get("run_id", ""))
+        return {"completed_at": at.isoformat() if at else None,
+            "started_at": started.isoformat() if started else None,
+            "run_id": run_id if run_id.isdigit() and len(run_id) <= 24 else None,
+            "status": safe_code(row.get("status")), "LIVE_DELETE": safe_code(row.get("LIVE_DELETE")),
+            "deleted": row.get("deleted") if type(row.get("deleted")) is int else None,
+            "schema_version": version if type(version) is int and version in {1, 2} else None,
+            "event": row.get("event") if row.get("event") in {"schedule", "workflow_dispatch", "push", "local"} else None,
+            "run_attempt": row.get("run_attempt") if type(row.get("run_attempt")) is int and 1 <= row["run_attempt"] <= 999999 else None,
+            "storage_status": safe_code(row.get("storage_status")),
+            "execution_status": safe_code(row.get("execution_status")),
+            "archive_records_written": row.get("archive_records_written") if type(row.get("archive_records_written")) is int and row["archive_records_written"] >= 0 else None,
+            "archive_failures": row.get("archive_failures") if type(row.get("archive_failures")) is int and row["archive_failures"] >= 0 else None}
+    for mode in ("archive", "auto", "dry-run"):
+        result[mode] = safe_row(item.value.get(mode, {}) if item else {})
+    result["scheduled_runs"] = {mode: [safe_row(row) for row in item.value.get("scheduled_runs", {}).get(mode, [])[-32:]]
+        if item else [] for mode in ("archive", "auto")}
+    return result
+
+
+def table_sizes(session):
+    from app.db.base import Base
+    statement = text("""SELECT relname AS table, pg_table_size(relid)::bigint AS table_bytes,
+        pg_indexes_size(relid)::bigint AS index_bytes, pg_total_relation_size(relid)::bigint AS total_bytes,
+        n_live_tup::bigint AS live_rows_estimate, n_dead_tup::bigint AS dead_rows_estimate
+        FROM pg_stat_user_tables WHERE relname IN :tables ORDER BY pg_total_relation_size(relid) DESC""").bindparams(
+            bindparam("tables", expanding=True))
+    return [dict(row) for row in session.execute(statement, {"tables": list(Base.metadata.tables)}).mappings()]
+
+
+def archive_runtime(session, *, now, stale_seconds):
+    """Counts + bounded safe metadata, never raw errors, journal values or user data."""
+    from app.models import ArchiveJob
+    from app.jobs.actions_retention import safe_code
+    rows = session.execute(select(ArchiveJob.status, func.count()).group_by(ArchiveJob.status)).all()
+    counts = {safe_code(status): count for status, count in rows}
+    latest = session.scalar(select(func.max(ArchiveJob.verified_at)).where(ArchiveJob.status == "VERIFIED"))
+    active = session.scalars(select(JobRun).where(JobRun.job_type.in_(["archive_data", "cleanup_database", "archive_retry"]),
+        JobRun.status == "RUNNING").order_by(JobRun.started_at).limit(26)).all()
+    jobs = []
+    for row in active[:25]:
+        age = (now - lc.aware(row.started_at)).total_seconds()
+        jobs.append({"job_type": row.job_type, "started_at": lc.aware(row.started_at).isoformat(),
+            "state": "UNKNOWN_RECONCILE_REQUIRED" if age >= stale_seconds or age < 0 else "IN_PROGRESS",
+            "age_seconds": max(0, age)})
+    slots = session.scalars(select(JobRun).where(JobRun.job_type.in_(["archive_data", "cleanup_database", "archive_retry"]))
+        .order_by(JobRun.started_at.desc()).limit(25)).all()
+    return {"ledger_status_counts": counts, "last_sql_ledger_verified_at": lc.aware(latest).isoformat() if latest else None,
+        "incomplete_archive_ledgers": sum(counts.get(k, 0) for k in ("PENDING", "UPLOADING", "UPLOADED", "FAILED")),
+        "running_jobs": jobs, "running_jobs_truncated": len(active) > 25,
+        "recent_slots": [{"job_type": r.job_type, "status": safe_code(r.status),
+            "started_at": lc.aware(r.started_at).isoformat(), "finished_at": lc.aware(r.finished_at).isoformat() if r.finished_at else None,
+            "slot_sha256": hashlib.sha256(r.idempotency_key.encode()).hexdigest(),
+            "records_written": r.records_written, "error_code": safe_code(r.error_code, "NONE")} for r in slots]}
+
+
+def run(settings=None):
+    from app.core.config import get_settings
+    from app.jobs.retention_errors import error_code
+    cfg = settings or get_settings()
+    output = {"stage": "7D.1", "mode": "READ_ONLY_RETENTION_VALIDATION", "status": "BLOCKED",
+              "deleted": 0, **import_preflight.flags()}
+    output["storage_preflight"] = import_preflight.run(cfg)
+    if output["storage_preflight"]["status"] != "PASS":
+        return output
+    phase = "SQL_CONNECTION"
+    try:
+        with retention.storage_session(cfg, readonly=True) as session:
+            session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+            readonly = session.execute(text("SHOW transaction_read_only")).scalar_one()
+            if readonly != "on":
+                raise RuntimeError()
+            phase = "SQL_QUERY"
+            before = protected_counts(session)
+            output["capacity"] = retention.capacity(session.execute(text("SELECT pg_database_size(current_database())")).scalar_one())
+            output["table_sizes"] = table_sizes(session)
+            output["vacuum"] = retention.vacuum_assessment(session)
+            output["sql_scheduler_audit"] = scheduler_audit(session)
+            # Tests may inject an opaque settings object; production always has the configured lease.
+            lease = getattr(cfg, "job_run_stale_after_seconds", 3600)
+            output["archive_runtime"] = archive_runtime(session, now=datetime.now(timezone.utc), stale_seconds=max(60, lease))
+            phase = "R2_VERIFICATION"
+            store = import_preflight.bounded_store(cfg)
+            with closing(store.client):
+                output["plan"] = inspect_records(session, store, now=datetime.now(timezone.utc))
+                output["protected_target"] = retention.target_check(session, store)
+            phase = "SQL_QUERY"
+            after = protected_counts(session)
+            output["protected_metadata"] = {"snapshot_counts": after, "same_snapshot_counts_unchanged": before == after,
+                "transaction_read_only": readonly, "isolation": "REPEATABLE_READ", "values_or_user_data": "NOT_EXPORTED",
+                "excluded_from_cleanup": list(lc.PROTECTED), "audit_write": "NOT_RUN"}
+            output["status"] = output["plan"]["status"]
+    except Exception as exc:
+        output.update(status="FAILED", error_code=error_code(exc, phase), failure_stage=phase)
+    return output
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args(argv)
+    try:
+        report = run()
+    except Exception:
+        report = {"status": "FAILED", "error_code": "RETENTION_VALIDATION_CONFIGURATION_FAILED", **import_preflight.flags()}
+    rendered = json.dumps(report, ensure_ascii=True, indent=2, default=str)
+    if args.output:
+        args.output.write_text(rendered + "\n", encoding="utf-8")
+    print(rendered)
+    return 0 if report["status"] in {"NO_ELIGIBLE_RECORDS", "ELIGIBLE_RECORDS_FOUND"} else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

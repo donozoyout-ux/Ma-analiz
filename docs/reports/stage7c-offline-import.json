@@ -1,0 +1,67 @@
+{
+  "stage": "7C",
+  "evidence_kind": "OFFLINE_SYNTHETIC_SQLITE_MEMORY_R2",
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "synthetic_clock": "2026-11-21T10:00:00+00:00",
+  "first_import": {
+    "status": "OFFLINE_VERIFIED",
+    "match_id": "08970ad9-e3dc-4595-99d2-711bbc37d93a",
+    "receipts": [
+      {
+        "key": "matches/season=2026-2027/league=de.bl1/date=2026-11-21/part=lifecycle-86842af7705615f7f155-bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c.parquet",
+        "sha256": "bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c",
+        "row_count": 1,
+        "size_bytes": 10510,
+        "content": "PASS",
+        "sql_snapshot": "PASS"
+      }
+    ],
+    "LIVE_DELETE": "NOT_RUN",
+    "production_writes": "NOT_RUN",
+    "created": true
+  },
+  "second_import": {
+    "status": "OFFLINE_VERIFIED",
+    "match_id": "08970ad9-e3dc-4595-99d2-711bbc37d93a",
+    "receipts": [
+      {
+        "key": "matches/season=2026-2027/league=de.bl1/date=2026-11-21/part=lifecycle-86842af7705615f7f155-bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c.parquet",
+        "sha256": "bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c",
+        "row_count": 1,
+        "size_bytes": 10510,
+        "content": "PASS",
+        "sql_snapshot": "PASS"
+      }
+    ],
+    "LIVE_DELETE": "NOT_RUN",
+    "production_writes": "NOT_RUN",
+    "created": false
+  },
+  "sqlite_counts": {
+    "matches": 1,
+    "results": 0
+  },
+  "source_identity": {
+    "provider": "openligadb",
+    "provider_match_id": "900001",
+    "match_id": "08970ad9-e3dc-4595-99d2-711bbc37d93a",
+    "season": "2026-2027",
+    "league_id": "de.bl1",
+    "review_id": "66ee64e3608e8be2e31ea4258fa3e5979afe0522ac0908de197328f30c5f7fef",
+    "evidence_sha256": "c3e69e77e50d39200402f6e2e0e54f412a8ac1864280b6b23c1432b879b21a69",
+    "first_verified_fixture_key": "matches/season=2026-2027/league=de.bl1/date=2026-11-21/part=lifecycle-86842af7705615f7f155-bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c.parquet"
+  },
+  "review_audit_id": "66ee64e3608e8be2e31ea4258fa3e5979afe0522ac0908de197328f30c5f7fef",
+  "archive_validation": {
+    "sha256": "bc1b7bd167df625ca69e3378851518d513a73fca36a48f267c172b2cc2b5912c",
+    "record_count": 1,
+    "size_bytes": 10510,
+    "receipt_checksum_matches": true,
+    "same_match_id_on_replay": true,
+    "sql_snapshot_present": true,
+    "fixture_status": "SCHEDULED",
+    "licence": "ODbL-1.0"
+  }
+}

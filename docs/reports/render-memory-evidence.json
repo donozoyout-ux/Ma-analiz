@@ -1,0 +1,16 @@
+{
+  "before": {
+    "import_seconds": 2.297,
+    "working_set_mb": 112.23,
+    "private_mb": 443.88,
+    "pyarrow_loaded": true,
+    "platform": "Windows local fresh interpreter; not Render OOM evidence"
+  },
+  "after": {
+    "import_seconds": 2.031,
+    "working_set_mb": 94.86,
+    "private_mb": 79.77,
+    "pyarrow_loaded": false,
+    "platform": "Windows local fresh interpreter; not Render OOM evidence"
+  }
+}

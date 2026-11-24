@@ -1,0 +1,276 @@
+{
+  "stage": "7D",
+  "source_evidence": {
+    "stage": "7B",
+    "collector": "STAGE7D_TRUSTED_SINGLE_FIXTURE",
+    "date_utc": "2026-11-22",
+    "observed_at": "2026-11-21T17:23:53.137472+00:00",
+    "evidence_kind": "LIVE_SOURCE_OBSERVATION",
+    "config_sha256": "e2208cadb4ed2036d9ffea3fc5629ba1272ddf91d09a72bd77fa85ec4374c16c",
+    "requests": [
+      {
+        "resource": "robots:www.openligadb.de",
+        "observed_at": "2026-11-21T17:23:54.655651+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 365,
+        "sha256": "716abafc4c1a9338a3131814b3e13da4d03bd71f8483c6677a4e6887a89c599d"
+      },
+      {
+        "resource": "openligadb_licence",
+        "observed_at": "2026-11-21T17:23:57.584368+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 17737,
+        "sha256": "e2fa6cbd98a24c0d27a1f775869e65ab821fd376cedf416e61477196c6172c6f"
+      },
+      {
+        "resource": "openligadb_terms",
+        "observed_at": "2026-11-21T17:24:00.545098+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 17278,
+        "sha256": "9dbc9c5b7189be8076f853e7045f88abc6c3caf95fddd16e66f76339007148b9"
+      },
+      {
+        "resource": "robots:raw.githubusercontent.com",
+        "observed_at": "2026-11-21T17:24:01.161231+00:00",
+        "attempt": 1,
+        "http_status": 404,
+        "bytes": 14,
+        "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed"
+      },
+      {
+        "resource": "openfootball_licence",
+        "observed_at": "2026-11-21T17:24:03.469848+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 6555,
+        "sha256": "36ffd9dc085d529a7e60e1276d73ae5a030b020313e6c5408593a6ae2af39673"
+      },
+      {
+        "resource": "robots:api.openligadb.de",
+        "observed_at": "2026-11-21T17:24:05.386154+00:00",
+        "attempt": 1,
+        "http_status": 404,
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "resource": "group:bl1",
+        "observed_at": "2026-11-21T17:24:07.342465+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 62,
+        "sha256": "646e2377a132340571c10373dfaf5cb50e5e314312dfb7ca4e1b2f3a1c4a7605"
+      },
+      {
+        "resource": "matches:bl1:10",
+        "observed_at": "2026-11-21T17:25:08.972918+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 14065,
+        "sha256": "699dd997db2e811bdb86651e17527d771462cde4e579fe3436ff28c076296d9d"
+      },
+      {
+        "resource": "football:de.bl1",
+        "observed_at": "2026-11-21T17:25:10.816062+00:00",
+        "attempt": 1,
+        "http_status": 200,
+        "bytes": 40409,
+        "sha256": "07fab65d4a1de8ce4c8472da9ccf4d1d2b145ecd5abdc5b6d4250a5c119d7681"
+      }
+    ],
+    "policies": [
+      {
+        "resource": "openligadb_licence",
+        "status": "REVIEWED_HASH_MATCH",
+        "reviewed_content_sha256": "eec9a145cf65b3c45211459ec0339d426f19c534b49884068ee5c8565dc90c98",
+        "raw_response_sha256": "e2fa6cbd98a24c0d27a1f775869e65ab821fd376cedf416e61477196c6172c6f"
+      },
+      {
+        "resource": "openligadb_terms",
+        "status": "REVIEWED_HASH_MATCH",
+        "reviewed_content_sha256": "28ee512bfec3aa0bbbb17a2b0f044760e740e42a5b1611aae1fd197b6e1fe486",
+        "raw_response_sha256": "9dbc9c5b7189be8076f853e7045f88abc6c3caf95fddd16e66f76339007148b9"
+      },
+      {
+        "resource": "openfootball_licence",
+        "status": "REVIEWED_HASH_MATCH",
+        "reviewed_content_sha256": "36ffd9dc085d529a7e60e1276d73ae5a030b020313e6c5408593a6ae2af39673",
+        "raw_response_sha256": "36ffd9dc085d529a7e60e1276d73ae5a030b020313e6c5408593a6ae2af39673"
+      }
+    ],
+    "leagues": {
+      "de.bl1": {
+        "observations": [
+          {
+            "provider": "openligadb",
+            "source_match_id": "83240",
+            "identity_scope": "bl1:2026",
+            "league": "de.bl1",
+            "source_league_id": 4937,
+            "home_team": "FC Augsburg",
+            "away_team": "1. FSV Mainz 05",
+            "home_source_id": 95,
+            "away_source_id": 81,
+            "start_time": "2026-11-22T14:30:00+00:00",
+            "day_basis": "UTC",
+            "source_status": "NOT_FINISHED",
+            "reported_score": null,
+            "final_confirmed": false,
+            "source_final_confirmed": false,
+            "issues": [],
+            "source_updated_at_raw": "2026-11-20T11:53:53.98",
+            "observed_at": "2026-11-21T17:25:08.972918+00:00",
+            "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+            "licence": "ODbL-1.0",
+            "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+            "observation_key": "9f3f4c0e5e29804703473053512f8558022d43960e4cda81b863a622e5b9bcfc",
+            "technical_statistics": "NOT_AVAILABLE",
+            "corners": "NOT_AVAILABLE",
+            "cards": "NOT_AVAILABLE",
+            "odds": "NOT_AVAILABLE",
+            "writes_allowed": false,
+            "season": "2026-2027",
+            "raw_response_sha256": "699dd997db2e811bdb86651e17527d771462cde4e579fe3436ff28c076296d9d",
+            "response_received_at": "2026-11-21T17:25:08.972918+00:00",
+            "checked_at": "2026-11-21T17:25:09.136450+00:00",
+            "evidence_kind": "LIVE_HTTP_200",
+            "validation_status": "REVIEW_REQUIRED"
+          },
+          {
+            "provider": "openfootball",
+            "source_match_id": null,
+            "record_fingerprint": "e41b64ceceea355a5b7f551287027dcdf9c98394de3a35b1a92ba9f13c1a04f8",
+            "identity_kind": "CONTENT_FINGERPRINT_NOT_SOURCE_ID",
+            "league": "de.bl1",
+            "home_team": "FC Augsburg",
+            "away_team": "1. FSV Mainz 05",
+            "start_time": null,
+            "source_date": "2026-11-22",
+            "source_time_raw": "15:30",
+            "source_status": "FIXTURE_ONLY",
+            "reported_score": null,
+            "final_confirmed": false,
+            "issues": [
+              "NO_EXPLICIT_FINISHED_FLAG",
+              "KICKOFF_TIMEZONE_NOT_DECLARED"
+            ],
+            "source_url": "https://raw.githubusercontent.com/openfootball/football.json/master/2026-27/de.1.json",
+            "observed_at": "2026-11-21T17:25:10.816062+00:00",
+            "licence": "CC0-1.0",
+            "day_basis": "SOURCE_DATE_TIMEZONE_UNKNOWN",
+            "identity_scope": "de.1",
+            "attribution": "OpenFootball football.json (CC0-1.0)",
+            "source_final_confirmed": false,
+            "observation_key": "0edb6afb6e7b59cbdf8cf43aaec51c54d8fe18b5ae05949a3a96405a6f9da1f6",
+            "technical_statistics": "NOT_AVAILABLE",
+            "corners": "NOT_AVAILABLE",
+            "cards": "NOT_AVAILABLE",
+            "odds": "NOT_AVAILABLE",
+            "writes_allowed": false,
+            "season": "2026-2027",
+            "raw_response_sha256": "07fab65d4a1de8ce4c8472da9ccf4d1d2b145ecd5abdc5b6d4250a5c119d7681",
+            "response_received_at": "2026-11-21T17:25:10.816062+00:00",
+            "checked_at": "2026-11-21T17:25:11.113005+00:00",
+            "evidence_kind": "LIVE_HTTP_200",
+            "validation_status": "REVIEW_REQUIRED",
+            "home_source_id": null,
+            "away_source_id": null,
+            "source_updated_at_raw": null
+          }
+        ]
+      }
+    },
+    "SQL_WRITE": "NOT_RUN",
+    "R2_WRITE": "NOT_RUN",
+    "LIVE_DELETE": "NOT_RUN",
+    "FINAL_IMPORT": "BLOCKED",
+    "status": "SOURCE_OBSERVED_NOT_AUTHORIZED"
+  },
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "FINAL_IMPORT": "BLOCKED",
+  "status": "BLOCKED",
+  "candidate": {
+    "source_key": "c9e03151a7f1c6b8f94567925c8b255f6ee6bdb884e46dd7815d0f122fe404ca",
+    "evidence_sha256": "4ae3cbaf2ff15fea4b8e58f4b5ac0e04cf5e4d57585fdf29711afedb53a6b938",
+    "evidence": {
+      "schema_version": 1,
+      "identity": {
+        "provider": "openligadb",
+        "source_match_id": "83240",
+        "league": "de.bl1",
+        "season": "2026-2027",
+        "home_source_id": 95,
+        "away_source_id": 81,
+        "home_team": "FC Augsburg",
+        "away_team": "1. FSV Mainz 05",
+        "start_time": "2026-11-22T14:30:00+00:00"
+      },
+      "observation": {
+        "provider": "openligadb",
+        "source_match_id": "83240",
+        "league": "de.bl1",
+        "season": "2026-2027",
+        "home_source_id": 95,
+        "away_source_id": 81,
+        "home_team": "FC Augsburg",
+        "away_team": "1. FSV Mainz 05",
+        "start_time": "2026-11-22T14:30:00+00:00",
+        "source_league_id": 4937,
+        "identity_scope": "bl1:2026",
+        "record_fingerprint": null,
+        "source_status": "NOT_FINISHED",
+        "reported_score": null,
+        "source_final_confirmed": false,
+        "licence": "ODbL-1.0",
+        "attribution": "Data: OpenLigaDB (https://www.openligadb.de), ODbL 1.0",
+        "observed_at": "2026-11-21T17:25:08.972918+00:00",
+        "response_received_at": "2026-11-21T17:25:08.972918+00:00",
+        "checked_at": "2026-11-21T17:25:09.136450+00:00",
+        "source_updated_at_raw": "2026-11-20T11:53:53.98",
+        "source_updated_at_utc": null,
+        "raw_response_sha256": "699dd997db2e811bdb86651e17527d771462cde4e579fe3436ff28c076296d9d",
+        "evidence_kind": "LIVE_HTTP_200",
+        "validation_status": "REVIEW_REQUIRED",
+        "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+        "resource": "matches:bl1:10"
+      },
+      "report_sha256": "1b45897da4153b571c33e25615ec2bae227f5ea6256595f96a2b96928d08bf31",
+      "checks": {
+        "collector_config_matches": true,
+        "source_response_bound": true,
+        "fresh_http_200": true,
+        "licence_and_terms_current": true,
+        "utc_kickoff": true,
+        "selected_utc_day": true,
+        "season_utc_window": true,
+        "native_match_id": true,
+        "native_team_ids": true,
+        "reviewed_league_identity": true,
+        "no_source_conflict": true,
+        "future_fixture": true,
+        "independent_fixture_utc": false
+      },
+      "corroboration": [],
+      "source_version": "47443e6f0370b5f0566202b96f559252ea43312b6b0dcf35559a32d68dbf5070"
+    },
+    "state": "REVIEW_REQUIRED",
+    "kind": "FIXTURE_OBSERVATION",
+    "source_reported_score": null,
+    "verified_final_score": null,
+    "technical_eligibility": false,
+    "blockers": [
+      "INDEPENDENT_FIXTURE_UTC"
+    ],
+    "production_ready": false,
+    "required_authority": [
+      "DURABLE_OPERATOR_REVIEW",
+      "TRUSTED_FRESH_REVALIDATION",
+      "STAGE7D_WRITE_GATE"
+    ]
+  }
+}

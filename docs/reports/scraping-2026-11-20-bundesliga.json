@@ -1,0 +1,578 @@
+{
+  "strategy": "WEB_SCRAPING_FIRST",
+  "status": "PARTIAL",
+  "writes": false,
+  "sql": "NOT_USED",
+  "r2": "NOT_USED",
+  "paid_fallback": false,
+  "scope": {
+    "league": "8",
+    "season": "2026-2027",
+    "date": "2026-11-20",
+    "timezone": "Europe/Istanbul"
+  },
+  "observed_at": "2026-11-20T21:02:30.289052+00:00",
+  "source_policies": {
+    "goaloo": {
+      "kind": "public_web_json_html",
+      "terms_url": "https://www.goaloo.com/disclaimer",
+      "feed_terms_url": "https://www.goaloo.com/freemap",
+      "automation": "ROBOTS_GATED_READ_ONLY_PROBE",
+      "redistribution": "NOT_VERIFIED",
+      "coverage": "Selected league/day; score and technical fields only when actually present",
+      "odds": "BLOCKED_BY_ROBOTS_AJAX",
+      "production_permission": "NOT_INFERRED_FROM_FREE_IFRAME"
+    },
+    "football_data_co_uk": {
+      "kind": "csv",
+      "terms_url": "https://football-data.co.uk/data.php",
+      "automation": "PROHIBITED_FOR_THIS_PRODUCT",
+      "download_enabled": false,
+      "coverage": "Publisher advertises 22 main European divisions plus 16 additional top divisions; field coverage varies",
+      "reason": "Private-individual use only; excludes commercial/data-training products using bots/scrapers/AI",
+      "first_odds": "PRE_CLOSING_NOT_GUARANTEED_OPENING",
+      "closing": "Only explicit C columns where available"
+    },
+    "openfootball": {
+      "kind": "open_json_txt",
+      "terms_url": "https://github.com/openfootball/football.json/blob/master/LICENSE.md",
+      "licence": "CC0-1.0",
+      "automation": "OPEN_DATA_CANDIDATE_NOT_FETCHED",
+      "coverage": "England, Germany, Spain, Italy, France and other community-maintained fixtures/results",
+      "odds": "NOT_PROVIDED",
+      "technical_statistics": "NOT_PROVIDED",
+      "download_enabled": false,
+      "freshness": "Community source updates are not guaranteed daily even when JSON generation runs daily"
+    },
+    "openligadb": {
+      "kind": "free_community_service",
+      "terms_url": "https://www.openligadb.de/nutzungsbedingungen",
+      "licence_url": "https://www.openligadb.de/lizenz",
+      "licence": "ODbL-1.0",
+      "automation": "OPTIONAL_REVIEWED_CANDIDATE_NOT_FETCHED",
+      "download_enabled": false,
+      "coverage": "Community leagues; strongest documented identifiers bl1/bl2/bl3; completeness varies",
+      "rate_limit": "30-60 seconds per league during live play; much less often otherwise; cache and last-change poll",
+      "requirements": "Attribution; share-alike for redistribution of a modified database; descriptive User-Agent with contact",
+      "odds": "NOT_PROVIDED",
+      "reason": "No paid provider dependency; not enabled as an automatic API fallback"
+    }
+  },
+  "requests": [
+    {
+      "url": "https://football.goaloo.com/robots.txt",
+      "http_status": 200,
+      "sha256": "d9066d29c1dfed62e1bbde2c102079a5ccc0c1e9f669644fd89fd652cdc156bb",
+      "observed_at": "2026-11-20T21:02:31.297135+00:00",
+      "policy_text": "User-agent: *"
+    },
+    {
+      "url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+      "http_status": 200,
+      "sha256": "a1442a83673b5d4e36eb53af5905ff5fa40e504118130981ec0d05ad2558d88c",
+      "observed_at": "2026-11-20T21:02:41.095484+00:00"
+    },
+    {
+      "url": "https://www.goaloo.com/robots.txt",
+      "http_status": 200,
+      "sha256": "f2ca85ee74e46d67cb487a6af6a9d53c421322e346865a1d7c0ae50dcf1a0b35",
+      "observed_at": "2026-11-20T21:02:51.166250+00:00",
+      "policy_text": "User-agent: *\r\nSitemap: https://www.goaloo.com/sitemap.xml\r\nDisallow: /bin/\r\nDisallow: /ajax/\r\nDisallow: /Ajax/\r\nDisallow: /home/ajax/\r\nDisallow: /Home/Ajax/\r\nDisallow:/gf/\r\nDisallow:/soccer/flashLive/\r\nDisallow:/textlive/\r\nDisallow:/Scripts/\r\nDisallow:/scripts/\r\n\r\n\r\n\r\n\r\n"
+    },
+    {
+      "url": "https://www.goaloo.com/football/match/live-3018869",
+      "http_status": 200,
+      "sha256": "0e184991abaa90af56b6e895f82d1684f0d0602e576ec21f48e5b9b1d871c96c",
+      "observed_at": "2026-11-20T21:03:04.057993+00:00"
+    }
+  ],
+  "matches": [
+    {
+      "provider": "goaloo",
+      "provider_match_id": "3018869",
+      "league_id": "8",
+      "league_name": "German Bundesliga",
+      "season": "2026-2027",
+      "home_team": "Bayern Munchen",
+      "away_team": "FC Koln",
+      "start_time": "2026-11-20 19:30:00+00:00",
+      "status": "SCHEDULED",
+      "source_url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+      "fixture_key": "[\"de.bl1\", \"2026-11-20T19:30:00+00:00\", \"bayern munchen\", \"fc koln\"]",
+      "fields": {
+        "fixture": "PASS",
+        "score": "NOT_AVAILABLE",
+        "odds": "BLOCKED",
+        "statistics": "OBSERVED_UNVERIFIED"
+      },
+      "result": null,
+      "odds": [],
+      "statistics": [
+        {
+          "id": "ftstat:Corner Kicks",
+          "name": "Corner Kicks",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 0.0,
+          "raw_home": "1",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Corner Kicks(HT)",
+          "name": "Corner Kicks(HT)",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 0.0,
+          "raw_home": "1",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Shots",
+          "name": "Shots",
+          "period": "ftstat",
+          "home_value": 4.0,
+          "away_value": 1.0,
+          "raw_home": "4",
+          "raw_away": "1",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Shots On Goal",
+          "name": "Shots On Goal",
+          "period": "ftstat",
+          "home_value": 0.0,
+          "away_value": 1.0,
+          "raw_home": "0",
+          "raw_away": "1",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Attack",
+          "name": "Attack",
+          "period": "ftstat",
+          "home_value": 47.0,
+          "away_value": 7.0,
+          "raw_home": "47",
+          "raw_away": "7",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Dangerous attack",
+          "name": "Dangerous attack",
+          "period": "ftstat",
+          "home_value": 29.0,
+          "away_value": 4.0,
+          "raw_home": "29",
+          "raw_away": "4",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Off Target",
+          "name": "Off Target",
+          "period": "ftstat",
+          "home_value": 3.0,
+          "away_value": 0.0,
+          "raw_home": "3",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Blocked",
+          "name": "Blocked",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 0.0,
+          "raw_home": "1",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Free Kicks",
+          "name": "Free Kicks",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 0.0,
+          "raw_home": "1",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Possession",
+          "name": "Possession",
+          "period": "ftstat",
+          "home_value": 74.0,
+          "away_value": 26.0,
+          "raw_home": "74%",
+          "raw_away": "26%",
+          "unit": "percent",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Possession(HT)",
+          "name": "Possession(HT)",
+          "period": "ftstat",
+          "home_value": 74.0,
+          "away_value": 26.0,
+          "raw_home": "74%",
+          "raw_away": "26%",
+          "unit": "percent",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Pass",
+          "name": "Pass",
+          "period": "ftstat",
+          "home_value": 176.0,
+          "away_value": 53.0,
+          "raw_home": "176",
+          "raw_away": "53",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Pass Success",
+          "name": "Pass Success",
+          "period": "ftstat",
+          "home_value": 91.0,
+          "away_value": 74.0,
+          "raw_home": "91%",
+          "raw_away": "74%",
+          "unit": "percent",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Fouls",
+          "name": "Fouls",
+          "period": "ftstat",
+          "home_value": 0.0,
+          "away_value": 1.0,
+          "raw_home": "0",
+          "raw_away": "1",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Offsides",
+          "name": "Offsides",
+          "period": "ftstat",
+          "home_value": 2.0,
+          "away_value": 0.0,
+          "raw_home": "2",
+          "raw_away": "0",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Heads",
+          "name": "Heads",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 3.0,
+          "raw_home": "1",
+          "raw_away": "3",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Head Success",
+          "name": "Head Success",
+          "period": "ftstat",
+          "home_value": 0.0,
+          "away_value": 2.0,
+          "raw_home": "0",
+          "raw_away": "2",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Tackles",
+          "name": "Tackles",
+          "period": "ftstat",
+          "home_value": 3.0,
+          "away_value": 5.0,
+          "raw_home": "3",
+          "raw_away": "5",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Dribbles",
+          "name": "Dribbles",
+          "period": "ftstat",
+          "home_value": 2.0,
+          "away_value": 3.0,
+          "raw_home": "2",
+          "raw_away": "3",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Throw ins",
+          "name": "Throw ins",
+          "period": "ftstat",
+          "home_value": 7.0,
+          "away_value": 2.0,
+          "raw_home": "7",
+          "raw_away": "2",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Tackle Success",
+          "name": "Tackle Success",
+          "period": "ftstat",
+          "home_value": 3.0,
+          "away_value": 6.0,
+          "raw_home": "3",
+          "raw_away": "6",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Intercept",
+          "name": "Intercept",
+          "period": "ftstat",
+          "home_value": 1.0,
+          "away_value": 6.0,
+          "raw_home": "1",
+          "raw_away": "6",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Assists",
+          "name": "Assists",
+          "period": "ftstat",
+          "home_value": 0.0,
+          "away_value": 1.0,
+          "raw_home": "0",
+          "raw_away": "1",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Long Passes",
+          "name": "Long Passes",
+          "period": "ftstat",
+          "home_value": 10.0,
+          "away_value": 4.0,
+          "raw_home": "10",
+          "raw_away": "4",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Expected Goals (xG)",
+          "name": "Expected Goals (xG)",
+          "period": "ftstat",
+          "home_value": 0.25,
+          "away_value": 0.88,
+          "raw_home": "0.25",
+          "raw_away": "0.88",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Open\u2011play xG",
+          "name": "Open\u2011play xG",
+          "period": "ftstat",
+          "home_value": 0.25,
+          "away_value": 0.88,
+          "raw_home": "0.25",
+          "raw_away": "0.88",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Non\u2011penalty xG (NP-xG)",
+          "name": "Non\u2011penalty xG (NP-xG)",
+          "period": "ftstat",
+          "home_value": 0.25,
+          "away_value": 0.88,
+          "raw_home": "0.25",
+          "raw_away": "0.88",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:xG on target (xGOT)",
+          "name": "xG on target (xGOT)",
+          "period": "ftstat",
+          "home_value": 0.0,
+          "away_value": 0.99,
+          "raw_home": "0",
+          "raw_away": "0.99",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        },
+        {
+          "id": "ftstat:Kick-off",
+          "name": "Kick-off",
+          "period": "ftstat",
+          "home_value": null,
+          "away_value": null,
+          "raw_home": "",
+          "raw_away": "",
+          "unit": "source_unspecified",
+          "provider_match_id": "3018869",
+          "source": "goaloo",
+          "source_url": "https://www.goaloo.com/football/match/live-3018869"
+        }
+      ],
+      "analysis_input": {
+        "history_status": "NOT_FETCHED_IN_SINGLE_DAY_PROBE",
+        "technical_statistics": [],
+        "home": {
+          "form": {
+            "score": null,
+            "confidence": 0,
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "reasons": [],
+            "warnings": [
+              "Only 0 of 5 requested matches available"
+            ]
+          },
+          "venue_form": {
+            "score": null,
+            "confidence": 0,
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "reasons": [],
+            "warnings": [
+              "Only 0 of 5 requested matches available"
+            ]
+          },
+          "goals": {
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "goals_for": 0,
+            "goals_against": 0,
+            "avg_goals_for": null,
+            "avg_goals_against": null,
+            "over_1_5": null,
+            "over_2_5": null,
+            "over_3_5": null,
+            "btts": null
+          }
+        },
+        "away": {
+          "form": {
+            "score": null,
+            "confidence": 0,
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "reasons": [],
+            "warnings": [
+              "Only 0 of 5 requested matches available"
+            ]
+          },
+          "venue_form": {
+            "score": null,
+            "confidence": 0,
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "reasons": [],
+            "warnings": [
+              "Only 0 of 5 requested matches available"
+            ]
+          },
+          "goals": {
+            "sample_size": 0,
+            "evidence": "INSUFFICIENT",
+            "goals_for": 0,
+            "goals_against": 0,
+            "avg_goals_for": null,
+            "avg_goals_against": null,
+            "over_1_5": null,
+            "over_2_5": null,
+            "over_3_5": null,
+            "btts": null
+          }
+        }
+      },
+      "odds_error": "PROVIDER_ACCESS_RESTRICTED",
+      "opening_odds": "NOT_AVAILABLE",
+      "closing_odds": "NOT_AVAILABLE",
+      "statistics_warning": "MATCH_NOT_CONFIRMED_FINISHED_BY_SCHEDULE"
+    }
+  ],
+  "match_count": 1,
+  "odds_count": 0,
+  "result_count": 0,
+  "statistics_count": 29,
+  "duplicates": [],
+  "live_test": true,
+  "source_resource_scope": "One current/requested-season schedule file, filtered to one day; no season traversal/backfill",
+  "matches_tested": 1,
+  "untested_match_details": 0,
+  "usable_statistics_count": 0,
+  "evidence_review": "Post-capture validation only; original observations and response hashes retained; no new requests"
+}

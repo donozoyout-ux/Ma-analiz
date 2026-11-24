@@ -1,1 +1,3 @@
-export default function Settings(){return <><header className="topbar"><div><div className="eyebrow">Configuration</div><h1 className="title">Settings</h1></div></header><div className="card empty">Provider, R2, Telegram, AI, and league settings are supplied through server environment configuration. Secret values are never shown in the dashboard.</div></>}
+import { permanentRedirect } from "next/navigation";
+import { legacyDestinations } from "@/lib/navigation";
+export default function Page() { permanentRedirect(legacyDestinations.settings); }

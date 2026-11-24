@@ -1,2 +1,3 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Coupons(){return <><header className="topbar"><div><div className="eyebrow">Simulation only</div><h1 className="title">Paper coupons</h1></div></header><RecordsPanel endpoint="coupons" columns={["created_at","type","total_odds","confidence","status","items"]} empty="No paper coupons. The system does not place real bets."/></>}
+import { permanentRedirect } from "next/navigation";
+import { legacyDestinations } from "@/lib/navigation";
+export default function Page() { permanentRedirect(legacyDestinations.coupons); }

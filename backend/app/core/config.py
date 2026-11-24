@@ -4,6 +4,7 @@ from pathlib import Path
 import re
 from urllib.parse import urlsplit
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -11,6 +12,10 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
+    controlled_import_operator_id: str | None = None
+    controlled_import_operator_token_sha256: SecretStr | None = None
+    system_expected_database_fingerprint: str | None = None
+    system_diagnostics_token: SecretStr | None = None
     app_env: str = "development"
     log_level: str = "INFO"
     database_url: str | None = None
@@ -28,9 +33,19 @@ class Settings(BaseSettings):
     sportmonks_max_retries: int = 3
     goaloo_base_url: str = "https://football.goaloo.com"
     goaloo_odds_base_url: str = "https://www.goaloo.com"
+    openligadb_base_url: str = "https://api.openligadb.de"
+    openligadb_timeout_seconds: float = 10.0
+    openligadb_requests_per_minute: int = 1
+    bundesliga_ingest_enabled: bool = False
+    bundesliga_ingest_dry_run: bool = True
+    bundesliga_daily_max_requests: int = 10
+    bundesliga_daily_max_r2_writes: int = 50
+    bundesliga_daily_max_archive_mb: int = 10
+    bundesliga_daily_max_matches: int = 50
     enabled_leagues: str = ""
     enabled_seasons: str = ""
     historical_start_date: date | None = None
+    historical_collect_odds: bool = True
 
     r2_endpoint: str | None = None
     r2_access_key_id: str | None = None
@@ -50,6 +65,13 @@ class Settings(BaseSettings):
     worker_odds_interval_seconds: int = 1800
     worker_results_interval_seconds: int = 1800
     worker_scanner_interval_seconds: int = 1800
+    worker_archive_interval_seconds: int = 900
+    worker_cleanup_interval_seconds: int = 3600
+    operational_retention_hours: int = Field(default=48, ge=1, le=48)
+    operational_delete_enabled: bool = False
+    auto_retention_delete_enabled: bool = False
+    lifecycle_batch_size: int = Field(default=25, ge=1, le=100)
+    lifecycle_child_limit: int = Field(default=500, ge=1, le=2000)
     worker_prune_interval_seconds: int = 86400
     job_run_stale_after_seconds: int = 21600
     historical_ingest_lease_seconds: int = 3600
@@ -58,15 +80,15 @@ class Settings(BaseSettings):
     postgres_high_mb: int = 750
     postgres_critical_mb: int = 750
     job_history_retention_days: int = 30
-    active_state_retention_days: int = 14
-    odds_retention_days: int = 30
+    active_state_retention_days: int = 2  # Legacy compatibility; lifecycle uses hours, capped at 48.
+    odds_retention_days: int = 2
     similarity_weak_threshold: int = 30
     similarity_moderate_threshold: int = 100
     similarity_strong_threshold: int = 500
 
     @property
     def provider_id(self) -> str | None:
-        return self.provider_name or self.match_provider or ("sportmonks" if self.sportmonks_api_token else None)
+        return self.provider_name or self.match_provider  # Never select a paid vendor from credentials.
 
     @property
     def provider_api_token(self) -> str | None:
@@ -78,6 +100,8 @@ class Settings(BaseSettings):
             return self.sportmonks_base_url or self.provider_base_url
         if (self.provider_id or "").lower() == "goaloo":
             return self.provider_base_url or self.goaloo_base_url
+        if (self.provider_id or "").lower() == "openligadb":
+            return self.openligadb_base_url
         return self.provider_base_url
 
     @property

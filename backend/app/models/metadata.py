@@ -118,6 +118,7 @@ class JobRun(Base):
 
 class HistoricalIngestDay(Base):
     __tablename__ = "historical_ingest_days"
+    coverage: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     __table_args__ = (UniqueConstraint("provider", "season", "league_id", "ingest_date"),)
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     provider: Mapped[str] = mapped_column(String(80), nullable=False)

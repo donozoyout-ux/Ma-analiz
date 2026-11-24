@@ -69,6 +69,7 @@ function shutdown(exitCode = 0, signal = "SIGTERM") {
 function startChild(name, command, args, cwd, env) {
   const child = spawn(command, args, { cwd, env, stdio: "inherit", windowsHide: true });
   children.push(child);
+  if (child.pid) console.log(`${name} process started (pid=${child.pid}).`);
   child.once("error", () => {
     console.error(`${name} process could not be started.`);
     void shutdown(1);
@@ -84,8 +85,9 @@ function startChild(name, command, args, cwd, env) {
 }
 
 async function waitForBackend(child) {
-  const timeoutMs = Number(process.env.BACKEND_STARTUP_TIMEOUT_MS || "30000");
-  const deadline = Date.now() + (Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000);
+  // Leave room for a cold, CPU-limited instance; this remains a bounded wait.
+  const timeoutMs = Number(process.env.BACKEND_STARTUP_TIMEOUT_MS || "90000");
+  const deadline = Date.now() + (Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 90_000);
   const healthUrl = `http://127.0.0.1:${backendPort}/health/live`;
 
   while (Date.now() < deadline) {
@@ -132,6 +134,12 @@ async function main() {
   }
 }
 
-process.on("SIGTERM", () => void shutdown(0, "SIGTERM"));
-process.on("SIGINT", () => void shutdown(0, "SIGINT"));
+process.on("SIGTERM", () => {
+  console.log("Single-service received SIGTERM; stopping both children.");
+  void shutdown(0, "SIGTERM");
+});
+process.on("SIGINT", () => {
+  console.log("Single-service received SIGINT; stopping both children.");
+  void shutdown(0, "SIGINT");
+});
 void main();

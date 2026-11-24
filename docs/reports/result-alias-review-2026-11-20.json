@@ -1,0 +1,15 @@
+{
+  "review_id": "result-alias-review-2026-11-20",
+  "method": "Explicit manual review of named clubs, competition, UTC kickoff and source identities; no fuzzy matching",
+  "scope": {"league": "de.bl1", "date": "2026-11-20", "start_time": "2026-11-20T19:30:00Z"},
+  "goaloo": {"match_id": "3018869", "home_team": "Bayern Munchen", "away_team": "FC Koln",
+    "source_url": "https://football.goaloo.com/jsData/matchResult/json/2026-2027/s8_en.json",
+    "response_sha256": "2f92b6c4170fd726bb929288b2854730259bcb3568c68471d5b700d8a3871267"},
+  "openligadb": {"match_id": "83237", "home_team_id": 40, "away_team_id": 65,
+    "home_team": "FC Bayern München", "away_team": "1. FC Köln",
+    "source_url": "https://api.openligadb.de/getmatchdata/bl1/2026/10",
+    "response_sha256": "7c46e596508694ca4d00b5eb5ae1a6a24350f756d2a8188a758e9afc67c076ac"},
+  "scope_rule": "Aliases are only applied to the specified Goaloo fixture and kickoff; OpenLigaDB must also match both team IDs and match ID",
+  "global_alias_registry_modified": false,
+  "database_or_r2_written": false
+}

@@ -1,0 +1,32 @@
+{
+  "observed_at": "2026-11-21T16:51:22.607780+00:00",
+  "workflow": "render-keepalive.yml",
+  "workflow_state": "active",
+  "total_count": 1,
+  "runs": [
+    {
+      "id": 44924627168,
+      "event": "schedule",
+      "status": "completed",
+      "conclusion": "success",
+      "created_at": "2026-11-21T16:26:54Z",
+      "run_started_at": "2026-11-21T16:26:54Z",
+      "updated_at": "2026-11-21T16:27:47Z",
+      "html_url": "https://github.com/donozoyout-ux/Ma-analiz/actions/runs/44924627168"
+    }
+  ],
+  "creation_gaps_minutes": [],
+  "max_gap_minutes": null,
+  "http_log_evidence": [
+    {
+      "run_id": 44924627168,
+      "job_conclusion": "success",
+      "responses": [
+        {
+          "http_status": 200,
+          "log_at": "2026-11-21T16:27:45.5589185Z"
+        }
+      ]
+    }
+  ]
+}

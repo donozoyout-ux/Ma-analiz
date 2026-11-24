@@ -1,0 +1,594 @@
+{
+  "run_id": 44935835102,
+  "job_id": 136942141835,
+  "commit": "c2c85d156bae7c1bde8d47eaa3c255d362554a47",
+  "event": "workflow_dispatch",
+  "conclusion": "success",
+  "source": "GITHUB_ACTIONS_JOB_STDOUT",
+  "report": {
+    "stage": "7D.1",
+    "mode": "READ_ONLY_RETENTION_VALIDATION",
+    "status": "NO_ELIGIBLE_RECORDS",
+    "deleted": 0,
+    "SQL_WRITE": "NOT_RUN",
+    "R2_WRITE": "NOT_RUN",
+    "LIVE_DELETE": "NOT_RUN",
+    "FINAL_IMPORT": "BLOCKED",
+    "AUTO_RETENTION_DELETE_ENABLED": false,
+    "OPERATIONAL_DELETE_ENABLED": false,
+    "storage_preflight": {
+      "stage": "7D",
+      "mode": "READ_ONLY_PREFLIGHT",
+      "checked_at": "2026-11-21T18:30:34.642563+00:00",
+      "status": "PASS",
+      "postgres": "CONNECTED_READ_ONLY",
+      "r2": {
+        "status": "ACCESSIBLE",
+        "missing_env": [],
+        "invalid_env": [],
+        "operation": "HEAD_BUCKET"
+      },
+      "protected_target": {
+        "status": "VERIFIED",
+        "postgres": "PASS",
+        "r2": "PASS",
+        "receipts": {
+          "matches": {
+            "key": "matches/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+            "sha256": "3b1992dba835a325a2229eab87f7afbc2fac89e57615a33c2041d1dec8583ff5",
+            "row_count": 1,
+            "readback": "PASS"
+          },
+          "results": {
+            "key": "results/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+            "sha256": "206aee158c1c32225521c929809b4630d562b73ddc65e994b838924178780d6a",
+            "row_count": 1,
+            "readback": "PASS"
+          }
+        },
+        "match_id": "e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+        "verified_at": "2026-11-20T22:08:11.894979+00:00",
+        "LIVE_DELETE": "NOT_RUN"
+      },
+      "missing_env": [],
+      "invalid_env": [],
+      "SQL_WRITE": "NOT_RUN",
+      "R2_WRITE": "NOT_RUN",
+      "LIVE_DELETE": "NOT_RUN",
+      "FINAL_IMPORT": "BLOCKED",
+      "AUTO_RETENTION_DELETE_ENABLED": false,
+      "OPERATIONAL_DELETE_ENABLED": false,
+      "schema": {
+        "status": "READY",
+        "issues": [],
+        "expected_revisions": [
+          "0010_active_statistics"
+        ]
+      },
+      "constraints": {
+        "status": "PASS",
+        "missing": []
+      },
+      "capacity": {
+        "bytes": 8910527,
+        "limit_bytes": 1000000000,
+        "used_percent": 0.89,
+        "status": "HEALTHY",
+        "action": "ARCHIVE_AND_REVIEW_BLOCKERS_NEVER_FORCE_DELETE"
+      },
+      "protected_sha256": "296f8adf1d3ad1fbdb085ef30b81ea27405835517f2284d65e482dbc628eff26",
+      "write_privileges": "NOT_EXERCISED",
+      "migrations": "NOT_RUN"
+    },
+    "capacity": {
+      "bytes": 8910527,
+      "limit_bytes": 1000000000,
+      "used_percent": 0.89,
+      "status": "HEALTHY",
+      "action": "ARCHIVE_AND_REVIEW_BLOCKERS_NEVER_FORCE_DELETE"
+    },
+    "table_sizes": [
+      {
+        "table": "job_runs",
+        "table_bytes": 16384,
+        "index_bytes": 81920,
+        "total_bytes": 98304,
+        "live_rows_estimate": 13,
+        "dead_rows_estimate": 13
+      },
+      {
+        "table": "active_matches",
+        "table_bytes": 16384,
+        "index_bytes": 65536,
+        "total_bytes": 81920,
+        "live_rows_estimate": 1,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "archive_jobs",
+        "table_bytes": 16384,
+        "index_bytes": 49152,
+        "total_bytes": 65536,
+        "live_rows_estimate": 4,
+        "dead_rows_estimate": 12
+      },
+      {
+        "table": "predictions",
+        "table_bytes": 8192,
+        "index_bytes": 57344,
+        "total_bytes": 65536,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "match_results",
+        "table_bytes": 8192,
+        "index_bytes": 49152,
+        "total_bytes": 57344,
+        "live_rows_estimate": 1,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "active_statistics",
+        "table_bytes": 8192,
+        "index_bytes": 40960,
+        "total_bytes": 49152,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "active_odds",
+        "table_bytes": 8192,
+        "index_bytes": 40960,
+        "total_bytes": 49152,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "match_analyses",
+        "table_bytes": 8192,
+        "index_bytes": 32768,
+        "total_bytes": 40960,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "historical_ingest_days",
+        "table_bytes": 8192,
+        "index_bytes": 24576,
+        "total_bytes": 32768,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "coupons",
+        "table_bytes": 0,
+        "index_bytes": 32768,
+        "total_bytes": 32768,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "system_settings",
+        "table_bytes": 16384,
+        "index_bytes": 16384,
+        "total_bytes": 32768,
+        "live_rows_estimate": 4,
+        "dead_rows_estimate": 2
+      },
+      {
+        "table": "lessons",
+        "table_bytes": 8192,
+        "index_bytes": 16384,
+        "total_bytes": 24576,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "bookmakers",
+        "table_bytes": 8192,
+        "index_bytes": 16384,
+        "total_bytes": 24576,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "daily_metrics",
+        "table_bytes": 0,
+        "index_bytes": 8192,
+        "total_bytes": 8192,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "coupon_items",
+        "table_bytes": 0,
+        "index_bytes": 8192,
+        "total_bytes": 8192,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "users",
+        "table_bytes": 0,
+        "index_bytes": 8192,
+        "total_bytes": 8192,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      },
+      {
+        "table": "notification_deliveries",
+        "table_bytes": 0,
+        "index_bytes": 8192,
+        "total_bytes": 8192,
+        "live_rows_estimate": 0,
+        "dead_rows_estimate": 0
+      }
+    ],
+    "vacuum": {
+      "status": "ASSESSED",
+      "autovacuum": "on",
+      "track_counts": "on",
+      "tables": [
+        {
+          "table": "active_matches",
+          "n_live_tup": 1,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "active_odds",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "active_statistics",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "coupon_items",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "coupons",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "match_analyses",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "match_results",
+          "n_live_tup": 1,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        },
+        {
+          "table": "predictions",
+          "n_live_tup": 0,
+          "n_dead_tup": 0,
+          "last_vacuum": null,
+          "last_autovacuum": null,
+          "last_analyze": null,
+          "last_autoanalyze": null,
+          "review_needed": false
+        }
+      ],
+      "row_counts_are_estimates": true,
+      "manual_vacuum": "NOT_RUN",
+      "vacuum_full": "DISABLED",
+      "space_reclamation": "DELETE_MAY_NOT_SHRINK_DATABASE_FILE;_AUTOVACUUM_REUSES_SPACE",
+      "recommendation": "MONITOR_AUTOVACUUM"
+    },
+    "sql_scheduler_audit": {
+      "archive": {
+        "completed_at": "2026-11-21T16:59:06.699233+00:00",
+        "run_id": "44927449780",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      },
+      "auto": {
+        "completed_at": "2026-11-21T17:12:47.338201+00:00",
+        "run_id": "44928703385",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      },
+      "dry-run": {
+        "completed_at": "2026-11-21T18:03:46.924663+00:00",
+        "run_id": "44933335342",
+        "status": "SKIPPED",
+        "LIVE_DELETE": "NOT_RUN",
+        "deleted": 0
+      }
+    },
+    "archive_runtime": {
+      "ledger_status_counts": {
+        "VERIFIED": 4
+      },
+      "last_sql_ledger_verified_at": "2026-11-21T08:48:54.195223+00:00",
+      "incomplete_archive_ledgers": 0,
+      "running_jobs": [],
+      "running_jobs_truncated": false,
+      "recent_slots": [
+        {
+          "job_type": "cleanup_database",
+          "status": "SKIPPED",
+          "started_at": "2026-11-21T17:12:52.636740+00:00",
+          "finished_at": "2026-11-21T17:13:04.292778+00:00",
+          "slot_sha256": "f35475c33a1d998dc37c4590ccb6ddf7d6603418880a080e4a546d5c7ccb11ae",
+          "records_written": 0,
+          "error_code": "NONE"
+        },
+        {
+          "job_type": "archive_data",
+          "status": "SKIPPED",
+          "started_at": "2026-11-21T16:59:11.437587+00:00",
+          "finished_at": "2026-11-21T16:59:25.121332+00:00",
+          "slot_sha256": "cd6e698ecd54109e17a5590289491f99e58ffdfe7ca9a2e9e345135a2d0ffd63",
+          "records_written": 0,
+          "error_code": "NONE"
+        },
+        {
+          "job_type": "cleanup_database",
+          "status": "SKIPPED",
+          "started_at": "2026-11-21T10:02:13.327062+00:00",
+          "finished_at": "2026-11-21T10:02:21.225797+00:00",
+          "slot_sha256": "548c40bef71e20ae765087628b992d0725d44d835a4937bea145027ff7865e2e",
+          "records_written": 0,
+          "error_code": "NONE"
+        },
+        {
+          "job_type": "archive_data",
+          "status": "SKIPPED",
+          "started_at": "2026-11-21T10:00:02.850224+00:00",
+          "finished_at": "2026-11-21T10:00:15.839953+00:00",
+          "slot_sha256": "fd71ecc2c9afef3e432fe960df73bde7b83445e1dcbb8b7368e6180e586b279e",
+          "records_written": 0,
+          "error_code": "NONE"
+        }
+      ]
+    },
+    "plan": {
+      "status": "NO_ELIGIBLE_RECORDS",
+      "scan_complete": true,
+      "policy_hours": 48,
+      "as_of": "2026-11-21T18:30:55.090331+00:00",
+      "over_48h": 0,
+      "eligible": 0,
+      "retained": 2,
+      "deleted": 0,
+      "unknown_dependency_tables": 0,
+      "datasets": {
+        "matches": {
+          "total": 1,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 1,
+          "eligible": 0,
+          "retained": 1,
+          "not_scanned": 0
+        },
+        "results": {
+          "total": 1,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 1,
+          "eligible": 0,
+          "retained": 1,
+          "not_scanned": 0
+        },
+        "odds": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        },
+        "statistics": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        },
+        "predictions": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        },
+        "analyses": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        },
+        "coupons": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        },
+        "coupon_items": {
+          "total": 0,
+          "over_48h": 0,
+          "missing_age_anchor": 0,
+          "scanned": 0,
+          "eligible": 0,
+          "retained": 0,
+          "not_scanned": 0
+        }
+      },
+      "records": [
+        {
+          "record": "active_matches:e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+          "dataset": "matches",
+          "eligible": false,
+          "reasons": [
+            "WITHIN_RETENTION_WINDOW"
+          ],
+          "archive_key": "matches/season=2026-2027/league=de.bl1/date=2026-11-20/part=lifecycle-c6890246335be6b38aa5-bc8c6438fd3ac7b36a9f087e81fe2e1151227a3d02af1457fd7f67365b605ace.parquet",
+          "age_hours": 23.0153,
+          "snapshot_sha256": "bc8c6438fd3ac7b36a9f087e81fe2e1151227a3d02af1457fd7f67365b605ace",
+          "archive_verification": "PASS",
+          "source_identity": "PASS"
+        },
+        {
+          "record": "match_results:9342733b-bd71-4174-9702-3cc66e8ee641",
+          "dataset": "results",
+          "eligible": false,
+          "reasons": [
+            "WITHIN_RETENTION_WINDOW"
+          ],
+          "archive_key": "results/season=2026-2027/league=de.bl1/date=2026-11-20/part=lifecycle-692e0e8ee46d66832547-05bbd9a67e108d108b1892c69188e7424872c0d706e9969313f1179f1b4749c8.parquet",
+          "age_hours": 20.3787,
+          "snapshot_sha256": "05bbd9a67e108d108b1892c69188e7424872c0d706e9969313f1179f1b4749c8",
+          "archive_verification": "PASS",
+          "source_identity": "PASS"
+        }
+      ],
+      "pages": [
+        {
+          "plan_sha256": "1a0970728203503a0baf61194357a505fc4b868d0f443fea9ea0421edf0c9060",
+          "scope": {
+            "matches_scanned": 1,
+            "truncated": false,
+            "next_after_match_id": null
+          }
+        }
+      ],
+      "archive_checks_on_pass": [
+        "OBJECT_EXISTS",
+        "SHA256",
+        "SIZE",
+        "ROW_COUNT",
+        "METADATA",
+        "FULL_CONTENT",
+        "SQL_SNAPSHOT",
+        "SQL_LEDGER"
+      ],
+      "SQL_WRITE": "NOT_RUN",
+      "R2_WRITE": "NOT_RUN",
+      "LIVE_DELETE": "NOT_RUN",
+      "FINAL_IMPORT": "BLOCKED",
+      "AUTO_RETENTION_DELETE_ENABLED": false,
+      "OPERATIONAL_DELETE_ENABLED": false
+    },
+    "protected_target": {
+      "status": "VERIFIED",
+      "postgres": "PASS",
+      "r2": "PASS",
+      "receipts": {
+        "matches": {
+          "key": "matches/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+          "sha256": "3b1992dba835a325a2229eab87f7afbc2fac89e57615a33c2041d1dec8583ff5",
+          "row_count": 1,
+          "readback": "PASS"
+        },
+        "results": {
+          "key": "results/season=2026-2027/league=de.bl1/date=2026-11-20/part=verified-openligadb-83237.parquet",
+          "sha256": "206aee158c1c32225521c929809b4630d562b73ddc65e994b838924178780d6a",
+          "row_count": 1,
+          "readback": "PASS"
+        }
+      },
+      "match_id": "e168fa17-c0f1-4e42-96c6-adf260d16bd8",
+      "verified_at": "2026-11-20T22:08:11.894979+00:00",
+      "LIVE_DELETE": "NOT_RUN"
+    },
+    "protected_metadata": {
+      "snapshot_counts": {
+        "tables": {
+          "users": 0,
+          "system_settings": 4,
+          "bookmakers": 0,
+          "job_runs": 13,
+          "archive_jobs": 4,
+          "historical_ingest_days": 0,
+          "daily_metrics": 0,
+          "lessons": 0,
+          "notification_deliveries": 0
+        },
+        "warnings": [],
+        "metadata_prefix_counts": {
+          "source-identity:": 1,
+          "review-source:": 0,
+          "review-evidence:": 0,
+          "review-audit:": 0,
+          "operator-import:": 0,
+          "controlled-import:": 0,
+          "verified-import:": 1
+        },
+        "successful_cleanup_audits": 0
+      },
+      "same_snapshot_counts_unchanged": true,
+      "transaction_read_only": "on",
+      "isolation": "REPEATABLE_READ",
+      "values_or_user_data": "NOT_EXPORTED",
+      "excluded_from_cleanup": [
+        "users",
+        "system_settings",
+        "bookmakers",
+        "job_runs",
+        "archive_jobs",
+        "historical_ingest_days",
+        "daily_metrics",
+        "lessons",
+        "notification_deliveries"
+      ],
+      "audit_write": "NOT_RUN"
+    }
+  }
+}

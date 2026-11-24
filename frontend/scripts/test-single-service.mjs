@@ -8,6 +8,8 @@ const repoRoot = path.resolve(frontendRoot, "..");
 const supervisorPath = path.join(frontendRoot, "scripts", "run-single-service.mjs");
 const backendPort = 8000;
 const shutdownSignal = process.platform === "win32" ? "SIGINT" : "SIGTERM";
+const crashTarget = process.argv.find(arg => arg.startsWith("--crash-child="))?.split("=")[1];
+if (crashTarget && !["FastAPI", "Next.js"].includes(crashTarget)) throw new Error("Invalid crash-test child name.");
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -66,6 +68,7 @@ delete safeEnv.API_INTERNAL_URL;
 delete safeEnv.SINGLE_SERVICE_MODE;
 Object.assign(safeEnv, {
   APP_ENV: "production",
+  SYSTEM_DIAGNOSTICS_TOKEN: "local-test-only-diagnostics-token-32-characters",
   CORS_ORIGINS: "",
   DATABASE_URL: "",
   MATCH_PROVIDER: "",
@@ -86,6 +89,8 @@ Object.assign(safeEnv, {
   GROQ_MODEL: "",
   TELEGRAM_BOT_TOKEN: "",
   TELEGRAM_CHAT_ID: "",
+  AUTO_RETENTION_DELETE_ENABLED: "false",
+  OPERATIONAL_DELETE_ENABLED: "false",
   BACKEND_PORT: String(backendPort),
   PORT: String(renderPort),
   NODE_ENV: "production",
@@ -105,6 +110,12 @@ const appendLog = (chunk) => { logs = (logs + chunk.toString()).slice(-12_000); 
 child.stdout.on("data", appendLog);
 child.stderr.on("data", appendLog);
 
+function stopOwnedChild(name) {
+  const started = [...logs.matchAll(/(FastAPI|Next\.js) process started \(pid=(\d+)\)\./g)].find(match => match[1] === name);
+  if (!started) throw new Error(`No owned ${name} PID was reported.`);
+  try { process.kill(Number(started[2]), "SIGKILL"); } catch (error) { if (error.code !== "ESRCH") throw error; }
+}
+
 let failed = false;
 try {
   const origin = `http://127.0.0.1:${renderPort}`;
@@ -112,6 +123,12 @@ try {
   if (!home.ok) throw new Error(`Next.js root returned HTTP ${home.status}.`);
   const html = await home.text();
   if (!html.toLowerCase().includes("<!doctype html")) throw new Error("Next.js root did not return an HTML document.");
+  for (const text of ["Futbol Analiz Merkezi", "Günün Maçları", "Doğrulanmış tahmin isabeti", "AI Tahminleri", "Tahmin performansı"]) {
+    if (!html.includes(text)) throw new Error(`Home is missing football content: ${text}`);
+  }
+  for (const text of ["Altyapı sağlığı", "Aktivite ve veri büyümesi", "System Health", "PostgreSQL kullanımı"]) {
+    if (html.includes(text)) throw new Error(`Technical panel remains on the football home: ${text}`);
+  }
   const staticAsset = [...html.matchAll(/(?:src|href)="([^"]*\/_next\/static\/[^"]+)"/g)]
     .map((match) => match[1])[0];
   if (!staticAsset) throw new Error("Next.js root did not reference a standalone static asset.");
@@ -122,6 +139,24 @@ try {
   if (!liveResponse.ok || (await liveResponse.json()).status !== "ok") {
     throw new Error("The public liveness route did not reach FastAPI successfully.");
   }
+  const readyResponse = await fetch(new URL("/health/ready", origin), { signal: AbortSignal.timeout(5000) });
+  const ready = await readyResponse.json();
+  if (!readyResponse.ok || ready.status !== "ok" || ready.scope !== "web_api_transport" || ready.dependencies !== "not_checked") {
+    throw new Error("Bounded public readiness must reflect the colocated web/API transport.");
+  }
+
+  if (crashTarget) {
+    const closed = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("Supervisor did not stop after a child crash.")), 30_000);
+      child.once("close", () => { clearTimeout(timer); resolve(); });
+    });
+    stopOwnedChild(crashTarget);
+    await closed;
+    if (!child.exitCode) throw new Error("Unexpected child termination must fail the supervisor.");
+    await expectOffline(new URL("/", origin));
+    await expectOffline(`http://127.0.0.1:${backendPort}/health/live`);
+    console.log(`PASS: ${crashTarget} termination stops both listeners and fails the supervisor.`);
+  } else {
 
   const apiResponse = await fetch(new URL("/api/v1/health", origin), { signal: AbortSignal.timeout(10_000) });
   if (!apiResponse.ok) throw new Error(`The API rewrite returned HTTP ${apiResponse.status}.`);
@@ -132,15 +167,61 @@ try {
   if (diagnostics.database !== "NOT_CONFIGURED") {
     throw new Error("Smoke test did not isolate the database configuration as intended.");
   }
+  const systemResponse = await fetch(new URL("/system", origin));
+  const systemHtml = await systemResponse.text();
+  if (!systemResponse.ok || /type=["']password["']|diagnostics-token|SYSTEM_DIAGNOSTICS_TOKEN/.test(systemHtml)) {
+    throw new Error("System page must be public and contain no diagnostics password form.");
+  }
+  const adminResponse = await fetch(new URL("/api/v1/system/connections", origin), {method:"POST"});
+  if (adminResponse.status !== 401) throw new Error("Detailed diagnostics must require authorization.");
+  for (const key of ["inventory", "current_revisions", "expected_revisions", "target_fingerprint", "error_family", "error_category"]) {
+    if (JSON.stringify(diagnostics).includes(`"${key}"`)) throw new Error("Public health leaked diagnostic details.");
+  }
+  // Exercise real production route rendering and permanent legacy redirects.
+  for (const [source, destination] of Object.entries({
+    odds: "/matches?tab=odds", coupons: "/predictions?tab=coupons", performance: "/analysis",
+    lessons: "/analysis?tab=lessons", storage: "/archive?tab=storage", system: "/management", settings: "/management?tab=settings",
+  })) {
+    const response = await fetch(new URL(`/${source}`, origin), { redirect: "manual" });
+    if (response.status !== 308 || response.headers.get("location") !== destination) {
+      throw new Error(`Legacy /${source} did not redirect permanently to ${destination}.`);
+    }
+  }
+  for (const [route, heading] of [
+    ["/matches", "Günün maçları"], ["/matches?tab=odds", "Oran analizi"],
+    ["/matches/test-only-id", "Maç ve oran geçmişi"],
+    ["/predictions", "Yapay zekâ tahminleri"], ["/predictions?tab=coupons", "Kuponlar"],
+    ["/analysis", "Tahmin performansı"], ["/analysis?tab=lessons", "Eğitim merkezi"],
+    ["/archive", "Geçmiş maç arşivi"], ["/archive?tab=storage", "Veri deposu"],
+    ["/management", "Sistem durumu"], ["/management?tab=settings", "Ayarlar"],
+    ["/analysis?tab=unknown", "Tahmin performansı"],
+  ]) {
+    const response = await fetch(new URL(route, origin));
+    const content = await response.text();
+    if (!response.ok || !content.includes(`>${heading}</h1>`) || !content.includes('class="section-tabs"')) {
+      throw new Error(`Section ${route} did not render its original feature and tabs.`);
+    }
+    const navigation = content.split('aria-label="Ana menü"')[1]?.split("</nav>")[0];
+    if ((navigation?.match(/<a /g) ?? []).length !== 5) throw new Error("Primary menu must contain exactly five destinations.");
+  }
+  console.log("PASS: Seven legacy redirects, twelve section views, and five primary navigation entries.");
   const shutdownNote = process.platform === "win32"
     ? "Windows signal-handler semantics NOT_TESTED"
     : "SIGTERM graceful shutdown verified";
   console.log(`PASS: Next.js standalone server on PORT=${renderPort}; /health/live and /api/v1/health reached FastAPI through rewrites; ${shutdownNote}.`);
+  }
 } catch (error) {
   failed = true;
   console.error(`FAIL: ${error.message}`);
 } finally {
   if (child.exitCode === null) {
+    // Windows kill() does not emulate POSIX graceful signal handlers. Explicitly
+    // clean up our own logged child PIDs before stopping the test parent there.
+    if (process.platform === "win32") {
+      for (const name of ["FastAPI", "Next.js"]) {
+        try { stopOwnedChild(name); } catch { /* startup may have failed before spawn */ }
+      }
+    }
     child.kill(shutdownSignal);
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 15_000);
@@ -151,7 +232,7 @@ try {
     child.kill("SIGKILL");
     failed = true;
     console.error(`FAIL: single-service supervisor did not stop after ${shutdownSignal}.`);
-  } else if (child.exitCode !== 0) {
+  } else if (!crashTarget && process.platform !== "win32" && child.exitCode !== 0) {
     if (process.platform !== "win32" || child.signalCode !== shutdownSignal) {
       failed = true;
       console.error(`FAIL: supervisor exited with ${child.exitCode ?? `signal ${child.signalCode}`} after shutdown signal.`);

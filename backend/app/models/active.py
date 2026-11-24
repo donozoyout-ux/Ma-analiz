@@ -89,6 +89,28 @@ class MatchResult(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
+class ActiveStatistic(Base):
+    """Only explicitly permitted, verified full-time technical observations."""
+    __tablename__ = "active_statistics"
+    __table_args__ = (UniqueConstraint("match_id", "provider", "provider_statistic_id", "observed_at"),)
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    match_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("active_matches.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_match_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    provider_statistic_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    unit: Mapped[str] = mapped_column(String(24), nullable=False)
+    period: Mapped[str] = mapped_column(String(24), nullable=False)
+    home_value: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    away_value: Mapped[Decimal] = mapped_column(Numeric(14, 4), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_url: Mapped[str] = mapped_column(Text, nullable=False)
+    licence: Mapped[str] = mapped_column(String(100), nullable=False)
+    permission_reference: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
 class Prediction(Base):
     __tablename__ = "predictions"
     __table_args__ = (UniqueConstraint("match_id", "market", "selection", "model_version"),)

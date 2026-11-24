@@ -1,2 +1,3 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Performance(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Outcomes</div><h1 className="title">Performance</h1></div></header><RecordsPanel endpoint="performance" columns={["date","total_matches","analyzed_matches","predictions","wins","losses","hit_rate","r2_bytes","postgres_bytes"]} empty="Performance metrics are unavailable until verified outcomes exist."/></>}
+import { permanentRedirect } from "next/navigation";
+import { legacyDestinations } from "@/lib/navigation";
+export default function Page() { permanentRedirect(legacyDestinations.performance); }

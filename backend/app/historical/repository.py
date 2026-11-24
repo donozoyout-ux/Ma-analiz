@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
-
-import pyarrow.parquet as pq
+import hashlib
+import json
 
 from app.storage.r2 import ObjectStore
 
@@ -25,6 +25,9 @@ class HistoricalRepository:
             key = f"{prefix}{first.isoformat()}.parquet"
             if key in found:
                 keys.append(key)
+            keys.extend(sorted(item for item in found
+                               if item.startswith(f"{prefix}{first.isoformat()}/part=")
+                               and item.endswith(".parquet")))
             first += timedelta(days=1)
         return keys
 
@@ -33,13 +36,26 @@ class HistoricalRepository:
             raise ValueError("Historical cutoff must include a timezone")
         rows: list[dict] = []
         for key in keys:
-            parquet_file = pq.ParquetFile(self._buffer(self.store.get_object(key)))
+            info = self.store.head_object(key)
+            if info is None: raise IOError("HISTORICAL_OBJECT_MISSING")
+            payload = self.store.get_object(key)
+            metadata = info.metadata or {}
+            if (len(payload) != info.size or metadata.get("sha256") != hashlib.sha256(payload).hexdigest()):
+                raise IOError("HISTORICAL_CHECKSUM_NOT_VERIFIED")
+            # Keep native Arrow libraries out of web startup/liveness. Load only
+            # when a real historical partition is read; validation is unchanged.
+            import pyarrow.parquet as pq
+            parquet_file = pq.ParquetFile(self._buffer(payload))
+            if metadata.get("row-count") != str(parquet_file.metadata.num_rows):
+                raise IOError("HISTORICAL_ROW_COUNT_NOT_VERIFIED")
+            if "part=lifecycle-" in key and metadata.get("archive-key") != key:
+                raise IOError("HISTORICAL_KEY_NOT_VERIFIED")
             for batch in parquet_file.iter_batches(batch_size=self.batch_size):
                 for row in batch.to_pylist():
                     # A finalized result is not available to analysis until it has
                     # been verified; prefer that availability timestamp to match time.
                     event_time = (row.get("available_at") or row.get("verified_at")
-                                  or row.get("settled_at") or row.get("captured_at") or row.get("created_at")
+                                  or row.get("retrieved_at") or row.get("settled_at") or row.get("captured_at") or row.get("created_at")
                                   or row.get("finished_at") or row.get("start_time")
                                   or row.get("match_start"))
                     if event_time is None:
@@ -50,12 +66,58 @@ class HistoricalRepository:
                         raise ValueError("Historical timestamps must include a timezone")
                     if event_time <= before:
                         rows.append(row)
-        return rows
+        # Immutable lifecycle revisions must not count as additional matches,
+        # predictions, odds or statistics. Pick the last version available at
+        # the requested analysis time, never a later correction.
+        versions, legacy = {}, []
+        for row in rows:
+            if row.get("archive_format") != "lifecycle-v1":
+                legacy.append(row)
+                continue
+            identity = (row["sql_table"], row["sql_identity"])
+            previous = versions.get(identity)
+            stamp = row["available_at"]
+            if isinstance(stamp, str): stamp = datetime.fromisoformat(stamp)
+            if previous:
+                prior = previous["available_at"]
+                if isinstance(prior, str): prior = datetime.fromisoformat(prior)
+                if stamp < prior: continue
+                if stamp == prior and row["sql_snapshot_json"] != previous["sql_snapshot_json"]:
+                    raise ValueError("AMBIGUOUS_HISTORICAL_REVISION")
+            versions[identity] = row
+        # Lifecycle rows precede legacy exports at the same provider identity.
+        return sorted(versions.values(), key=lambda r: str(r["available_at"]), reverse=True) + legacy
 
     @staticmethod
     def _buffer(data: bytes):
         import io
         return io.BytesIO(data)
+
+    def read_verified_part(self, key: str, *, checksum: str, size: int, row_count: int = 1) -> list[dict]:
+        """Ledger-addressed public reads: never list a bucket or decode an unbounded file."""
+        from app.storage.archive import _verify_object
+        if row_count != 1 or not 0 < size <= 1_048_576:
+            raise IOError("HISTORICAL_PART_LIMIT")
+        info = self.store.head_object(key)
+        if info is None or info.size != size:
+            raise IOError("HISTORICAL_OBJECT_MISSING_OR_SIZE_CHANGED")
+        payload = self.store.get_object(key)
+        if len(payload) != size or hashlib.sha256(payload).hexdigest() != checksum:
+            raise IOError("HISTORICAL_CHECKSUM_NOT_VERIFIED")
+        import pyarrow.parquet as pq
+        metadata = pq.read_metadata(self._buffer(payload))
+        unpacked = sum(metadata.row_group(g).column(c).total_uncompressed_size
+            for g in range(metadata.num_row_groups) for c in range(metadata.num_columns))
+        if metadata.num_rows != 1 or metadata.num_columns > 100 or unpacked > 8_388_608:
+            raise IOError("HISTORICAL_DECODE_LIMIT")
+        class BufferedPart:
+            def head_object(self, requested):
+                if requested != key: raise IOError("PART_SCOPE_CHANGED")
+                return info
+            def get_object(self, requested):
+                if requested != key: raise IOError("PART_SCOPE_CHANGED")
+                return payload
+        return _verify_object(BufferedPart(), key, expected_size=size, expected_rows=1, expected_checksum=checksum)
 
     def get_team_matches(self, keys: list[str], *, before: datetime, team: str) -> list[dict]:
         return [row for row in self._read(keys, before=before) if team in (row.get("home_team"), row.get("away_team"))]
@@ -102,10 +164,12 @@ class HistoricalRepository:
             start=start, end=end), before=before)
         results = self._read(self.partition_keys(dataset="results", season=season, league=league,
             start=start, end=end), before=before)
-        outcomes = {str(row.get("provider_match_id")): row for row in results
-                    if row.get("provider_match_id") is not None and row.get("verified_at") is not None
+        outcomes = {}
+        for row in results:
+            if (row.get("provider_match_id") is not None and row.get("verified_at") is not None
                     and row.get("home_score") is not None and row.get("away_score") is not None
-                    and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}}
+                    and str(row.get("status", "")).upper() in {"FINAL", "FINISHED", "FT"}):
+                outcomes.setdefault((str(row.get("provider") or ""), str(row.get("provider_match_id"))), row)
         odds_rows = self._read(self.partition_keys(dataset="odds", season=season, league=league,
             start=start, end=end), before=before) if bookmaker else []
         odds_by_match: dict[str, list[dict]] = {}
@@ -114,7 +178,7 @@ class HistoricalRepository:
                 continue
             match_key = row.get("provider_match_id")
             if match_key is not None:
-                odds_by_match.setdefault(str(match_key), []).append(row)
+                odds_by_match.setdefault((str(row.get("provider") or ""), str(match_key)), []).append(row)
 
         # Partition retries or overlapping source exports can contain a fixture
         # more than once. Keep one stable row per provider match identity.
@@ -122,7 +186,13 @@ class HistoricalRepository:
         for match in matches:
             identity = match.get("provider_match_id")
             if identity is not None:
-                matches_by_id.setdefault(str(identity), match)
+                matches_by_id.setdefault((str(match.get("provider") or ""), str(identity)), match)
+        technical = self._read(self.partition_keys(dataset="statistics", season=season, league=league,
+            start=start, end=end), before=before)
+        technical_by_match = {}
+        for observation in technical:
+            identity = (str(observation.get("provider") or ""), str(observation.get("provider_match_id")))
+            technical_by_match.setdefault(identity, []).append(observation)
         output = []
         for match_key, match in sorted(matches_by_id.items()):
             result = outcomes.get(match_key)
@@ -130,6 +200,7 @@ class HistoricalRepository:
                 continue
             row = {**match, "home_score": result["home_score"], "away_score": result["away_score"],
                    "status": "FINISHED", "verified_at": result["verified_at"]}
+            row["technical_statistics"] = technical_by_match.get(match_key, [])
             snapshots = odds_by_match.get(match_key, [])
             if snapshots:
                 row["historical_odds"] = snapshots
@@ -193,7 +264,7 @@ class HistoricalRepository:
             row["away_form"] = form(away_only, row["away_team"], 5)
             if row["home_strength"] is not None and row["away_strength"] is not None:
                 row["form"] = (row["home_strength"] + row["away_strength"]) / 2
-            team_prior_by_id = {str(item.get("provider_match_id")): item for item in prior_home + prior_away}
+            team_prior_by_id = {(str(item.get("provider") or ""), str(item.get("provider_match_id"))): item for item in prior_home + prior_away}
             team_prior = list(team_prior_by_id.values())
             if len(team_prior) >= 5:
                 team_prior = team_prior[-20:]

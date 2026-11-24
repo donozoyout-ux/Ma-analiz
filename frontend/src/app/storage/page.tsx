@@ -1,2 +1,3 @@
-import {StoragePanel} from "@/components/storage-panel";
-export default function Storage(){return <><header className="topbar"><div><div className="eyebrow">PostgreSQL = active state / R2 = historical memory</div><h1 className="title">Storage</h1></div></header><div className="grid page-grid"><div className="card page-card"><div className="section-title">Storage usage</div><div style={{marginTop:24}}><StoragePanel/></div></div></div></>}
+import { permanentRedirect } from "next/navigation";
+import { legacyDestinations } from "@/lib/navigation";
+export default function Page() { permanentRedirect(legacyDestinations.storage); }

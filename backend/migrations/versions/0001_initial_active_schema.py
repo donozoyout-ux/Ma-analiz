@@ -4,9 +4,9 @@ Revision ID: 0001_initial
 Revises:
 """
 from alembic import op
-
-from app.db.base import Base
-from app import models  # noqa: F401
+import json
+from pathlib import Path
+import sqlalchemy as sa
 
 revision = "0001_initial"
 down_revision = None
@@ -15,8 +15,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind())
+    # Freeze the old bootstrap schema instead of importing future model fields.
+    statements = json.loads((Path(__file__).parents[1] / "initial_schema.json").read_text(encoding="utf-8"))
+    for statement in statements:
+        op.execute(sa.text(statement))
 
 
 def downgrade() -> None:
-    Base.metadata.drop_all(bind=op.get_bind())
+    statements = json.loads((Path(__file__).parents[1] / "initial_schema.json").read_text(encoding="utf-8"))
+    for statement in reversed(statements):
+        if statement.startswith("CREATE TABLE "):
+            op.execute(sa.text("DROP TABLE IF EXISTS " + statement.split()[2]))

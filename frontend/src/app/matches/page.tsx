@@ -1,2 +1,8 @@
-import {RecordsPanel} from "@/components/records-panel";
-export default function Matches(){return <><header className="topbar"><div><div className="eyebrow">Sports intelligence / Data</div><h1 className="title">Matches</h1></div><div className="clock">Upcoming and active</div></header><RecordsPanel endpoint="matches" columns={["start_time","league_name","home_team","away_team","status"]} empty="No active matches are available from the configured provider."/></>}
+import { selectedTab } from "@/lib/navigation";
+import { SectionTabs } from "@/components/section-tabs";
+import View0 from "@/components/section-views/matches";
+import View1 from "@/components/section-views/odds";
+export default async function Page({ searchParams }: { searchParams: Promise<{ tab?: string | string[] }> }) {
+ const active = selectedTab("matches", (await searchParams).tab);
+ return <><SectionTabs section="matches" active={active} />{active === "odds" ? <View1 /> : <View0 />}</>;
+}

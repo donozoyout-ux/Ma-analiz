@@ -1,0 +1,25 @@
+{
+  "stage": "7D",
+  "mode": "READ_ONLY_PREFLIGHT",
+  "checked_at": "2026-11-21T17:38:34.672047+00:00",
+  "status": "BLOCKED",
+  "postgres": "NOT_RUN",
+  "r2": "NOT_RUN",
+  "protected_target": {
+    "status": "NOT_RUN"
+  },
+  "missing_env": [
+    "DATABASE_URL",
+    "R2_ENDPOINT",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY"
+  ],
+  "invalid_env": [],
+  "SQL_WRITE": "NOT_RUN",
+  "R2_WRITE": "NOT_RUN",
+  "LIVE_DELETE": "NOT_RUN",
+  "FINAL_IMPORT": "BLOCKED",
+  "AUTO_RETENTION_DELETE_ENABLED": false,
+  "OPERATIONAL_DELETE_ENABLED": false,
+  "error_code": "STORAGE_CONFIGURATION_INCOMPLETE"
+}
