@@ -1,7 +1,7 @@
 import { CalendarDays, ChartNoAxesCombined, Target } from "lucide-react";
 export function OverviewMetrics({ matches, analyzed, rate, loading }: { matches: number | null; analyzed: number | null; rate: number | null; loading: boolean }) {
  const items = [
-  { label: "Bugünkü maçlar", value: matches, note: "Türkiye saatine göre · erişilebilir maçlar", Icon: CalendarDays },
+  { label: "SQL’deki bugünkü maçlar", value: matches, note: "Yalnızca kaydedilmiş maçlar · kaynak bülteni aşağıda", Icon: CalendarDays },
   { label: "Analiz edilen maçlar", value: analyzed, note: "Bugünün maçları · model analizi tamamlanan", Icon: ChartNoAxesCombined },
   { label: "Doğrulanmış tahmin isabeti", value: rate == null ? null : `%${(rate * 100).toFixed(1)}`, note: "Son 30 gün · sonuçlandırılmış kayıtlar", Icon: Target },
  ];
