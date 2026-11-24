@@ -197,7 +197,9 @@ def import_verified_odds(
                 stats["already_in_sql"] += 1
                 continue
             session.add(ActiveOdds(match_id=match.id,
-                expires_at=max(row["captured_at"] + timedelta(days=2), match.expires_at),
+                expires_at=max(row["captured_at"] + timedelta(days=2),
+                               _aware(match.expires_at.replace(tzinfo=timezone.utc)
+                                      if match.expires_at.tzinfo is None else match.expires_at)),
                 **row))
             inserted += 1
         session.commit()
