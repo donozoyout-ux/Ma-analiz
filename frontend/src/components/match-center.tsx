@@ -5,6 +5,7 @@ import { CalendarDays, Goal, LayoutGrid, List, RefreshCw, Search } from "lucide-
 import { type Match, type MatchFilters, formatMatchTime, matchHref, matchQuery, statusLabel, verifiedScoreText } from "@/lib/matches";
 import { useMatchRead } from "@/lib/use-match-read";
 import { MatchCard } from "./match-card";
+import { SourceBulletin } from "./source-bulletin";
 
 type Page = {items:Match[]; next_cursor:string|null; as_of:string; history_status:string; warnings:string[];
  scope:{scanned:number; limit:number; start_utc:string; end_utc:string}};
@@ -19,6 +20,8 @@ export function MatchCenter({initialSource="all"}:{initialSource?:MatchFilters["
  const apply = (next:MatchFilters) => {setFilters(next);setDraft(next);setCursors([undefined]);setPage(0);};
  const reload = () => {setCursors([undefined]);setPage(0);refresh();};
  return <div className="explorer-stack match-center">
+  <SourceBulletin />
+  <p className="scope-note">Aşağıdaki kayıtlar PostgreSQL ve doğrulanmış R2 arşividir; üstteki internet kaynak bülteninden ayrıdır.</p>
   <form className="card filter-panel" onSubmit={event=>{event.preventDefault();apply(draft);}}>
    <div className="filter-heading"><span><Search size={17}/> Maçları bul</span><button className="quiet-button" type="button" onClick={()=>apply(defaults)}>Sıfırla</button></div>
    <div className="filter-grid center-filter-grid">
