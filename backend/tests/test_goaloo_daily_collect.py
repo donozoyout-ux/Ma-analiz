@@ -87,3 +87,24 @@ def test_runner_dryrun_only_reads_and_bounds_request_count():
 def test_scope_rejects_mass_requests():
     with pytest.raises(ValueError):
         collect_one_day(DAY,openliga=None,goaloo=None,session=None,max_odds_requests=50)
+
+
+def test_robots_block_does_not_break_fixture_summary_or_write(session=None):
+    from app.providers.base import ProviderAccessRestricted
+    class Open:
+        def get_matches(self, day):
+            return [ol()]
+    class Goal:
+        def get_matches_on_day(self, day, league, season):
+            return [go()]
+        def get_odds(self, match_id):
+            raise ProviderAccessRestricted("PROVIDER_ACCESS_RESTRICTED")
+    engine=create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s:
+        report=collect_one_day(DAY,openliga=Open(),goaloo=Goal(),session=s)
+        assert report["mapping"]["MATCHED"] == 1
+        assert report["odds_source_status"] == "SOURCE_BLOCKED"
+        assert report["odds_pages_checked"] == 0
+        assert report["import"]["sql_inserted"] == 0
+    engine.dispose()

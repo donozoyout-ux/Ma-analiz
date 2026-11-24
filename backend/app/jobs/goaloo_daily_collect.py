@@ -74,14 +74,24 @@ def collect_one_day(target_day: date, *, openliga, goaloo, session, store=None,
     goal_rows = goaloo.get_matches_on_day(target_day, "8", "2026-2027")
     decisions = map_observed_rows(goal_rows, open_rows)
     verified = sorted((d for d in decisions if d.status == "MATCHED"), key=lambda d:d.goaloo_id)
+    from app.providers.base import ProviderAccessRestricted
     quotes: dict[str, list[dict]] = {}
+    odds_status = "NO_VERIFIED_MATCHES" if not verified else "OK"
     for item in verified[:max_odds_requests]:
-        quotes[item.goaloo_id] = goaloo.get_odds(item.goaloo_id)
+        try:
+            quotes[item.goaloo_id] = goaloo.get_odds(item.goaloo_id)
+        except ProviderAccessRestricted:
+            # Access controls must not be bypassed or retried via another route.
+            # Keep verified fixture observations available and report no odds.
+            odds_status = "SOURCE_BLOCKED"
+            quotes.clear()  # fail closed: do not partially persist an incomplete batch
+            break
     from app.providers.goaloo_match_identity import summary
     result = import_verified_odds(session, decisions, quotes, store=store,
                                   dry_run=dry_run, live_approved=live_approved)
     return {"day": target_day.isoformat(), "openligadb_matches": len(open_rows),
             "goaloo_matches": len(goal_rows), "mapping": summary(decisions),
+            "odds_source_status": odds_status,
             "odds_pages_checked": len(quotes), "import": result}
 
 
