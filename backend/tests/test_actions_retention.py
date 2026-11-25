@@ -114,6 +114,19 @@ def test_archive_diagnostics_are_bounded_and_never_include_secret_or_object_key(
     assert "SECRET" not in encoded and "private-uuid" not in encoded
 
 
+def test_unverified_result_is_reported_as_pending_without_exposing_match_id():
+    summary = actions.public_summary({
+        **result("PARTIAL"), "records_failed": 1,
+        "entries": [
+            {"record": "match_results:PRIVATE_ID", "status": "HELD",
+             "reasons": ["RESULT_NOT_VERIFIED"]},
+        ],
+    })
+    assert summary["archive_failure_codes"] == {"MATCH_RESULTS_RESULT_NOT_VERIFIED": 1}
+    assert summary["archive_failures"] == 1
+    assert "PRIVATE_ID" not in json.dumps(summary)
+
+
 def test_watchdog_ignores_manual_dry_runs_for_schedule_freshness():
     now=NOW
     workflow={"state":"active","created_at":(now-timedelta(days=2)).isoformat()}
