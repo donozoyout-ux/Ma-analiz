@@ -239,7 +239,7 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                         if cursor_record: cursor_record.value = value
                         else: session.add(SystemSetting(key=cursor_key, value=value))
                     last = session.get(SystemSetting, "lifecycle:last-auto-run")
-                    data = {"as_of": options["now"].isoformat(), "policy_hours": 48, "deleted": outcome["deleted"],
+                    data = {"as_of": options["now"].isoformat(), "policy_hours": cfg.operational_retention_hours, "deleted": outcome["deleted"],
                             "plan_digest": outcome["approval_digest"], "LIVE_DELETE": outcome["LIVE_DELETE"],
                             "retained_for_safety": outcome["retained_for_safety"], "datasets": outcome["datasets"],
                             "archive_failures": outcome["archive_repair"]["records_failed"], "capacity_before": report["capacity"]}
