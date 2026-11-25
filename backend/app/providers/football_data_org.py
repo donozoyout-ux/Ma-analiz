@@ -71,7 +71,7 @@ def fetch_bundesliga_finals(day: date, *, token: str | None = None, client=None,
     if not token:
         raise FootballDataFailure("FOOTBALL_DATA_TOKEN_NOT_CONFIGURED")
     observed_at = observed_at or datetime.now(timezone.utc)
-    if day > observed_at.date() or day < observed_at.date() - timedelta(days=31):
+    if day > observed_at.date() or day < observed_at.date() - timedelta(days=120):
         raise FootballDataFailure("FOOTBALL_DATA_DATE_OUT_OF_BOUNDS")
     own = client is None
     client = client or httpx.Client(timeout=8, follow_redirects=False)
