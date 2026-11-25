@@ -360,6 +360,7 @@ def test_daily_live_mode_uses_date_not_hardcoded_matchday(session, store, mock_o
     settings = Settings(
         bundesliga_ingest_enabled=True,
         bundesliga_ingest_dry_run=False,
+        operational_retention_hours=32,
         _env_file=None,
     )
     report = run_bundesliga_ingest_pipeline(
