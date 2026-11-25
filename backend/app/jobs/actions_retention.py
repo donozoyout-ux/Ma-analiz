@@ -46,6 +46,18 @@ def public_summary(report):
         for reason in row.get("reasons", []):
             code = safe_code(reason)
             reasons[code] = reasons.get(code, 0) + 1
+    # Aggregate only fixed-format codes and dataset labels, never UUIDs, object
+    # keys, provider response bodies, exception strings or source payloads.
+    archive_issue_counts = {}
+    archive_entries = report.get("entries") if isinstance(report.get("entries"), list) else (
+        report.get("archive_repair", {}).get("entries", []))
+    for entry in archive_entries[:1000]:
+        if not isinstance(entry, dict) or entry.get("status") not in {"FAILED", "HELD"}:
+            continue
+        dataset = safe_code(str(entry.get("record", "")).split(":", 1)[0].upper(), "UNKNOWN")
+        code = safe_code(entry.get("failure_code"), "ARCHIVE_HELD" if entry["status"] == "HELD" else "ARCHIVE_UNKNOWN_FAILURE")
+        label = f"{dataset}_{code}"
+        archive_issue_counts[label] = archive_issue_counts.get(label, 0) + 1
     digest = report.get("approval_digest")
     return {"storage_status": safe_code(report.get("status")), "error_code": safe_code(report.get("error_code"), "NONE"),
             "failure_stage": report.get("failure_stage") if report.get("failure_stage") in STAGES else "NONE",
@@ -53,6 +65,7 @@ def public_summary(report):
             "policy_hours": number(report.get("policy_hours")), **totals, "retention_reasons": reasons,
             "plan_digest": digest if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None,
             "archive_failures": number(report.get("archive_repair", {}).get("records_failed")) or number(report.get("records_failed")) or 0,
+            "archive_failure_codes": archive_issue_counts,
             "capacity_bytes": number(report.get("capacity", {}).get("bytes")),
             "capacity_status": safe_code(report.get("capacity", {}).get("status")),
             "auto_delete_enabled": report.get("auto_delete_enabled") is True}
