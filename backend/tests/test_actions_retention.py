@@ -128,7 +128,7 @@ def test_workflow_is_pinned_least_privilege_and_push_is_dry_run():
     assert "github.event_name != 'push'" in workflow and "default: dry-run" in workflow
     # Production deletion is enabled solely for the hourly scheduled auto slot.
     # Manual dispatches, push and PR cannot activate destructive cleanup.
-    assert "github.event_name == 'schedule' && github.event.schedule == '2 * * * *' && 'true' || 'false'" in workflow
+    assert "github.event_name == 'schedule' && github.event.schedule == '2 * * * *' && vars.AUTO_RETENTION_DELETE_ENABLED == 'true' && 'true' || 'false'" in workflow
     assert "OPERATIONAL_DELETE_ENABLED: 'false'" in workflow
     assert "AUTO_RETENTION_DELETE_ENABLED: ${{" in workflow
     assert 'if [ "$RETENTION_MODE" = auto ]' in workflow and '--mode dry-run' in workflow
