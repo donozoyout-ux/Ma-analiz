@@ -156,7 +156,7 @@ def run_bundesliga_ingest_pipeline(
             if start_dt.tzinfo is None:
                 start_dt = start_dt.replace(tzinfo=timezone.utc)
 
-            expires_at = start_dt + timedelta(hours=48)
+            expires_at = start_dt + timedelta(hours=cfg.operational_retention_hours)
 
             if is_new:
                 match_id = uuid4()
