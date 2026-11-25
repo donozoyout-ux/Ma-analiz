@@ -6,6 +6,7 @@ on:
       - 'backend/app/providers/openligadb.py'
       - 'backend/tests/test_source_bulletin.py'
       - 'frontend/src/components/source-bulletin.tsx'
+      - 'frontend/src/app/globals.css'
       - 'frontend/src/components/football-home.tsx'
       - 'frontend/src/components/match-center.tsx'
       - 'frontend/src/components/section-views/matches.tsx'
