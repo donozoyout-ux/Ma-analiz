@@ -7,6 +7,7 @@ before one SQL transaction persists verified_at and its archive ledger.
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import json
+import re
 
 from sqlalchemy import select
 from app.analysis.football_data_corroboration import corroborate
@@ -48,7 +49,8 @@ def verify_bundesliga_result(session, store, primary, secondary, *,
     first, second = primary[0], secondary[0]
     if (str(first.get("source_match_id")) != candidate["openligadb_match_id"]
             or str(second.get("source_match_id")) != candidate["football_data_match_id"]
-            or first.get("source_url") != "https://api.openligadb.de/getmatchdata/bl1/2026/1"
+            or not re.fullmatch(r"https://api\.openligadb\.de/getmatchdata/bl1/2026/(?:[1-9]|[12][0-9]|3[0-4])",
+                                 str(first.get("source_url") or ""))
             or second.get("source_url") != "https://api.football-data.org/v4/competitions/BL1/matches"
             or first.get("final_confirmed") is not True
             or second.get("final_confirmed") is not True):
