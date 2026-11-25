@@ -147,15 +147,15 @@ export function SourceBulletin({variant = "full"}: {variant?: "full" | "home"}) 
             <strong>Seçilen filtrelerde maç bulunamadı</strong>
             <span>Bugün maç yoksa gelecek 7 gün içindeki fikstür görünür. Filtreyi değiştirebilir veya
               {" "}<Link href="/europe">Avrupa kupalarında başka tarih seçebilirsin</Link>.</span>
-          </div> : <div className="records-scroll" tabIndex={0} role="region" aria-label="Kaynak futbol maçları">
-            <table className="records-table"><thead><tr>
+          </div> : <div className="records-scroll source-fixtures-scroll" tabIndex={0} role="region" aria-label="Kaynak futbol maçları">
+            <table className="records-table source-fixtures-table"><thead><tr>
               <th>Tarih · TSİ</th><th>Turnuva</th><th>Karşılaşma</th><th>Durum</th><th>Skor</th>
             </tr></thead><tbody>{shown.map(match => <tr key={match.id}>
-              <td>{formatMatchTime(match.start_time)}</td>
-              <td>{match.league_name}</td>
-              <td>{match.home_team} – {match.away_team}</td>
-              <td>{statusLabel(match.status)}</td>
-              <td>{Array.isArray(match.score) ? `${match.score[0]} – ${match.score[1]}` : "—"}</td>
+              <td data-label="Tarih · TSİ">{formatMatchTime(match.start_time)}</td>
+              <td data-label="Turnuva">{match.league_name}</td>
+              <td data-label="Karşılaşma">{match.home_team} – {match.away_team}</td>
+              <td data-label="Durum">{statusLabel(match.status)}</td>
+              <td data-label="Skor">{Array.isArray(match.score) ? `${match.score[0]} – ${match.score[1]}` : "—"}</td>
             </tr>)}</tbody></table>
           </div>}
         </div>
