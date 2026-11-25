@@ -55,9 +55,18 @@ def public_summary(report):
         if not isinstance(entry, dict) or entry.get("status") not in {"FAILED", "HELD"}:
             continue
         dataset = safe_code(str(entry.get("record", "")).split(":", 1)[0].upper(), "UNKNOWN")
-        code = safe_code(entry.get("failure_code"), "ARCHIVE_HELD" if entry["status"] == "HELD" else "ARCHIVE_UNKNOWN_FAILURE")
-        label = f"{dataset}_{code}"
-        archive_issue_counts[label] = archive_issue_counts.get(label, 0) + 1
+        if entry["status"] == "HELD":
+            # The retention engine reports stable blocker codes: expose these
+            # rather than an unhelpful generic HELD status. Ignore unknown text.
+            codes = [safe_code(reason) for reason in entry.get("reasons", []) if isinstance(reason, str)]
+            codes = [code for code in codes if code != "UNAVAILABLE"]
+            if not codes:
+                codes = ["ARCHIVE_HELD"]
+        else:
+            codes = [safe_code(entry.get("failure_code"), "ARCHIVE_UNKNOWN_FAILURE")]
+        for code in codes[:10]:
+            label = f"{dataset}_{code}"
+            archive_issue_counts[label] = archive_issue_counts.get(label, 0) + 1
     digest = report.get("approval_digest")
     return {"storage_status": safe_code(report.get("status")), "error_code": safe_code(report.get("error_code"), "NONE"),
             "failure_stage": report.get("failure_stage") if report.get("failure_stage") in STAGES else "NONE",
