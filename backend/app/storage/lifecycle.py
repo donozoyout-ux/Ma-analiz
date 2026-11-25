@@ -398,7 +398,10 @@ def automatic(session, store, *, enabled, now, **options):
     AUTO enablement is separate from the manual gate. No supplied approval digest
     is trusted here: the system produces one and execute recomputes it under locks.
     """
-    options["hours"] = options.get("hours", 48)
+    # Preserve the legacy 48h direct-call contract unless an explicitly configured
+    # scheduler opts into the new policy. Deletion itself has a separate hard gate.
+    configured = options.pop("configured_retention", False)
+    options["hours"] = options.get("hours", 48) if configured else 48
     if not enabled:
         report, _ = plan(session, store, now=now, **options)
         return {**report, "auto_delete_enabled": False, "reason": "AUTO_RETENTION_DELETE_DISABLED"}
