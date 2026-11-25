@@ -58,8 +58,13 @@ def public_summary(report):
         if entry["status"] == "HELD":
             # The retention engine reports stable blocker codes: expose these
             # rather than an unhelpful generic HELD status. Ignore unknown text.
-            codes = [safe_code(reason) for reason in entry.get("reasons", []) if isinstance(reason, str)]
-            codes = [code for code in codes if code != "UNAVAILABLE"]
+            allowed_blockers = {
+                "RESULT_NOT_VERIFIED", "REUSE_PERMISSION_NOT_CONFIRMED",
+                "PARTITION_IDENTITY_MISSING", "TECHNICAL_VALIDATION_FAILED",
+                "TECHNICAL_PERMISSION_CHANGED", "ARCHIVE_FAILED_RETRY_NEXT_CYCLE",
+            }
+            codes = [reason for reason in entry.get("reasons", [])
+                     if isinstance(reason, str) and reason in allowed_blockers]
             if not codes:
                 codes = ["ARCHIVE_HELD"]
         else:
