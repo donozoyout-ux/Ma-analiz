@@ -119,6 +119,59 @@ class HistoricalRepository:
                 return payload
         return _verify_object(BufferedPart(), key, expected_size=size, expected_rows=1, expected_checksum=checksum)
 
+    def get_verified_match_from_archive(self, session, match_id):
+        """Only fully verified lifecycle match+result archives can be shown."""
+        from datetime import timezone
+        from sqlalchemy import select
+        from app.models import ArchiveJob
+        match_id = str(match_id)
+        fingerprint = hashlib.sha256(f"active_matches:{match_id}".encode()).hexdigest()[:20]
+        fixtures = session.scalars(select(ArchiveJob).where(
+            ArchiveJob.dataset_type == "matches", ArchiveJob.status == "VERIFIED",
+            ArchiveJob.verified_at.is_not(None),
+            ArchiveJob.r2_key.contains(f"/part=lifecycle-{fingerprint}-"),
+        ).order_by(ArchiveJob.verified_at.desc()).limit(20)).all()
+        if not fixtures:
+            return None
+        match = None
+        for job in fixtures:
+            row, = self.read_verified_part(job.r2_key, checksum=job.checksum,
+                                          size=job.file_size_bytes, row_count=job.row_count)
+            if (row.get("archive_format"), row.get("sql_table"), row.get("sql_identity")) != (
+                    "lifecycle-v1", "active_matches", match_id):
+                raise IOError("HISTORICAL_MATCH_IDENTITY_MISMATCH")
+            snapshot = json.loads(row["sql_snapshot_json"])
+            if snapshot.get("id") != match_id:
+                raise IOError("HISTORICAL_MATCH_SNAPSHOT_MISMATCH")
+            match = snapshot
+            break
+        if match is None:
+            return None
+        kickoff = datetime.fromisoformat(str(match["start_time"]).replace("Z", "+00:00"))
+        if kickoff.tzinfo is None:
+            raise IOError("HISTORICAL_KICKOFF_UNTRUSTED")
+        candidates = session.scalars(select(ArchiveJob).where(
+            ArchiveJob.dataset_type == "results", ArchiveJob.status == "VERIFIED",
+            ArchiveJob.verified_at.is_not(None),
+            ArchiveJob.archive_date == kickoff.astimezone(timezone.utc).date(),
+            ArchiveJob.league == match.get("league_id"),
+        ).limit(501)).all()
+        if len(candidates) > 500:
+            raise IOError("HISTORICAL_RESULT_LOOKUP_LIMIT")
+        for job in candidates:
+            row, = self.read_verified_part(job.r2_key, checksum=job.checksum,
+                                          size=job.file_size_bytes, row_count=job.row_count)
+            if row.get("archive_format") != "lifecycle-v1" or row.get("sql_table") != "match_results":
+                continue
+            result = json.loads(row["sql_snapshot_json"])
+            if result.get("match_id") != match_id:
+                continue
+            if (result.get("status") != "FINAL" or not result.get("verified_at") or
+                    any(type(result.get(k)) is not int or result[k] < 0 for k in ("home_score", "away_score"))):
+                raise IOError("HISTORICAL_RESULT_NOT_VERIFIED")
+            return {"match": match, "result": result}
+        return None
+
     def get_team_matches(self, keys: list[str], *, before: datetime, team: str) -> list[dict]:
         return [row for row in self._read(keys, before=before) if team in (row.get("home_team"), row.get("away_team"))]
 
