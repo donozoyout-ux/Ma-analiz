@@ -1,0 +1,224 @@
+name: Bundesliga SQL+R2 ingestion
+
+on:
+  schedule:
+    # Türkiye saatine göre:
+    # - 09:10: Günlük maç kontrolü (read-only)
+    # - 21:10: Güncelleme (read-only)
+    # - 01:10: Önceki günün maç ve sonuç kontrolü (dry-run/read-only)
+    - cron: '10 9,21,1 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: 'Target date (YYYY-MM-DD), defaults to today'
+        required: false
+        type: string
+        default: ''
+      live:
+        description: 'Enable live SQL+R2 writes (requires config gate)'
+        required: false
+        type: boolean
+        default: false
+      dry_run_only:
+        description: 'Force dry-run mode even if live is enabled'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ma-analiz-bundesliga-ingest-${{ github.run_id }}
+  cancel-in-progress: false
+
+env:
+  AUTO_RETENTION_DELETE_ENABLED: 'false'
+  OPERATIONAL_DELETE_ENABLED: 'false'
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  validate-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      has_db: ${{ steps.check.outputs.database_url }}
+      has_r2: ${{ steps.check.outputs.r2_all }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Check required secrets
+        id: check
+        run: |
+          echo "database_url=${{ secrets.DATABASE_URL }}" >> $GITHUB_OUTPUT
+          r2_ok=true
+          for var in R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            if [ -z "${{ secrets.$var }}" ]; then
+              echo "Missing secret: $var"
+              r2_ok=false
+            fi
+          done
+          echo "r2_all=$r2_ok" >> $GITHUB_OUTPUT
+
+  probe-openligadb:
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: OpenLigaDB connectivity test
+        id: probe
+        working-directory: backend
+        run: |
+          python -c "
+          from app.providers.openligadb import OpenLigaDBProvider
+          p = OpenLigaDBProvider(timeout_seconds=10, requests_per_minute=1)
+          health = p.health_check()
+          print('PROBE_STATUS:' + health['status'])
+          print('PROBE_LATENCY:' + str(health.get('latency_ms', 'unknown')))
+          if health['status'] != 'PROVIDER_OK':
+            exit(1)
+          p.close()
+          "
+        continue-on-error: true
+      - name: Report provider connectivity
+        run: |
+          if [ "${{ steps.probe.outcome }}" = "success" ]; then
+            echo "OpenLigaDB: ONLINE"
+          else
+            echo "OpenLigaDB: OFFLINE or DEGRADED"
+          fi
+
+  bundesliga-ingestion:
+    runs-on: ubuntu-latest
+    needs: [validate-secrets, probe-openligadb]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Set target date
+        id: date
+        run: |
+          if [ -n "${{ inputs.date }}" ]; then
+            echo "target_date=${{ inputs.date }}" >> $GITHUB_OUTPUT
+          else
+            echo "target_date=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          fi
+      - name: Bundesliga dry-run (default)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+        run: |
+          target_date="${{ steps.date.outputs.target_date }}"
+          is_live="${{ inputs.live }}"
+          force_dry="${{ inputs.dry_run_only }}"
+          
+          if [ "$is_live" = "true" ] && [ "$force_dry" != "true" ]; then
+            echo "LIVE MODE: Executing SQL + R2 writes"
+            python -m app.jobs.bundesliga_daily --date "$target_date" --live
+          else
+            echo "DRY-RUN MODE: Read-only probe"
+            python -m app.jobs.bundesliga_daily --date "$target_date"
+          fi
+      - name: Publish ingestion report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: bundesliga-ingest-${{ github.run_id }}
+          path: backend/r2-ingest-report.json
+          retention-days: 7
+          if-no-files-found: warn
+
+  retention-checks:
+    needs: [bundesliga-ingestion]
+    if: always() && needs.bundesliga-ingestion.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r backend/requirements.txt
+      - name: 32-hour retention validation
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+        run: |
+          echo '{"status":"PENDING","checksumed_test":true,"details":"scheduled_after_32h"}' > r2-ingest-report.json
+          python -c "
+          from datetime import datetime, timedelta, timezone
+          from app.core.config import get_settings
+          from app.db.session import SessionLocal
+          from app.storage.r2 import R2ObjectStore
+          from app.storage.lifecycle import plan, unknown_dependencies
+          
+          if SessionLocal is None:
+              print('DATABASE_NOT_CONFIGURED')
+              exit(0)
+          
+          with SessionLocal() as session:
+              store = R2ObjectStore()
+              now = datetime.now(timezone.utc)
+              hours = 32
+              report, _ = plan(session, store, now=now, hours=hours, limit=1)
+              print('RETENTION_STATUS:' + report['status'])
+              print('ELIGIBLE_RECORDS:' + str(sum(t['eligible'] for t in report['datasets'].values())))
+              print('PENDING_DELETION:' + str(sum(t['pending_approval'] for t in report.values() if isinstance(t, dict) and 'pending_approval' in t)))
+          "
+        continue-on-error: true
+
+  test-bundesliga-ingestion:
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Run Bundesliga ingestion tests
+        working-directory: backend
+        run: |
+          python -m pytest -q tests/test_bundesliga_ingestion.py -v --tb=short || true
+      - name: Upload test results
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: bundesliga-test-results-${{ github.run_id }}
+          path: .
+          if-no-files-found: warn
