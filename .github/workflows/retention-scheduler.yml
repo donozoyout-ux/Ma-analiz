@@ -138,7 +138,7 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
           R2_REGION: auto
-          OPERATIONAL_RETENTION_HOURS: '48'
+          OPERATIONAL_RETENTION_HOURS: '32'
           OPERATIONAL_DELETE_ENABLED: 'false'
           AUTO_RETENTION_DELETE_ENABLED: ${{ github.event_name != 'push' && (github.event_name == 'schedule' || inputs.mode == 'auto') && vars.AUTO_RETENTION_DELETE_ENABLED == 'true' && 'true' || 'false' }}
           RETENTION_MODE: ${{ github.event_name == 'schedule' && (github.event.schedule == '2 * * * *' && 'auto' || 'archive') || inputs.mode || 'dry-run' }}
