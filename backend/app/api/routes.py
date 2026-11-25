@@ -194,7 +194,28 @@ def list_matches(db: Session = Depends(get_db), limit: int = 100) -> list[dict]:
 def match_detail(match_id: UUID, db: Session = Depends(get_db)) -> dict:
     match = db.get(ActiveMatch, match_id)
     if match is None:
-        raise HTTPException(status_code=404, detail="MATCH_NOT_FOUND")
+        # Fail closed: only a checksum/row-count/identity verified lifecycle
+        # fixture accompanied by an independently verified FINAL result is shown.
+        try:
+            archive = HistoricalRepository(R2ObjectStore()).get_verified_match_from_archive(db, match_id)
+        except (OSError, ValueError, RuntimeError):
+            raise HTTPException(status_code=503, detail="HISTORICAL_ARCHIVE_UNAVAILABLE")
+        if archive is None:
+            raise HTTPException(status_code=404, detail="MATCH_NOT_FOUND")
+        data = dict(archive["match"])
+        result = archive["result"]
+        data["result"] = {"home_score": result["home_score"], "away_score": result["away_score"],
+                          "status": result["status"], "verified_at": result["verified_at"],
+                          "result_source": result.get("result_source")}
+        data["odds"] = []
+        data["odds_summary"] = []
+        data["live_odds"] = []
+        data["current_odds"] = []
+        data["opening_odds"] = []
+        data["closing_odds"] = []
+        data["odds_history"] = []
+        data["archive_source"] = "R2_VERIFIED"
+        return data
     data = _serialize(match)
     now = datetime.now(timezone.utc)
     odds_rows = db.scalars(select(ActiveOdds).where(
