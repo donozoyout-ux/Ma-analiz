@@ -9,13 +9,14 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.db.session import get_db
-from app.models import ActiveMatch
+from app.models import ActiveMatch, ActiveOdds, Bookmaker
 
 
 def _client(monkeypatch, archived=None, error=None, sql_match=False):
     from app.api import routes
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    ActiveMatch.__table__.create(engine)
+    for model in (ActiveMatch, ActiveOdds, Bookmaker):
+        model.__table__.create(engine)
     factory = sessionmaker(bind=engine)
     match_id = uuid4()
     if sql_match:
