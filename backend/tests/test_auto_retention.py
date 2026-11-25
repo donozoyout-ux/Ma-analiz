@@ -156,7 +156,13 @@ def test_retention_schedule_is_independent_and_heartbeat_is_bounded(monkeypatch,
     worker.retention_cycle(NOW)
     worker.retention_cycle(NOW+timedelta(minutes=17))
     assert [name for name,_ in calls]==["archive_data","cleanup_database"]*2
-    assert calls[2][1].endswith("12:15:00+00:00") and calls[3][1].endswith("12:00:00+00:00")
+    # Slot boundaries are derived from the synthetic clock instead of assuming
+    # it is perpetually 12:00 UTC (CI fixtures can be future-shifted).
+    current = NOW + timedelta(minutes=17)
+    archive_slot = current.replace(minute=(current.minute // 15) * 15, second=0, microsecond=0)
+    cleanup_slot = current.replace(minute=0, second=0, microsecond=0)
+    assert calls[2][1].endswith(archive_slot.isoformat())
+    assert calls[3][1].endswith(cleanup_slot.isoformat())
     heartbeat=session.get(SystemSetting,"scheduler:retention-heartbeat")
     assert heartbeat.value["last_cycle_at"]==(NOW+timedelta(minutes=17)).isoformat()
     assert session.query(SystemSetting).filter_by(key="scheduler:retention-heartbeat").count()==1
