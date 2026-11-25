@@ -57,7 +57,14 @@ def test_postgres_fk_and_verified_cleanup_to_r2_history(session):
     assert session.query(MatchResult).count() == 0
     assert session.query(ArchiveJob).count() == 2 and store._objects == original
     assert session.query(JobRun).filter_by(job_type="retention_cleanup").count() == 1
-    detail = api.detail_view(session, match.id, now=NOW, store=store)
+    # Diagnose the actual indexed-archive failure rather than hiding its cause behind HTTP 503.
+    from app.models import SystemSetting
+    entry = next(x for x in session.query(SystemSetting).all() if x.key.startswith("source-identity:"))
+    history = api.IndexedHistory(session, store=store)
+    try:
+        detail = history.match(entry, now=NOW)
+    finally:
+        history.close()
     assert detail["storage"] == "R2" and detail["result"]["home_score"] == 1
 
 
