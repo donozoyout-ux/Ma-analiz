@@ -398,7 +398,7 @@ def automatic(session, store, *, enabled, now, **options):
     AUTO enablement is separate from the manual gate. No supplied approval digest
     is trusted here: the system produces one and execute recomputes it under locks.
     """
-    options["hours"] = 48
+    options["hours"] = options.get("hours", 48)
     if not enabled:
         report, _ = plan(session, store, now=now, **options)
         return {**report, "auto_delete_enabled": False, "reason": "AUTO_RETENTION_DELETE_DISABLED"}
