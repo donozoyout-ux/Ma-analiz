@@ -54,7 +54,10 @@ def run(session, store=None, *, live=False, approval="", now=None):
     match, result = _validate(session, now)
     records = [lc.make_record(session, match, entity, now=now, hours=32) for entity in (match, result)]
     for record in records:
-        if record.blockers:
+        # Early archiving is intentionally allowed within the SQL retention
+        # window; the window prohibits DELETION, not immutable proof backups.
+        forbidden = set(record.blockers) - {"WITHIN_RETENTION_WINDOW"}
+        if forbidden:
             raise LifecycleBlocked("ARCHIVE_POLICY_OR_RETENTION_BLOCKED")
     if not live:
         return {"status": "DRY_RUN_READY", "match_id": str(MATCH_ID), "records": [
