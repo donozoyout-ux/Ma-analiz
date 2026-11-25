@@ -11,7 +11,7 @@ from app.jobs.verified_lifecycle_archive import (
 from app.models import ActiveMatch, MatchResult, ArchiveJob, SystemSetting
 from app.storage.r2 import InMemoryObjectStore
 
-NOW = datetime(2026, 11, 25, 21, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 26, 0, tzinfo=timezone.utc)
 KICKOFF = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
 
 
