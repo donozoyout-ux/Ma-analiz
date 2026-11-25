@@ -75,8 +75,14 @@ def verify_bundesliga_result(session, store, primary, secondary, *,
             or result.away_score != candidate["score"][1]):
         raise VerificationBlocked("SQL_FINAL_RESULT_CONFLICT")
     if result.verified_at is not None:
+        # SQLite drops timezone offsets in isolated tests; production stores
+        # this column as PostgreSQL timestamptz. Treat persisted SQL naive
+        # timestamps as UTC, never untrusted external source timestamps.
+        stamped = result.verified_at
+        if stamped.tzinfo is None:
+            stamped = stamped.replace(tzinfo=timezone.utc)
         return {"status": "ALREADY_VERIFIED_NO_WRITE", "match_id": str(match.id),
-                "verified_at": utc(result.verified_at).isoformat(), "writes": 0}
+                "verified_at": stamped.astimezone(timezone.utc).isoformat(), "writes": 0}
     if dry_run:
         return {"status": "DRY_RUN_MATCHED", "match_id": str(match.id),
                 "openligadb_match_id": candidate["openligadb_match_id"],
