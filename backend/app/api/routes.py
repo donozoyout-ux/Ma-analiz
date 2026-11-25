@@ -198,7 +198,7 @@ def match_detail(match_id: UUID, db: Session = Depends(get_db)) -> dict:
         # fixture accompanied by an independently verified FINAL result is shown.
         try:
             archive = HistoricalRepository(R2ObjectStore()).get_verified_match_from_archive(db, match_id)
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError, R2NotConfigured):
             raise HTTPException(status_code=503, detail="HISTORICAL_ARCHIVE_UNAVAILABLE")
         if archive is None:
             raise HTTPException(status_code=404, detail="MATCH_NOT_FOUND")
