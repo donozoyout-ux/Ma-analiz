@@ -373,6 +373,8 @@ def test_daily_live_mode_uses_date_not_hardcoded_matchday(session, store, mock_o
     assert report["status"] == "COMPLETED"
     assert report["scope_mode"] == "DAILY"
     assert report["inserted_matches"] == 1
+    stored = session.scalar(select(ActiveMatch))
+    assert (stored.expires_at.replace(tzinfo=timezone.utc) if stored.expires_at.tzinfo is None else stored.expires_at) == (stored.start_time.replace(tzinfo=timezone.utc) if stored.start_time.tzinfo is None else stored.start_time) + timedelta(hours=32)
     assert "day20261120" in report["archive_receipt"]["key"]
     mock_http.get.assert_called_once()
     assert "getmatchdata/bl1/2026" in mock_http.get.call_args.args[0]
