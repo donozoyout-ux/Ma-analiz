@@ -1,0 +1,91 @@
+name: Bundesliga verified batch R2 archive (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      day:
+        description: 'UTC Bundesliga match date (YYYY-MM-DD)'
+        required: true
+        type: string
+      limit:
+        description: 'Maximum independently proven finals in scope (1-10)'
+        required: true
+        type: number
+        default: 10
+      mode:
+        description: 'Dry-run checks SQL and R2 proof; live archives and validates history'
+        required: true
+        type: choice
+        options: [dry-run, live]
+        default: dry-run
+      approval:
+        description: 'For live only, type ARCHIVE_VERIFIED_BATCH_ONLY'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bundesliga-proven-batch-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+      R2_REGION: auto
+      OPERATIONAL_DELETE_ENABLED: 'false'
+      AUTO_RETENTION_DELETE_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate explicit bounds and credentials
+        env:
+          TARGET_DAY: ${{ inputs.day }}
+          LIMIT: ${{ inputs.limit }}
+          MODE: ${{ inputs.mode }}
+          APPROVAL: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          from datetime import date
+          import os
+          d = date.fromisoformat(os.environ["TARGET_DAY"])
+          assert d.year in (2026, 2027)
+          assert 1 <= int(os.environ["LIMIT"]) <= 10
+          assert os.environ["MODE"] in ("dry-run", "live")
+          if os.environ["MODE"] == "live":
+              assert os.environ["APPROVAL"] == "ARCHIVE_VERIFIED_BATCH_ONLY"
+          for key in ("DATABASE_URL", "R2_ENDPOINT", "R2_ACCESS_KEY_ID",
+                      "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
+              if not os.environ.get(key):
+                  raise ValueError("MISSING_SECRET_" + key)
+          PY
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run independently verified archive batch
+        working-directory: backend
+        env:
+          TARGET_DAY: ${{ inputs.day }}
+          LIMIT: ${{ inputs.limit }}
+          MODE: ${{ inputs.mode }}
+          APPROVAL: ${{ inputs.approval }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$MODE" = live ]; then
+            python -m app.jobs.bundesliga_verified_batch_archive --day "$TARGET_DAY" --limit "$LIMIT" --live --approval "$APPROVAL"
+          else
+            python -m app.jobs.bundesliga_verified_batch_archive --day "$TARGET_DAY" --limit "$LIMIT"
+          fi
