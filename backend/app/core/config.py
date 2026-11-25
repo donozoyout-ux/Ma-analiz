@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     worker_scanner_interval_seconds: int = 1800
     worker_archive_interval_seconds: int = 900
     worker_cleanup_interval_seconds: int = 3600
-    operational_retention_hours: int = Field(default=32, ge=1, le=48)
+    operational_retention_hours: int = Field(default=48, ge=1, le=48)
     operational_delete_enabled: bool = False
     auto_retention_delete_enabled: bool = False
     lifecycle_batch_size: int = Field(default=25, ge=1, le=100)
