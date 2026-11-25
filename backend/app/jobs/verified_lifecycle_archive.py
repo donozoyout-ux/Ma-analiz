@@ -31,7 +31,7 @@ def _validate(session, now):
     if (match is None or match.provider != "openligadb" or
             match.provider_match_id != SOURCE_ID or match.league_id != "de.bl1" or
             match.season != "2026-2027" or match.status != "FINISHED" or
-            utc(match.start_time) != KICKOFF or
+            lc.aware(match.start_time) != KICKOFF or
             match.home_team != "FC Bayern München" or match.away_team != "VfB Stuttgart"):
         raise LifecycleBlocked("TARGET_MATCH_IDENTITY_NOT_VERIFIED")
     results = session.scalars(select(MatchResult).where(MatchResult.match_id == MATCH_ID).limit(2)).all()
@@ -40,7 +40,7 @@ def _validate(session, now):
     result = results[0]
     if (result.status != "FINAL" or result.provider != "openligadb" or
             result.home_score != 5 or result.away_score != 1 or
-            utc(result.verified_at) is None or utc(result.verified_at) > now):
+            result.verified_at is None or lc.aware(result.verified_at) > now):
         raise LifecycleBlocked("TARGET_RESULT_NOT_INDEPENDENTLY_VERIFIED")
     return match, result
 
