@@ -232,7 +232,7 @@ def run(*, mode="dry-run", approval=None, after=None, target=False, settings=Non
                     session.commit()
             elif mode == "auto":
                 phase = "RETENTION"
-                outcome = lifecycle.automatic(session, store, enabled=auto_enabled, **options)
+                outcome = lifecycle.automatic(session, store, enabled=auto_enabled, configured_retention=True, **options)
                 if auto_enabled:
                     if not target:
                         value = {"after_match_id": outcome["scope"]["next_after_match_id"]}
