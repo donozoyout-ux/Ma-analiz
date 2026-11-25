@@ -82,11 +82,14 @@ def store_factory():
         retries={"total_max_attempts": 1}))
 
 
-def day_bounds(day=None, *, now):
+def day_bounds(day=None, *, now, history_only=False):
     if day is not None and not 2000 <= day.year <= 2100:
         raise HTTPException(422,detail="MATCH_DATE_OUT_OF_RANGE")
     end_day = day or now.astimezone(ISTANBUL).date()
-    start_day = day or end_day - timedelta(days=30)
+    # Archive view is not a live fixture feed: older verified records must
+    # be discoverable without entering a specific date. Keep the default
+    # bounded, with a single-date filter available for older partitions.
+    start_day = day or end_day - timedelta(days=119 if history_only else 30)
     return (datetime.combine(start_day, day_time.min, ISTANBUL).astimezone(timezone.utc),
             datetime.combine(end_day+timedelta(days=1), day_time.min, ISTANBUL).astimezone(timezone.utc))
 
@@ -306,7 +309,7 @@ def catalog(session, *, source, cursor, start, end, league):
 
 def list_view(session, *, source="all", day=None, league=None, team="", status=None, cursor=None, limit=12, now=None, store=None):
     now = now or datetime.now(timezone.utc)
-    start,end = day_bounds(day, now=now)
+    start,end = day_bounds(day, now=now, history_only=source == "history")
     ids = catalog(session,source=source,cursor=cursor,start=start,end=end,league=league)
     history = IndexedHistory(session,store=store)
     items, scanned, failed, read = [], 0, 0, 0
