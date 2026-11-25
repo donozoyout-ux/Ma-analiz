@@ -91,6 +91,29 @@ def test_summary_never_contains_raw_payload_or_url():
     assert report["retention_reasons"]=={"ARCHIVE_READBACK_FAILED":1}
 
 
+def test_archive_diagnostics_are_bounded_and_never_include_secret_or_object_key():
+    summary = actions.public_summary({
+        **result("PARTIAL"), "records_failed": 2,
+        "entries": [
+            {"record": "active_matches:private-uuid", "status": "FAILED",
+             "failure_code": "ARCHIVE_OBJECT_CONFLICT", "key": "SECRET_BUCKET/private.parquet",
+             "exception": "DATABASE_URL=SECRET_VALUE"},
+            {"record": "match_results:private-uuid", "status": "HELD",
+             "reasons": ["SECRET_VALUE"]},
+            {"record": "active_matches:private-uuid", "status": "FAILED",
+             "failure_code": "postgres://SECRET_VALUE"},
+        ],
+    })
+    assert summary["archive_failures"] == 2
+    assert summary["archive_failure_codes"] == {
+        "ACTIVE_MATCHES_ARCHIVE_OBJECT_CONFLICT": 1,
+        "MATCH_RESULTS_ARCHIVE_HELD": 1,
+        "ACTIVE_MATCHES_ARCHIVE_UNKNOWN_FAILURE": 1,
+    }
+    encoded = json.dumps(summary)
+    assert "SECRET" not in encoded and "private-uuid" not in encoded
+
+
 def test_watchdog_ignores_manual_dry_runs_for_schedule_freshness():
     now=NOW
     workflow={"state":"active","created_at":(now-timedelta(days=2)).isoformat()}
