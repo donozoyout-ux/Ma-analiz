@@ -80,10 +80,10 @@ def test_authenticated_probe_does_not_log_token():
     class Client:
         def get(self, url, headers, params):
             assert headers == {"X-Auth-Token": "secret-token"}
-            assert params["dateTo"] == "2026-08-29"
+            assert params["dateTo"] == "2026-11-25"
             return Response()
     with pytest.raises(FootballDataFailure, match="REMOTE_UNAVAILABLE") as err:
-        fetch_bundesliga_finals(DAY, token="secret-token", client=Client(), observed_at=NOW)
+        fetch_bundesliga_finals(date(2026, 11, 24), token="secret-token", client=Client(), observed_at=NOW)
     assert "secret-token" not in str(err.value)
 
 
