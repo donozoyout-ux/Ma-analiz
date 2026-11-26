@@ -91,3 +91,63 @@ def test_invalid_or_unbounded_dates_rejected():
         parse_days("2027-11-20",today=NOW.date())
     with pytest.raises(DiscoveryBlocked):
         parse_days("2026-01-01",today=NOW.date())
+
+
+def test_different_source_ids_counted_before_sql_lookup(db):
+    s, m, r = db
+    # Valid cross-provider IDs are intentionally different.
+    out = run(s, days=[DAY], matchday=11,
+              collector=lambda day, md, now: observations(), now=NOW)
+    assert out["matched_both_sources"] == 1
+    assert out["in_postgresql"] == 1
+    assert out["candidate_count"] == 1
+    assert out["candidates"][0]["openligadb_match_id"] == "83156"
+    assert out["candidates"][0]["football_data_match_id"] == "565776"
+
+
+def test_corrob_exception_is_held_without_sql_writes(db, monkeypatch):
+    import app.jobs.bundesliga_candidate_discovery as module
+    s, m, r = db
+
+    def broken(*args):
+        raise ValueError("BAD_SOURCE_PAYLOAD")
+
+    monkeypatch.setattr(module, "corroborate", broken)
+    out = run(s, days=[DAY], matchday=11,
+              collector=lambda day, md, now: observations(), now=NOW)
+    assert out["candidate_count"] == 0
+    assert out["held"][0]["reason"] == "SOURCE_CORROBORATION_FAILED"
+    assert out["sql_writes"] == out["r2_writes"] == 0
+    assert out["sql_delete"] is False
+
+
+def test_source_match_count_independent_of_missing_sql(db):
+    s, m, r = db
+    s.delete(r)
+    s.delete(m)
+    s.commit()
+    out = run(s, days=[DAY], matchday=11,
+              collector=lambda day, md, now: observations(), now=NOW)
+    assert out["matched_both_sources"] == 1
+    assert out["in_postgresql"] == 0
+    assert out["not_in_postgresql"] == 1
+    assert out["held"][0]["reason"] == "SQL_MATCH_NOT_FOUND"
+
+
+def test_multiple_sql_results_held(db, monkeypatch):
+    # Production schema has UNIQUE(match_id); simulate a corrupt query result
+    # without violating the database constraint in a regression fixture.
+    from types import SimpleNamespace
+    s, m, r = db
+    original_scalars = s.scalars
+
+    def scalars_with_duplicate_results(statement, *args, **kwargs):
+        if statement.column_descriptions[0]["entity"] is MatchResult:
+            return SimpleNamespace(all=lambda: [r, r])
+        return original_scalars(statement, *args, **kwargs)
+
+    monkeypatch.setattr(s, "scalars", scalars_with_duplicate_results)
+    out = run(s, days=[DAY], matchday=11,
+              collector=lambda day, md, now: observations(), now=NOW)
+    assert out["candidate_count"] == 0
+    assert out["held"][0]["reason"] == "SQL_MULTIPLE_RESULTS"
