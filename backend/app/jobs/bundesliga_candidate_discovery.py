@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app.analysis.football_data_corroboration import corroborate
 from app.jobs.bundesliga_verified_runner import collect
 from app.models import ActiveMatch, MatchResult
+from app.storage.lifecycle import aware
 from app.providers.result_sources import utc
 
 
@@ -93,7 +94,7 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
             results = session.scalars(select(MatchResult).where(
                 MatchResult.match_id == match.id).limit(2)).all()
             if (match.status != "FINISHED" or
-                    utc(match.start_time) != utc(candidate["start_time"]) or
+                    aware(match.start_time) != utc(candidate["start_time"]) or
                     match.home_team != first[0]["home_team"] or
                     match.away_team != first[0]["away_team"] or
                     len(results) != 1 or results[0].provider != "openligadb" or
