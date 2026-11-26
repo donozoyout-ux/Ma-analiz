@@ -451,16 +451,22 @@ def archive_early(session, store, *, now, hours=48, limit=25, after=None, child_
         if fixture_entries:
             index = session.get(SystemSetting, source_index_key(match))
             if index and index.value.get("match_id") != str(match.id):
+                # Index exists but maps to a DIFFERENT match UUID - this is a conflict.
+                # Never silently reassign the identity link. Preserve the existing mapping
+                # and surface the conflict so operators can investigate.
                 failures += 1
                 blocked_bundles.append({"match_id": str(match.id), "reasons": ["SOURCE_IDENTITY_INDEX_CONFLICT"]})
+                # Do NOT update index.value; keep the existing mapping intact.
             elif not index:
-                # One compact, permanent identity link per source fixture. Never
-                # prune it with operational data or silently reassign its UUID.
+                # No index exists yet - create one compact, permanent identity link
+                # per source fixture. Never prune it with operational data or
+                # silently reassign its UUID.
                 session.add(SystemSetting(key=source_index_key(match), value={
                     "provider": match.provider, "provider_match_id": match.provider_match_id,
                     "match_id": str(match.id), "season": match.season, "league_id": match.league_id,
                     "first_verified_fixture_key": fixture_entries[0]["key"]}))
-                session.commit()
+            # If index exists and match_id matches, no action needed (already correct).
+            session.commit()
     return {"status": "PARTIAL" if failures else "SUCCESS" if written else "SKIPPED", "records_written": written,
             "records_failed": failures, "records_seen": len(entries), "entries": entries, "LIVE_DELETE": "NOT_RUN",
             "blocked_bundles": blocked_bundles,
