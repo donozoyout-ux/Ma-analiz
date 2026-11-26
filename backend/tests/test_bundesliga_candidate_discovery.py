@@ -134,12 +134,19 @@ def test_source_match_count_independent_of_missing_sql(db):
     assert out["held"][0]["reason"] == "SQL_MATCH_NOT_FOUND"
 
 
-def test_multiple_sql_results_held(db):
+def test_multiple_sql_results_held(db, monkeypatch):
+    # Production schema has UNIQUE(match_id); simulate a corrupt query result
+    # without violating the database constraint in a regression fixture.
+    from types import SimpleNamespace
     s, m, r = db
-    s.add(MatchResult(match_id=m.id, provider="openligadb",
-                      home_score=5, away_score=1, status="FINAL",
-                      result_source="OpenLigaDB"))
-    s.commit()
+    original_scalars = s.scalars
+
+    def scalars_with_duplicate_results(statement, *args, **kwargs):
+        if statement.column_descriptions[0]["entity"] is MatchResult:
+            return SimpleNamespace(all=lambda: [r, r])
+        return original_scalars(statement, *args, **kwargs)
+
+    monkeypatch.setattr(s, "scalars", scalars_with_duplicate_results)
     out = run(s, days=[DAY], matchday=11,
               collector=lambda day, md, now: observations(), now=NOW)
     assert out["candidate_count"] == 0
