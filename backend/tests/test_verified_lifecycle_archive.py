@@ -11,7 +11,10 @@ from app.jobs.verified_lifecycle_archive import (
 from app.models import ActiveMatch, MatchResult, ArchiveJob, SystemSetting
 from app.storage.r2 import InMemoryObjectStore
 
-NOW = datetime(2026, 11, 26, 0, tzinfo=timezone.utc)
+# The history reader hides R2 rows whose SQL available_at is after the
+# requested as-of time. A fixed 2026-11-26 test clock became stale as CI
+# passed midnight; use a fresh clock after SQL server timestamps instead.
+NOW = datetime.now(timezone.utc) + timedelta(minutes=5)
 KICKOFF = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
 
 
