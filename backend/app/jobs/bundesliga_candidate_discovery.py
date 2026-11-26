@@ -63,21 +63,26 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
     for day in days:
         try:
             primary, secondary = collector(day, matchday, now=now)
-            decision = corroborate(primary, secondary)
+            # Ensure primary and secondary are always lists
+            if primary is None: primary = []
+            if secondary is None: secondary = []
         except Exception:
+            # collector failed - no data fetched from either API
             report["held"].append({"date": day.isoformat(),
-                                   "reason": "SOURCE_FETCH_OR_PARSE_FAILED"})
-            report["openligadb_fetched"] += len(primary) if primary else 0
-            report["footballdata_fetched"] += len(secondary) if secondary else 0
+                                   "reason": "SOURCE_FETCH_FAILED"})
+            report["openligadb_fetched"] += 0
+            report["footballdata_fetched"] += 0
+            report["reason_code"] = "SOURCE_FETCH_FAILED"
             continue
-        report["openligadb_fetched"] += len(primary) if primary else 0
-        report["footballdata_fetched"] += len(secondary) if secondary else 0
-        if decision["conflicts"] or decision["unmatched"]:
-            report["held"].append({"date": day.isoformat(), "reason": "SOURCE_DISAGREEMENT",
-                                   "conflicts": len(decision["conflicts"]),
-                                   "unmatched": len(decision["unmatched"])})
-            report["reason_code"] = "SOURCE_DISAGREEMENT"
-            continue
+        report["openligadb_fetched"] += len(primary)
+        report["footballdata_fetched"] += len(secondary)
+        if decision := corroborate(primary, secondary):
+            if decision["conflicts"] or decision["unmatched"]:
+                report["held"].append({"date": day.isoformat(), "reason": "SOURCE_DISAGREEMENT",
+                                       "conflicts": len(decision["conflicts"]),
+                                       "unmatched": len(decision["unmatched"])})
+                report["reason_code"] = "SOURCE_DISAGREEMENT"
+                continue
         for candidate in decision["matches"]:
             # Both sources must agree exactly, and both must have been fetched
             # fresh for this observation window. corroborate enforces exact
@@ -94,39 +99,43 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
                 report["held"].append({"date": day.isoformat(), "reason": "STALE_OR_AMBIGUOUS_EVIDENCE"})
                 report["identity_conflicts"] += 1
                 continue
-            fixtures = session.scalars(select(ActiveMatch).where(
-                ActiveMatch.provider == "openligadb",
-                ActiveMatch.provider_match_id == candidate["openligadb_match_id"],
-                ActiveMatch.league_id == "de.bl1",
-                ActiveMatch.season == "2026-2027",
-            ).limit(2)).all()
-            if len(fixtures) != 1:
-                report["held"].append({"date": day.isoformat(),
-                    "source_match_id": candidate["openligadb_match_id"],
-                    "reason": "SQL_MATCH_NOT_UNIQUE_OR_MISSING"})
+            # Safely query MatchResults - handle 0, 1, or multiple results
+            stmt = select(MatchResult).where(MatchResult.match_id == match.id)
+            results = session.scalars(stmt).all()
+            n_results = len(results)
+            # Check all required conditions
+            checks_pass = True
+            if match.status != "FINISHED":
+                checks_pass = False
+                report["kickoff_mismatches"] += 1  # status not finished counts too
+            if n_results == 0:
+                checks_pass = False
                 report["not_in_postgresql"] += 1
-                continue
-            match = fixtures[0]
-            results = session.scalars(select(MatchResult).where(
-                MatchResult.match_id == match.id).limit(2)).all()
-            if (match.status != "FINISHED" or
-                    aware(match.start_time) != utc(candidate["start_time"]) or
-                    match.home_team != first[0]["home_team"] or
-                    match.away_team != first[0]["away_team"] or
-                    len(results) != 1 or results[0].provider != "openligadb" or
-                    results[0].status != "FINAL" or
-                    [results[0].home_score, results[0].away_score] != candidate["score"]):
-                report["held"].append({"date": day.isoformat(),
-                    "source_match_id": candidate["openligadb_match_id"],
-                    "reason": "SQL_FINAL_OR_IDENTITY_CONFLICT"})
-                if match.home_team != first[0]["home_team"] or match.away_team != first[0]["away_team"]:
+                report["reason_code"] = "SQL_MATCH_RESULT_MISSING"
+            elif n_results > 1:
+                checks_pass = False
+                report["identity_conflicts"] += 1
+                report["reason_code"] = "SQL_MULTIPLE_RESULTS"
+            else:
+                result = results[0]
+                # Check all the remaining conditions
+                if (match.home_team != first[0]["home_team"] or
+                    match.away_team != first[0]["away_team"]):
+                    checks_pass = False
                     report["team_name_mismatches"] += 1
                 if aware(match.start_time) != utc(candidate["start_time"]):
+                    checks_pass = False
                     report["kickoff_mismatches"] += 1
-                if [results[0].home_score, results[0].away_score] != candidate["score"]:
+                if result.provider != "openligadb" or result.status != "FINAL" or \
+                   [result.home_score, result.away_score] != candidate["score"]:
+                    checks_pass = False
                     report["score_mismatches"] += 1
-                report["identity_conflicts"] += 1
-                report["reason_code"] = "SQL_FINAL_OR_IDENTITY_CONFLICT"
+                    report["identity_conflicts"] += 1
+                    report["reason_code"] = "SQL_FINAL_OR_IDENTITY_CONFLICT"
+            if not checks_pass:
+                report["held"].append({"date": day.isoformat(),
+                    "source_match_id": candidate["openligadb_match_id"],
+                    "reason": report["reason_code"] or "SQL_FINAL_OR_IDENTITY_CONFLICT"})
                 continue
             report["candidates"].append({
                 "date": day.isoformat(), "match_id": str(match.id),
@@ -142,6 +151,7 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
         report["status"] = "PARTIAL"
     report["candidate_count"] = len(report["candidates"])
     report["held_count"] = len(report["held"])
+    # Set reason_code if no candidates found
     if report["candidate_count"] == 0:
         if report["held"]:
             report["reason_code"] = report["held"][0].get("reason", "NO_CANDIDATES")
