@@ -1,332 +1,204 @@
-"""Read-only Bundesliga coverage and analysis readiness report.
+"""Read-only Bundesliga source-to-SQL coverage report.
 
-Never writes to SQL or R2. Only queries existing data and fetches from
-authorized APIs in dry-run mode. Reports coverage gaps and readiness
-for subsequent controlled ingestion pipelines.
-
-Usage:
-    from app.jobs.bundesliga_coverage_report import generate_coverage_report
-    report = generate_coverage_report(days=[date(2026, 8, 28)], matchday=1)
-    print(report["summary"])
+Source observations are never persisted. An unavailable SQL session or R2
+verification is explicitly UNKNOWN, never counted as complete coverage.
 """
 from __future__ import annotations
 
+import argparse
+from datetime import date, datetime, timedelta, time, timezone
 import json
-from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from app.analysis.football_data_corroboration import corroborate
 from app.jobs.bundesliga_verified_runner import collect
-from app.providers.football_data_org import fetch_bundesliga_finals
 from app.models import ActiveMatch, MatchResult
-from app.core.config import get_settings
+from app.providers.result_sources import utc
+from app.storage.lifecycle import aware
 
 
-DISCOVERY_BLOCKED = (
-    get_settings().operational_delete_enabled
-    or get_settings().auto_retention_delete_enabled
-)
-
-
-class CoverageReportException(Exception):
+class CoverageReportException(ValueError):
     pass
 
 
-def _validate_days(days: list[date]) -> None:
-    if not 1 <= len(days) <= 3:
-        raise CoverageReportException("DAYS_MUST_BE_1_TO_3")
-    today = datetime.now(timezone.utc).date()
-    for d in days:
-        if d < today - timedelta(days=120) or d > today:
-            raise CoverageReportException(
-                f"DAY_OUT_OF_RANGE: {d.isoformat()}"
-            )
-
-
-def _fetch_matches(days: list[date], matchday: int) -> dict[date, tuple[list[dict], list[dict], str]]:
-    """Fetch from both APIs in dry-run mode. Returns day -> (primary, secondary, error)."""
-    results: dict[date, tuple[list[dict], list[dict], str]] = {}
-    for day in days:
-        try:
-            primary, secondary = collect(day, matchday, now=datetime.now(timezone.utc))
-            if primary is None: primary = []
-            if secondary is None: secondary = []
-            results[day] = (primary, secondary, "")
-        except Exception as exc:
-            results[day] = ([], [], str(exc))
-    return results
-
-
-def _query_postgresql(session: Session, days: list[date]) -> dict[date, dict[str, Any]]:
-    """Query existing ActiveMatch + MatchResult records from PostgreSQL/SQLite."""
-    report: dict[date, dict[str, Any]] = {}
-    for day in days:
-        matches = session.scalars(
-            select(ActiveMatch).where(
-                ActiveMatch.league_id == "de.bl1",
-                ActiveMatch.season == "2026-2027",
-                ActiveMatch.start_time >= day,
-                ActiveMatch.start_time < day + timedelta(days=1),
-            )
-        ).all()
-        match_ids = [m.id for m in matches]
-        results = {}
-        if match_ids:
-            match_results = session.scalars(
-                select(MatchResult).where(MatchResult.match_id.in_(match_ids))
-            ).all()
-            for m in matches:
-                rr = [r for r in match_results if r.match_id == m.id]
-                results[m.provider_match_id] = {
-                    "home_team": m.home_team,
-                    "away_team": m.away_team,
-                    "status": m.status,
-                    "home_score": rr[0].home_score if rr else None,
-                    "away_score": rr[0].away_score if rr else None,
-                    "verified_at": rr[0].verified_at is not None if rr else False,
-                    "provider": rr[0].provider if rr else m.provider,
-                }
-        else:
-            results = {"<no_matches>": {"reason": "NO_SQL_MATCHES_FOUND"}}
-        report[day] = {
-            "sql_matches": len(matches),
-            "sql_match_details": results,
-        }
-    return report
-
-
-def _r2_archive_check(days: list[date]) -> dict[date, dict[str, Any]]:
-    """Check R2 Parquet archive existence (read-only, in-memory check only)."""
-    from app.storage.r2 import InMemoryObjectStore
-    from app.core.config import get_settings
-    settings = get_settings()
-    if not settings.r2_configured:
-        return {d.isoformat(): {"r2_status": "R2_NOT_CONFIGURED"} for d in days}
-
-    store = InMemoryObjectStore(settings=settings)
-    report: dict[date, dict[str, Any]] = {}
-    for day in days:
-        keys = list(store.list_keys(prefix=f"bundesliga/{day.isoformat()}"))
-        report[day.isoformat()] = {
-            "r2_status": "CONFIGURED" if keys else "R2_EMPTY",
-            "archived_keys": keys[:10],
-        }
-    return report
+def _validate_days(days: list[date], today: date) -> None:
+    if not 1 <= len(days) <= 3 or len(days) != len(set(days)):
+        raise CoverageReportException("ONE_TO_THREE_DISTINCT_DAYS_REQUIRED")
+    if any(d < today - timedelta(days=120) or d > today or
+           (d.year if d.month >= 7 else d.year - 1) != 2026 for d in days):
+        raise CoverageReportException("INVALID_SEASON_OR_DATE")
 
 
 def generate_coverage_report(
-    *,
-    days: list[date] | None = None,
-    matchday: int | None = None,
-    today: date | None = None,
-    session: Session | None = None,
+    *, days: list[date] | None = None, matchday: int = 1,
+    today: date | None = None, session: Session | None = None,
+    collector=collect, archive_checker=None,
 ) -> dict[str, Any]:
-    """Generate read-only Bundesliga coverage report.
+    """Read only, bounded to 3 days and 2 source calls per day.
 
-    Keyword args:
-        days: list of date objects (default: last 3 days from today)
-        matchday: Bundesliga matchday (1-34, default: 1)
-        today: reference date for default days (default: now)
-        session: SQLAlchemy Session (optional; if not provided, SQL queries
-                 are skipped and report notes session-unavailable)
-
-    Returns dict with coverage metrics and readiness status.
-    Never writes to SQL or R2.
+    archive_checker is an optional trusted, read-only verification callback
+    taking (match, result) and returning True only for independently verified
+    R2 readback/receipt. None means NOT_CHECKED, never a negative assertion.
     """
-    if today is None:
-        today = datetime.now(timezone.utc).date()
-    if days is None:
-        days = [today - timedelta(days=i) for i in range(2, -1, -1)]
-    _validate_days(days)
+    today = today or datetime.now(timezone.utc).date()
+    days = days if days is not None else [today - timedelta(days=i) for i in (2, 1, 0)]
+    _validate_days(days, today)
+    if type(matchday) is not int or not 1 <= matchday <= 34:
+        raise CoverageReportException("INVALID_MATCHDAY")
 
-    if DISCOVERY_BLOCKED:
+    from app.core.config import get_settings
+    settings = get_settings()
+    if settings.operational_delete_enabled or settings.auto_retention_delete_enabled:
         raise CoverageReportException("DELETE_GATES_MUST_BE_DISABLED")
 
-    if matchday is None:
-        matchday = 1
-    if not 1 <= matchday <= 34:
-        raise CoverageReportException("MATCHDAY_MUST_BE_1_TO_34")
-
-    # Fetch from both APIs (always dry-run, no writes)
-    fetched: dict[date, tuple[list[dict], list[dict], str]] = _fetch_matches(days, matchday)
-
-    # Query PostgreSQL if session provided
-    if session is not None:
-        pg_status = _query_postgresql(session, days)
-    else:
-        pg_status = {
-            day: {"sql_matches": 0, "sql_match_details": {"<no_session>": {"reason": "SQL_SESSION_REQUIRED"}}}
-            for day in days
-        }
-
-    # Check R2 archive (read-only check)
-    r2_status = _r2_archive_check(days)
-
-    # Build report data
-    total_fetched = 0
-    total_sql = 0
-    total_missing = 0
-    candidates_for_analysis = []
-    reasons: list[str] = []
-    sql_session_missing = session is None
-
+    report: dict[str, Any] = {
+        "operation": "BUNDESLIGA_READ_ONLY_COVERAGE_REPORT",
+        "days": [d.isoformat() for d in days], "matchday": matchday,
+        "fetched": {"openligadb": 0, "football_data_org": 0},
+        "matched_both_sources": 0, "postgresql": {"total_sql_matches": 0, "days": {}},
+        "missing_from_sql": 0, "candidates_for_analysis": [],
+        "held": [], "r2_archive": {}, "verified_r2_archives": 0,
+        "sql_writes": 0, "r2_writes": 0, "sql_delete": False,
+        "verified_at_modified": False, "api_requests_max": 2 * len(days),
+    }
     for day in days:
         day_str = day.isoformat()
-        primary, secondary, fetch_error = fetched.get(day, ([], [], "FETCH_ERROR"))
-        sql_info = pg_status.get(day, {"sql_matches": 0, "sql_match_details": {}})
-        r_info = r2_status.get(day_str, {"r2_status": "R2_NOT_CONFIGURED"})
+        report["postgresql"]["days"][day_str] = None if session is None else 0
+        report["r2_archive"][day_str] = {"r2_status": "NOT_CHECKED"}
+        try:
+            primary, secondary = collector(day, matchday, now=datetime.now(timezone.utc))
+            if not isinstance(primary, list) or not isinstance(secondary, list):
+                raise ValueError("INVALID_SOURCE_PAYLOAD")
+            report["fetched"]["openligadb"] += len(primary)
+            report["fetched"]["football_data_org"] += len(secondary)
+            decision = corroborate(primary, secondary)
+        except Exception:
+            report["held"].append({"date": day_str, "reason": "SOURCE_FETCH_OR_PARSE_FAILED"})
+            continue
 
-        n_primary = len(primary)
-        n_secondary = len(secondary)
-        total_fetched += n_primary + n_secondary
+        if decision["conflicts"] or decision["unmatched"]:
+            report["held"].append({"date": day_str, "reason": "SOURCE_DISAGREEMENT",
+                                   "conflicts": len(decision["conflicts"]),
+                                   "unmatched": len(decision["unmatched"])})
+        report["matched_both_sources"] += len(decision["matches"])
+        if session is None:
+            if decision["matches"]:
+                report["held"].append({"date": day_str, "reason": "SQL_SESSION_REQUIRED"})
+            continue
 
-        n_sql = sql_info.get("sql_matches", 0)
-        total_sql += n_sql
+        start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+        end = start + timedelta(days=1)
+        fixtures = session.scalars(select(ActiveMatch).where(
+            ActiveMatch.league_id == "de.bl1",
+            ActiveMatch.season == "2026-2027",
+            ActiveMatch.start_time >= start, ActiveMatch.start_time < end,
+        )).all()
+        report["postgresql"]["days"][day_str] = len(fixtures)
+        report["postgresql"]["total_sql_matches"] += len(fixtures)
 
-        missing = max(0, n_primary + n_secondary - n_sql) if n_primary + n_secondary > 0 else 0
-        total_missing += missing
+        by_id: dict[str, list] = {}
+        for m in fixtures:
+            if m.provider == "openligadb":
+                by_id.setdefault(str(m.provider_match_id), []).append(m)
+        for candidate in decision["matches"]:
+            source_id = candidate["openligadb_match_id"]
+            matching = by_id.get(source_id, [])
+            if len(matching) != 1:
+                reason = "SQL_MATCH_NOT_FOUND" if not matching else "SQL_MULTIPLE_MATCHES"
+                report["held"].append({"date": day_str, "source_match_id": source_id,
+                                       "reason": reason})
+                if not matching:
+                    report["missing_from_sql"] += 1
+                continue
+            match = matching[0]
+            results = session.scalars(select(MatchResult).where(
+                MatchResult.match_id == match.id).limit(2)).all()
+            observations = [x for x in primary if x.get("provider") == "openligadb"
+                            and str(x.get("source_match_id")) == source_id]
+            if len(observations) != 1 or len(results) != 1:
+                reason = "SQL_MULTIPLE_RESULTS" if len(results) > 1 else (
+                    "SQL_MATCH_RESULT_MISSING" if not results else "AMBIGUOUS_SOURCE_ID")
+                report["held"].append({"date": day_str, "source_match_id": source_id,
+                                       "reason": reason})
+                continue
+            result = results[0]
+            source = observations[0]
+            if (match.status != "FINISHED" or result.status != "FINAL" or
+                result.provider != "openligadb" or
+                aware(match.start_time) != utc(candidate["start_time"]) or
+                match.home_team != source["home_team"] or
+                match.away_team != source["away_team"] or
+                [result.home_score, result.away_score] != candidate["score"]):
+                report["held"].append({"date": day_str, "source_match_id": source_id,
+                                       "reason": "SQL_FINAL_OR_IDENTITY_CONFLICT"})
+                continue
+            # SQL verified_at is not by itself proof of a valid R2 archive.
+            archive_status = "NOT_CHECKED"
+            if archive_checker is not None:
+                try:
+                    archive_status = "VERIFIED" if archive_checker(match, result) is True else "UNVERIFIED"
+                except Exception:
+                    archive_status = "CHECK_FAILED"
+            if archive_status == "VERIFIED":
+                report["verified_r2_archives"] += 1
+            report["r2_archive"][day_str]["r2_status"] = archive_status
+            report["candidates_for_analysis"].append({
+                "date": day_str, "match_id": str(match.id),
+                "openligadb_match_id": source_id,
+                "football_data_match_id": candidate["football_data_match_id"],
+                "home_team": match.home_team, "away_team": match.away_team,
+                "home_score": result.home_score, "away_score": result.away_score,
+                "independently_corrob_observed": True,
+                "sql_verified": result.verified_at is not None,
+                "r2_status": archive_status,
+            })
 
-        # Check if any candidates for analysis (finished, verified, scores match)
-        for pm_id, pdata in sql_info.get("sql_match_details", {}).items():
-            if pdata.get("status") == "FINISHED" and pdata.get("verified_at") and \
-               pdata.get("home_score") is not None and pdata.get("away_score") is not None:
-                candidates_for_analysis.append({
-                    "date": day_str,
-                    "match_id": pm_id,
-                    "home_team": pdata["home_team"],
-                    "away_team": pdata["away_team"],
-                    "home_score": pdata["home_score"],
-                    "away_score": pdata["away_score"],
-                    "verified": pdata.get("verified_at") is not None,
-                })
-
-        # Reasons per day
-        day_reasons: list[str] = []
-        if n_primary == 0 and n_secondary == 0:
-            day_reasons.append("NO_MATCHES_FETCHED")
-            reasons.append("NO_MATCHES_FETCHED")
-        if n_sql == 0 and n_primary + n_secondary > 0:
-            day_reasons.append("NO_SQL_MATCHES")
-            reasons.append("NO_SQL_MATCHES")
-        if r_info.get("r2_status") == "R2_NOT_CONFIGURED":
-            day_reasons.append("R2_NOT_CONFIGURED")
-            reasons.append("R2_NOT_CONFIGURED")
-        if not candidates_for_analysis and n_sql > 0 and sql_session_missing:
-            day_reasons.append("SQL_SESSION_REQUIRED")
-        if not candidates_for_analysis and n_sql > 0 and not sql_session_missing:
-            day_reasons.append("NO_ANALYSIS_READY_DATA")
-
-        if day_reasons:
-            reasons.extend(day_reasons)
-
-    # Determine overall readiness
-    if sql_session_missing:
-        readiness = "SESSION_REQUIRED"
-        reason_code = "SQL_SESSION_REQUIRED"
-    elif total_missing == 0 and candidates_for_analysis and "R2_NOT_CONFIGURED" not in reasons:
+    candidates = report["candidates_for_analysis"]
+    if session is None:
+        reason = "SQL_SESSION_REQUIRED"
+        readiness = "UNKNOWN"
+    elif report["held"]:
+        reason = report["held"][0]["reason"]
+        readiness = "PARTIAL" if candidates else "NOT_READY"
+    elif not candidates:
+        reason = "NO_MATCHES_FETCHED" if not sum(report["fetched"].values()) else "NO_MATCHES_CORROBORATED"
+        readiness = "NOT_READY"
+    elif all(x["sql_verified"] and x["r2_status"] == "VERIFIED" for x in candidates):
+        reason = "FULL_COVERAGE"
         readiness = "READY"
-        reason_code = "FULL_COVERAGE"
-    elif total_sql == 0 and total_fetched > 0:
-        readiness = "NOT_READY"
-        reason_code = "NO_SQL_RECORDS"
-    elif total_fetched == 0:
-        readiness = "NOT_READY"
-        reason_code = "NO_MATCHES_FETCHED"
     else:
-        readiness = "PARTIALLY_READY"
-        reason_code = "PARTIAL_COVERAGE"
-
-    # Build summary parts
-    n_ol = len([p for d in fetched.values() for p in d[0]])
-    n_fd = len([s for d in fetched.values() for s in d[1]])
-    r2_vals = [v.get("r2_status") for v in r2_status.values()]
-    r2_status_val = r2_vals[0] if r2_vals else "unknown"
-
-    summary_parts = []
-    summary_parts.append(f"Bundesliga Coverage Report ({len(days)} days, Matchday {matchday})")
-    summary_parts.append(f"  Fetched from APIs: {total_fetched} ({n_ol} openligadb, {n_fd} football-data.org)")
-    summary_parts.append(f"  In PostgreSQL: {total_sql} matches")
-    summary_parts.append(f"  Missing from SQL: {total_missing} matches")
-    summary_parts.append(f"  R2 Archive: {r2_status_val}")
-    summary_parts.append(f"  Candidates for analysis: {len(candidates_for_analysis)}")
-    if reasons:
-        summary_parts.append(f"  Coverage Issues: {', '.join(set(reasons))}")
-    summary_parts.append(f"  Readiness: {readiness}")
-
-    report = {
-        "summary": "\n".join(summary_parts),
-        "total_days": len(days),
-        "days": [d.isoformat() for d in days],
-        "matchday": matchday,
-        "fetched": {
-            "openligadb": n_ol,
-            "football_data_org": n_fd,
-        },
-        "postgresql": {
-            "total_sql_matches": total_sql,
-            "days": {day.isoformat(): sql_info.get("sql_matches", 0) for day, sql_info in pg_status.items()},
-        },
-        "r2_archive": r2_status,
-        "missing_from_sql": total_missing,
-        "candidates_for_analysis": candidates_for_analysis,
-        "readiness": readiness,
-        "reason_code": reason_code,
-        "operation": "BUNDESLIGA_READ_ONLY_COVERAGE_REPORT",
-        "sql_writes": 0,
-        "r2_writes": 0,
-        "sql_delete": False,
-        "verified_at_modified": False,
-    }
-
+        reason = "R2_OR_SQL_VERIFICATION_INCOMPLETE"
+        readiness = "PARTIAL"
+    report["reason_code"] = reason
+    report["readiness"] = readiness
+    report["summary"] = (
+        f"Bundesliga coverage: {report['matched_both_sources']} cross-source matches; "
+        f"{report['postgresql']['total_sql_matches']} SQL fixtures; "
+        f"{report['missing_from_sql']} missing SQL fixtures; "
+        f"{len(candidates)} candidate rows; "
+        f"{report['verified_r2_archives']} independently checked R2 archives; "
+        f"readiness={readiness} ({reason})"
+    )
     return report
 
 
 def main(argv=None) -> int:
-    """CLI entry point for generating coverage report."""
-    import argparse
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--days", required=False, default=None,
-                        help="Comma-separated ISO dates, e.g. 2026-08-28,2026-08-29")
-    parser.add_argument("--matchday", type=int, default=1, choices=range(1, 35),
-                        help="Bundesliga matchday (1-34)")
-    parser.add_argument("--session", default=None, help="SQLAlchemy connection string")
+    parser.add_argument("--days", default=None)
+    parser.add_argument("--matchday", type=int, default=1)
     args = parser.parse_args(argv)
-
-    # Parse days
-    days: list[date] | None = None
-    if args.days:
-        try:
-            days = [date.fromisoformat(p.strip()) for p in args.days.split(",")]
-        except ValueError:
-            print(json.dumps({"error": "INVALID_DATE_FORMAT"}))
-            return 2
-
-    # Create session if connection string provided
-    from sqlalchemy import create_engine
-    session = None
-    if args.session:
-        engine = create_engine(args.session)
-        session = sessionmaker(bind=engine)()
-
     try:
-        report = generate_coverage_report(days=days, matchday=args.matchday, session=session)
-    except CoverageReportException as exc:
-        print(json.dumps({"status": "BLOCKED", "reason": str(exc)}))
+        days = [date.fromisoformat(p.strip()) for p in args.days.split(",")] if args.days else None
+        # No implicit production credentials or SQL session: explicitly UNKNOWN.
+        report = generate_coverage_report(days=days, matchday=args.matchday)
+    except (CoverageReportException, ValueError):
+        print(json.dumps({"status": "BLOCKED", "reason": "INVALID_DISCOVERY_SCOPE"}))
         return 2
-    except Exception as exc:
-        print(json.dumps({"status": "ERROR", "reason": f"REPORT_FAILED: {str(exc)}"}))
-        return 1
-
-    # Output
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=False, indent=2, default=str)
-        print(json.dumps({"status": "WROTTEN", "path": args.out}))
-    else:
-        print(json.dumps(report, ensure_ascii=False, default=str, indent=2))
-
-    return 0 if report["readiness"] in ("READY", "PARTIALLY_READY", "SESSION_REQUIRED") else 2
+    print(json.dumps(report, ensure_ascii=False, default=str))
+    return 0 if report["readiness"] in ("READY", "PARTIAL", "UNKNOWN") else 2
 
 
 if __name__ == "__main__":
