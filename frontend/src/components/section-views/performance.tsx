@@ -1,2 +1,3 @@
 import { PerformancePanel } from "@/components/performance-panel";
-export default function Performance(){ return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / SONUÇ TAKİBİ</div><h1 className="title">Tahmin performansı</h1><p className="page-intro">Tahminlerle gerçekleşen sonuçları ayrı değerlendirin. Günlük sonuçları dönem bazında inceleyin.</p></div></header><PerformancePanel /></>; }
+import { BundesligaTeamPerformance } from "@/components/bundesliga-team-performance";
+export default function Performance(){ return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / SONUÇ TAKİBİ</div><h1 className="title">Tahmin performansı</h1><p className="page-intro">Tahminlerle gerçekleşen sonuçları ayrı değerlendirin. Günlük sonuçları dönem bazında inceleyin.</p></div></header><BundesligaTeamPerformance /><PerformancePanel /></>; }
