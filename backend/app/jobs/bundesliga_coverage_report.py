@@ -189,11 +189,29 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", default=None)
     parser.add_argument("--matchday", type=int, default=1)
+    parser.add_argument("--read-sql", action="store_true",
+                        help="Explicit opt-in to read existing SQL using a read-only transaction")
     args = parser.parse_args(argv)
     try:
         days = [date.fromisoformat(p.strip()) for p in args.days.split(",")] if args.days else None
-        # No implicit production credentials or SQL session: explicitly UNKNOWN.
-        report = generate_coverage_report(days=days, matchday=args.matchday)
+        if args.read_sql:
+            from app.db.session import SessionLocal
+            if SessionLocal is None:
+                raise CoverageReportException("DATABASE_NOT_CONFIGURED")
+            from sqlalchemy import text
+            with SessionLocal() as session:
+                # PostgreSQL blocks every data-changing statement in this transaction.
+                if session.get_bind().dialect.name != "postgresql":
+                    raise CoverageReportException("POSTGRESQL_REQUIRED_FOR_SQL_READ")
+                session.execute(text("SET TRANSACTION READ ONLY"))
+                try:
+                    report = generate_coverage_report(
+                        days=days, matchday=args.matchday, session=session)
+                finally:
+                    session.rollback()
+        else:
+            # No implicit production credentials or SQL session: explicitly UNKNOWN.
+            report = generate_coverage_report(days=days, matchday=args.matchday)
     except (CoverageReportException, ValueError):
         print(json.dumps({"status": "BLOCKED", "reason": "INVALID_DISCOVERY_SCOPE"}))
         return 2
