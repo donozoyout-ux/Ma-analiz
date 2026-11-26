@@ -398,7 +398,10 @@ def automatic(session, store, *, enabled, now, **options):
     AUTO enablement is separate from the manual gate. No supplied approval digest
     is trusted here: the system produces one and execute recomputes it under locks.
     """
-    options["hours"] = 48
+    # Preserve the legacy 48h direct-call contract unless an explicitly configured
+    # scheduler opts into the new policy. Deletion itself has a separate hard gate.
+    configured = options.pop("configured_retention", False)
+    options["hours"] = options.get("hours", 48) if configured else 48
     if not enabled:
         report, _ = plan(session, store, now=now, **options)
         return {**report, "auto_delete_enabled": False, "reason": "AUTO_RETENTION_DELETE_DISABLED"}
@@ -411,6 +414,27 @@ def automatic(session, store, *, enabled, now, **options):
     result = execute(session, store, approval=digest, enabled=True, now=now, trigger="automatic", **options)
     return {**result, "auto_delete_enabled": True, "generated_plan_digest": digest,
             "archive_repair": repair}
+
+
+def archive_failure_code(exc):
+    """Stable allowlisted code only; never expose provider, SQL or S3 exception strings."""
+    known = {
+        "ARCHIVE_LEDGER_NOT_VERIFIED", "ARCHIVE_RECEIPT_MISMATCH",
+        "ARCHIVE_CONTENT_MISMATCH", "ARCHIVE_READBACK_FAILED",
+        "SQL_SNAPSHOT_CHANGED",
+    }
+    message = str(exc)
+    if message in known:
+        return message
+    # These are module-defined, constant messages, not raw remote error text.
+    constants = {
+        "Previously verified archive failed re-verification": "PREVIOUS_ARCHIVE_REVERIFICATION_FAILED",
+        "Conflicting archive object exists; refusing to overwrite it": "ARCHIVE_OBJECT_CONFLICT",
+        "Archive object existence check failed; source records must be retained": "R2_OBJECT_CHECK_FAILED",
+    }
+    if message in constants and type(exc) is RuntimeError:
+        return constants[message]
+    return "ARCHIVE_WRITE_OR_VERIFY_FAILED"
 
 
 def archive_early(session, store, *, now, hours=48, limit=25, after=None, child_limit=500, target=False):
@@ -443,10 +467,12 @@ def archive_early(session, store, *, now, hours=48, limit=25, after=None, child_
                 written += int(previous != "VERIFIED")
                 entries.append({"record": reference(entity), "status": "VERIFIED", "key": record.key,
                                 "sha256": record.checksum, "row_count": 1, "content": "PASS"})
-            except Exception:
+            except Exception as exc:
                 session.rollback()
                 failures += 1
-                entries.append({"record": reference(entity), "status": "FAILED", "reasons": ["ARCHIVE_FAILED_RETRY_NEXT_CYCLE"]})
+                entries.append({"record": reference(entity), "status": "FAILED",
+                                "reasons": ["ARCHIVE_FAILED_RETRY_NEXT_CYCLE"],
+                                "failure_code": archive_failure_code(exc)})
         fixture_entries = [e for e in entries if e["record"] == reference(match) and e["status"] == "VERIFIED"]
         if fixture_entries:
             index = session.get(SystemSetting, source_index_key(match))

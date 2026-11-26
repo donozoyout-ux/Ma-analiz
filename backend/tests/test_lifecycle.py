@@ -16,7 +16,10 @@ from app.models import (ActiveMatch, ActiveOdds, ActiveStatistic, ArchiveJob, Co
 from app.storage import lifecycle as lc
 from app.storage.r2 import InMemoryObjectStore
 
-NOW = datetime(2026, 11, 25, 12, tzinfo=timezone.utc)
+# Synthetic fixtures must never be observed before their DB server-created
+# available_at timestamps. A hard-coded timestamp can become stale in CI.
+NOW = max(datetime(2026, 11, 25, 12, tzinfo=timezone.utc),
+          datetime.now(timezone.utc) + timedelta(minutes=5))
 
 
 @compiles(JSONB, "sqlite")

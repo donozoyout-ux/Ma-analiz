@@ -4,6 +4,7 @@ Explicit TEST_POSTGRES_URL must point to loopback and db stage7h_ci.
 No production DATABASE_URL, R2 network, or cleanup workflow permitted.
 """
 import os
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 import pytest
@@ -57,7 +58,10 @@ def test_postgres_fk_and_verified_cleanup_to_r2_history(session):
     assert session.query(MatchResult).count() == 0
     assert session.query(ArchiveJob).count() == 2 and store._objects == original
     assert session.query(JobRun).filter_by(job_type="retention_cleanup").count() == 1
-    detail = api.detail_view(session, match.id, now=NOW, store=store)
+    # Archived snapshots cannot be visible before their actual available_at timestamp.
+    # NOW is a synthetic cleanup clock; CI may run after it on the same calendar day.
+    read_at = max(NOW, datetime.now(timezone.utc))
+    detail = api.detail_view(session, match.id, now=read_at, store=store)
     assert detail["storage"] == "R2" and detail["result"]["home_score"] == 1
 
 

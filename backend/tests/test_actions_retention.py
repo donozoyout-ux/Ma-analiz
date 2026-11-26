@@ -91,6 +91,42 @@ def test_summary_never_contains_raw_payload_or_url():
     assert report["retention_reasons"]=={"ARCHIVE_READBACK_FAILED":1}
 
 
+def test_archive_diagnostics_are_bounded_and_never_include_secret_or_object_key():
+    summary = actions.public_summary({
+        **result("PARTIAL"), "records_failed": 2,
+        "entries": [
+            {"record": "active_matches:private-uuid", "status": "FAILED",
+             "failure_code": "ARCHIVE_OBJECT_CONFLICT", "key": "SECRET_BUCKET/private.parquet",
+             "exception": "DATABASE_URL=SECRET_VALUE"},
+            {"record": "match_results:private-uuid", "status": "HELD",
+             "reasons": ["SECRET_VALUE"]},
+            {"record": "active_matches:private-uuid", "status": "FAILED",
+             "failure_code": "postgres://SECRET_VALUE"},
+        ],
+    })
+    assert summary["archive_failures"] == 2
+    assert summary["archive_failure_codes"] == {
+        "ACTIVE_MATCHES_ARCHIVE_OBJECT_CONFLICT": 1,
+        "MATCH_RESULTS_ARCHIVE_HELD": 1,
+        "ACTIVE_MATCHES_ARCHIVE_UNKNOWN_FAILURE": 1,
+    }
+    encoded = json.dumps(summary)
+    assert "SECRET" not in encoded and "private-uuid" not in encoded
+
+
+def test_unverified_result_is_reported_as_pending_without_exposing_match_id():
+    summary = actions.public_summary({
+        **result("PARTIAL"), "records_failed": 1,
+        "entries": [
+            {"record": "match_results:PRIVATE_ID", "status": "HELD",
+             "reasons": ["RESULT_NOT_VERIFIED"]},
+        ],
+    })
+    assert summary["archive_failure_codes"] == {"MATCH_RESULTS_RESULT_NOT_VERIFIED": 1}
+    assert summary["archive_failures"] == 1
+    assert "PRIVATE_ID" not in json.dumps(summary)
+
+
 def test_watchdog_ignores_manual_dry_runs_for_schedule_freshness():
     now=NOW
     workflow={"state":"active","created_at":(now-timedelta(days=2)).isoformat()}
@@ -126,7 +162,11 @@ def test_workflow_is_pinned_least_privilege_and_push_is_dry_run():
     assert "contents: read" in workflow
     assert "github.event_name != 'pull_request' &&" in workflow  # PR tests cannot access the retention job
     assert "github.event_name != 'push'" in workflow and "default: dry-run" in workflow
-    assert "vars.AUTO_RETENTION_DELETE_ENABLED == 'true'" in workflow
+    # Production deletion is enabled solely for the hourly scheduled auto slot.
+    # Manual dispatches, push and PR cannot activate destructive cleanup.
+    assert "github.event_name == 'schedule' && github.event.schedule == '2 * * * *' && vars.AUTO_RETENTION_DELETE_ENABLED == 'true' && 'true' || 'false'" in workflow
+    assert "OPERATIONAL_DELETE_ENABLED: 'false'" in workflow
+    assert "AUTO_RETENTION_DELETE_ENABLED: ${{" in workflow
     assert 'if [ "$RETENTION_MODE" = auto ]' in workflow and '--mode dry-run' in workflow
     for name in actions.REQUIRED:assert "${{ secrets."+name+" }}" in workflow
     for line in workflow.splitlines():
