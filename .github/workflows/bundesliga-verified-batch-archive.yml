@@ -1,0 +1,169 @@
+name: Bundesliga Verified Batch Archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Target branch (default: main)'
+        required: false
+        default: main
+      day:
+        description: 'Target date (YYYY-MM-DD)'
+        required: false
+        default: '2026-08-28'
+      limit:
+        description: 'Maximum number of matches to process'
+        required: false
+        default: '10'
+      mode:
+        description: 'dry-run never deletes; archive writes immutable snapshots; auto uses the repository variable'
+        required: false
+        type: choice
+        options: [dry-run, archive, auto]
+        default: dry-run
+      approval:
+        description: 'Approval digest for archive mode (leave empty for dry-run)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  AUTO_RETENTION_DELETE_ENABLED: 'false'
+  OPERATIONAL_DELETE_ENABLED: 'false'
+  PYTHONUNBUFFERED: '1'
+
+concurrency:
+  group: ma-analiz-bundesliga-verified-batch-${{ github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  validate-secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      has_db: ${{ steps.check.outputs.database_url }}
+      has_r2: ${{ steps.check.outputs.r2_all }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check required secrets
+        id: check
+        run: |
+          echo "database_url=${{ secrets.DATABASE_URL }}" >> $GITHUB_OUTPUT
+          r2_ok=true
+          for var in R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+            if [ -z "${{ secrets.$var }}" ]; then
+              echo "Missing secret: $var"
+              r2_ok=false
+            fi
+          done
+          echo "r2_all=$r2_ok" >> $GITHUB_OUTPUT
+
+  probe-openligadb:
+    runs-on: ubuntu-latest
+    needs: validate-secrets
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: OpenLigaDB connectivity test
+        id: probe
+        working-directory: backend
+        run: |
+          python -c "
+          from app.providers.openligadb import OpenLigaDBProvider
+          p = OpenLigaDBProvider(timeout_seconds=10, requests_per_minute=1)
+          health = p.health_check()
+          print('PROBE_STATUS:' + health['status'])
+          print('PROBE_LATENCY:' + str(health.get('latency_ms', 'unknown')))
+          if health['status'] != 'PROVIDER_OK':
+            exit(1)
+          p.close()
+          "
+        continue-on-error: true
+      - name: Report provider connectivity
+        run: |
+          if [ "${{ steps.probe.outcome }}" = "success" ]; then
+            echo "OpenLigaDB: ONLINE"
+          else
+            echo "OpenLigaDB: OFFLINE or DEGRADED"
+          fi
+
+  batch-archive:
+    runs-on: ubuntu-latest
+    needs: [validate-secrets, probe-openligadb]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r backend/requirements.txt
+      - name: Set target parameters
+        id: params
+        run: |
+          BRANCH="${{ inputs.branch }}"
+          DAY="${{ inputs.day }}"
+          LIMIT="${{ inputs.limit }}"
+          MODE="${{ inputs.mode }}"
+          APPROVAL="${{ inputs.approval }}"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "day=$DAY" >> $GITHUB_OUTPUT
+          echo "limit=$LIMIT" >> $GITHUB_OUTPUT
+          echo "mode=$MODE" >> $GITHUB_OUTPUT
+          echo "approval=$APPROVAL" >> $GITHUB_OUTPUT
+      - name: Run Bundesliga verified batch archive (dry-run)
+        working-directory: backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_REGION: auto
+          AUTO_RETENTION_DELETE_ENABLED: 'false'
+          OPERATIONAL_DELETE_ENABLED: 'false'
+        run: |
+          branch="${{ steps.params.outputs.branch }}"
+          day="${{ steps.params.outputs.day }}"
+          limit="${{ steps.params.outputs.limit }}"
+          mode="${{ steps.params.outputs.mode }}"
+          approval="${{ steps.params.outputs.approval }}"
+
+          echo "=== Bundesliga Verified Batch Archive ==="
+          echo "Branch: $branch"
+          echo "Day: $day"
+          echo "Limit: $limit"
+          echo "Mode: $mode"
+          echo "Approval: $approval"
+
+          if [ "$mode" = "archive" ] && [ -n "$approval" ]; then
+            echo "LIVE MODE: Executing SQL + R2 archive writes with approval: $approval"
+            python -m app.jobs.actions_retention --mode archive --approval "$approval" --day "$day" --limit "$limit"
+          elif [ "$mode" = "auto" ]; then
+            echo "AUTO MODE: Retention auto-delete (gated)"
+            python -m app.jobs.actions_retention --mode auto
+          else
+            echo "DRY-RUN MODE: Read-only probe (no SQL or R2 writes)"
+            python -m app.jobs.actions_retention --mode dry-run
+          fi
+          echo "=== Dry-run complete: no data modified ==="
+
+      - name: Publish batch archive report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundesliga-verified-batch-${{ github.run_id }}-report
+          path: backend/retention-report.json
+          retention-days: 14
+          if-no-files-found: warn
