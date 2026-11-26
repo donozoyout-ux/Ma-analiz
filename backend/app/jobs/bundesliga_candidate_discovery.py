@@ -76,8 +76,14 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
             continue
         report["openligadb_fetched"] += len(primary)
         report["footballdata_fetched"] += len(secondary)
-        # Use corroborate's validated match pairs - no separate primary_ids check
-        if decision := corroborate(primary, secondary):
+        # Corroboration can reject malformed observations; fail closed per day.
+        try:
+            decision = corroborate(primary, secondary)
+        except Exception:
+            report["held"].append({"date": day.isoformat(),
+                                   "reason": "SOURCE_CORROBORATION_FAILED"})
+            continue
+        if decision:
             if decision["conflicts"] or decision["unmatched"]:
                 report["held"].append({"date": day.isoformat(), "reason": "SOURCE_DISAGREEMENT",
                                        "conflicts": len(decision["conflicts"]),
@@ -88,7 +94,25 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
             for candidate in decision["matches"]:
                 # Use the candidate's OpenLigaDB ID to find the match in SQL
                 olid_match_id = candidate["openligadb_match_id"]
-                # Safely query ActiveMatch
+                # Source identities use different ID namespaces; look up each
+                # side by the ID pair returned by corroborate, not by intersection.
+                first = [r for r in primary if str(r.get("source_match_id")) == olid_match_id
+                         and r.get("provider") == "openligadb"]
+                peer = [r for r in secondary
+                        if str(r.get("source_match_id")) == candidate["football_data_match_id"]
+                        and r.get("provider") == "football-data.org"]
+                report["matched_both_sources"] += 1
+                if len(first) != 1 or len(peer) != 1 or any(
+                    utc(row.get("observed_at")) is None or
+                    not timedelta(0) <= now - utc(row["observed_at"]) <= timedelta(minutes=15)
+                    for row in (first[:1] + peer[:1])
+                ):
+                    report["held"].append({"date": day.isoformat(),
+                        "source_match_id": olid_match_id,
+                        "reason": "STALE_OR_AMBIGUOUS_EVIDENCE"})
+                    report["identity_conflicts"] += 1
+                    continue
+                # Safely query ActiveMatch.
                 matches = session.scalars(select(ActiveMatch).where(
                     ActiveMatch.provider == "openligadb",
                     ActiveMatch.provider_match_id == olid_match_id,
@@ -96,8 +120,6 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
                     ActiveMatch.season == "2026-2027",
                 ).limit(2)).all()
                 n_matches = len(matches)
-                # matched_both_sources incremented before SQL query, counts actual source-agreed matches
-                report["matched_both_sources"] += 1
                 # in_postgresql counts only unique SQL match matches
                 if n_matches == 0:
                     report["not_in_postgresql"] += 1
@@ -125,8 +147,8 @@ def run(session, *, days: list[date], matchday: int, collector=collect, now=None
                 if match.status != "FINISHED":
                     match_reason = "MATCH_NOT_FINISHED"
                 # Check home/away team names using the match record
-                if match.home_team != candidate.get("home_team") or \
-                   match.away_team != candidate.get("away_team"):
+                if match.home_team != first[0]["home_team"] or \
+                   match.away_team != first[0]["away_team"]:
                     report["team_name_mismatches"] += 1
                     if match_reason is None:
                         match_reason = "TEAM_NAME_MISMATCH"
