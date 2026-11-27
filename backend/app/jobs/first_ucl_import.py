@@ -53,6 +53,8 @@ def check_database(connection) -> None:
     if connection.scalar(text("SELECT current_database()")) != DATABASE:
         raise RuntimeError("ACTUAL_DATABASE_MISMATCH")
     revisions = connection.execute(text("SELECT version_num FROM alembic_version")).scalars().all()
+    if revisions == ["0010_active_statistics"]:
+        raise RuntimeError("MIGRATION_REQUIRED")
     if revisions != ["0011_season_bulk"]:
         raise RuntimeError("MIGRATION_VERSION_MISMATCH")
     for table in ("season_teams", "season_fixtures", "season_odds", "season_imports"):
@@ -103,7 +105,7 @@ def main(argv: list[str] | None = None) -> int:
         report = run(live=args.live, approval=args.approval)
     except Exception as exc:
         known = {"OPERATOR_APPROVAL_REQUIRED", "TARGET_DATABASE_MISMATCH", "ACTUAL_DATABASE_MISMATCH",
-                 "MIGRATION_VERSION_MISMATCH", "MIGRATION_SCHEMA_INCOMPLETE", "SOURCE_SCOPE_MISMATCH",
+                 "MIGRATION_REQUIRED", "MIGRATION_VERSION_MISMATCH", "MIGRATION_SCHEMA_INCOMPLETE", "SOURCE_SCOPE_MISMATCH",
                  "SOURCE_SHA256_MISMATCH", "SOURCE_MATCH_COUNT_MISMATCH", "SQL_MATCH_COUNT_MISMATCH",
                  "ARCHIVE_RECEIPT_MISMATCH", "ARCHIVE_CHECKSUM_MISMATCH", "ARCHIVE_ROW_COUNT_MISMATCH"}
         reason = str(exc) if str(exc) in known else "PREFLIGHT_OR_IMPORT_FAILED"
