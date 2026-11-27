@@ -158,3 +158,31 @@ def test_walk_forward_uses_only_earlier_seasons():
     assert result["upset"]["actual"] == pytest.approx(1 / 201)
     assert result["backtest"][0]["historical_brier"] == 1
     assert result["backtest"][0]["train_sample"] == 200
+
+
+def test_season_bulk_migration_upgrade_and_destructive_downgrade_blocked():
+    """Isolated migration smoke: add-only schema, never drop historical data."""
+    from importlib import import_module
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import inspect, text
+
+    migration = import_module("migrations.versions.0011_season_bulk")
+    engine = create_engine("sqlite://")
+    try:
+        with engine.begin() as connection:
+            ctx = MigrationContext.configure(connection)
+            with Operations.context(ctx):
+                migration.upgrade()
+                assert set(("season_teams", "season_fixtures", "season_odds", "season_imports")) <= set(
+                    inspect(connection).get_table_names()
+                )
+                connection.execute(text(
+                    "INSERT INTO season_teams (id, provider, source_name) "
+                    "VALUES ('test-1', 'test-source', 'Test FC')"
+                ))
+                with pytest.raises(RuntimeError, match="SEASON_BULK_DOWNGRADE_REQUIRES_MANUAL_REVIEW"):
+                    migration.downgrade()
+                assert connection.execute(text("SELECT COUNT(*) FROM season_teams")).scalar_one() == 1
+    finally:
+        engine.dispose()
