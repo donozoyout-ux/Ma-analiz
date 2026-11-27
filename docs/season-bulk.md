@@ -42,3 +42,18 @@ Salt okunur gözlemde cbcxbcxbcv public şemasında 18 tablo ve Alembic 0010_act
 R2 staging için production bucket ve erişim anahtarlarından ayrı bir bucket ve sadece bu bucket'a yetkili kimlik gerekir. Beklenen depolama bir kaynak dosyası, bir Parquet ve bir manifest ile küçüktür. İstek, depolama, minimum ücret ve yaşam döngüsü maliyetleri Cloudflare hesabının güncel fiyatlandırmasından işlem öncesi hesaplanmalıdır. Ayrı onay ardından Parquet yüklemesi, HEAD ve GET ile byte sayısı ve SHA-256, manifest içeriği, iki kez aktarımda aynı nesne ve tek SQL makbuzu ile kesinti sonrası yeniden deneme doğrulanır. Mevcut CI bellekteki R2 simülasyonunu kullanır, gerçek R2 yetkisini doğrulamaz.
 
 İlk yük için kaynak revizyonu abfaeddc2ee3d14f99ecc163c9ddb46cb4d67cef, kaynak SHA-256 c2692b22af02c5df4587b69c5f430aebf7d936845b5337aee462ce8e649eb1b5 ve 189 maç/189 normal süre skoru ön koşuldur. Genel transfer arayüzü başka lig ve sezonları da kabul eder. Bu nedenle production operatörü için bu değerleri zorunlu tutan, SQL ve gerçek R2 doğrulamasını ayrı raporlayan bir çalıştırma yolu ve bağımsız staging provası tamamlanmadan ilk yük hazır sayılmaz.
+
+
+## Render Free PostgreSQL: servis bağlantısı ve gerçek yedek kapısı
+
+**Kritik:** Render bağlayıcısı servis ortam değişkenini okumuyor. PostgreSQL instance'ının aynı workspace'te olması, `Ma-analiz-2` servisinin bu DB'yi kullandığını kanıtlamaz. Yetkili operatör Render Dashboard'da `Ma-analiz-2 > Environment` altındaki `DATABASE_URL` referansının sunucu ve veritabanı adını (parola veya tam URL'yi dışarı aktarmadan) `cbcxbcxbcv > Connect` verileriyle karşılaştırmalıdır. Eşleşme doğrulanmadan üretim migration'ı veya ingest yoktur.
+
+**Free plan:** Render'ın kendi on-demand logical backup/PITR özelliği Free Postgres için mevcut değildir. 2026-11-28 itibarıyla API'deki instance `expiresAt` değeri `2026-12-16T19:41:50Z` idi. Gerçek yedek henüz alınmadı. Hemen ayrı bir operatör bilgisayarında güvenli `pg_dump` yedeği planlanmalıdır.
+
+**Windows yerel yedek:** `scripts/backup_render_postgres.ps1`, sadece beklenen Render instance/username kabul eder, PostgreSQL komut satırı araçlarını kullanır, parolayı PowerShell'de güvenli prompt ile alır ve en sonda ortamdan siler. Önce Render Dashboard > `cbcxbcxbcv` > Connect ekranında *External Hostname* ve kullanıcı adını doğrulayın. Sonra örnek komut:
+
+```powershell
+pwsh -File scripts/backup_render_postgres.ps1 -HostName "<Render External Hostname>" -DatabaseUser "cbcxbcxbcv_user"
+```
+
+Bu örnek parola veya URL içermez. Script, döküm dosyasının boyutunu, SHA-256'sını ve `pg_restore --list` başarısını raporlar; gerçek veri geri yüklemesi yapmaz. Döküm dosyasını GitHub'a, herkese açık depoya veya sohbete göndermeyin. `PGSSLMODE=require` taşıma şifrelemesini zorunlu kılar; ek sertifika doğrulaması altyapı imkânlarına göre ele alınmalıdır. Tam bağımsız `pg_restore` provası, şifreli/offline yedek saklama ve DB kaynağı eşleştirmesi ayrı kontrol kapılarıdır.
