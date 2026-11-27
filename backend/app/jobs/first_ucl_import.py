@@ -62,6 +62,17 @@ def check_database(connection) -> None:
             raise RuntimeError("MIGRATION_SCHEMA_INCOMPLETE")
 
 
+def source_only_preflight() -> dict:
+    """Validate pinned public source without DB, R2, or production credentials."""
+    source = source_for("uefa.cl", "2024-2025")
+    with httpx.Client(trust_env=False) as client:
+        raw = download(source, client, DownloadBudget(remaining_attempts=3))
+    rows = validate_source(source, raw)
+    return {"status": "SOURCE_ONLY_PASS", "fixtures": len(rows),
+            "regulation_scores": sum(row["regulation"] is not None for row in rows),
+            "sha256": SHA256, "database": "NOT_CHECKED", "r2": "NOT_CHECKED"}
+
+
 def run(*, live: bool = False, approval: str = "") -> dict:
     if live and approval != APPROVAL:
         raise RuntimeError("OPERATOR_APPROVAL_REQUIRED")
@@ -99,12 +110,15 @@ def run(*, live: bool = False, approval: str = "") -> dict:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--live", action="store_true")
+    parser.add_argument("--source-only", action="store_true", help="Verify pinned source without DB or R2 access")
     parser.add_argument("--approval", default="")
     args = parser.parse_args(argv)
     try:
-        report = run(live=args.live, approval=args.approval)
+        if args.source_only and (args.live or args.approval):
+            raise RuntimeError("SOURCE_ONLY_MODE_CONFLICT")
+        report = source_only_preflight() if args.source_only else run(live=args.live, approval=args.approval)
     except Exception as exc:
-        known = {"OPERATOR_APPROVAL_REQUIRED", "TARGET_DATABASE_MISMATCH", "ACTUAL_DATABASE_MISMATCH",
+        known = {"SOURCE_ONLY_MODE_CONFLICT", "OPERATOR_APPROVAL_REQUIRED", "TARGET_DATABASE_MISMATCH", "ACTUAL_DATABASE_MISMATCH",
                  "MIGRATION_REQUIRED", "MIGRATION_VERSION_MISMATCH", "MIGRATION_SCHEMA_INCOMPLETE", "SOURCE_SCOPE_MISMATCH",
                  "SOURCE_SHA256_MISMATCH", "SOURCE_MATCH_COUNT_MISMATCH", "SQL_MATCH_COUNT_MISMATCH",
                  "ARCHIVE_RECEIPT_MISMATCH", "ARCHIVE_CHECKSUM_MISMATCH", "ARCHIVE_ROW_COUNT_MISMATCH"}
