@@ -70,7 +70,9 @@ def main(argv: list[str] | None = None) -> int:
             "attribution": provider.attribution,
         }
     print(json.dumps(report, ensure_ascii=False, default=str))
-    return 0 if report["status"] in {"DRY_RUN", "COMPLETED"} else 1
+    if report["status"] == "QUOTA_DEFERRED":
+        print(f"Bundesliga quota deferred {report['resume_date']}. Retry this date after {report['retry_after_utc']}.")
+    return 0 if report["status"] in {"DRY_RUN", "COMPLETED", "QUOTA_DEFERRED"} else 1
 
 
 if __name__ == "__main__":

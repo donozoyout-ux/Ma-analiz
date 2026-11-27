@@ -8,6 +8,7 @@ Complies with OpenLigaDB terms:
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, timezone
 import json
 import re
@@ -50,6 +51,7 @@ class OpenLigaDBProvider:
         requests_per_minute: int = 1,
         max_retries: int = 3,
         client: httpx.Client | None = None,
+        before_request: Callable[[], None] | None = None,
     ) -> None:
         parsed = urlsplit(base_url)
         if parsed.scheme != "https":
@@ -58,6 +60,7 @@ class OpenLigaDBProvider:
         self.timeout_seconds = timeout_seconds
         self.min_interval = 60.0 / max(1, requests_per_minute)
         self.max_retries = max_retries
+        self.before_request = before_request
         self._lock = threading.Lock()
         self._last_request_time: float = 0.0
         self._client = client or httpx.Client(timeout=timeout_seconds, follow_redirects=False)
@@ -91,6 +94,8 @@ class OpenLigaDBProvider:
         while attempt < self.max_retries:
             # Every retry is a new external request and must obey throttling.
             self._throttle()
+            if self.before_request is not None:
+                self.before_request()
             attempt += 1
             t0 = time.monotonic()
             try:

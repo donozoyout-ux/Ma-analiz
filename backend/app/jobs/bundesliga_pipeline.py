@@ -13,21 +13,22 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 import hashlib
+import json
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.models import ActiveMatch, MatchResult
+from app.models import ActiveMatch, MatchResult, SystemSetting
 from app.notifications.events import (
     MatchEventPayload,
     MatchEventType,
     create_match_event,
 )
-from app.providers.identity import deduplicate_scope, fixture_key
+from app.providers.identity import deduplicate_scope
 from app.providers.openligadb import ATTRIBUTION, LICENCE, LICENCE_URL, OpenLigaDBProvider
 from app.storage.archive import SQLArchiveTracker, archive_partition
 from app.storage.quota import QuotaExceededError, get_quota_tracker, DurableQuotaTracker
@@ -75,7 +76,7 @@ def run_bundesliga_ingest_pipeline(
         if matchday is not None and (not isinstance(matchday, int) or isinstance(matchday, bool) or not 1 <= matchday <= 34):
             raise PipelineSafetyError("INVALID_MATCHDAY: Bundesliga matchday must be 1..34")
         # Automatic day scope is restricted to current or past dates, never to arbitrary future guesses.
-        if matchday is None and (target_day > datetime.now(ISTANBUL).date() or target_day.year not in (2026, 2027)):
+        if matchday is None and not (date(2026, 7, 1) <= target_day <= min(date(2027, 6, 30), datetime.now(ISTANBUL).date())):
             raise PipelineSafetyError("INVALID_DAY_SCOPE: automatic daily ingest must be in the pilot season and not future-dated")
         if store is None:
             raise PipelineSafetyError("ARCHIVE_STORE_REQUIRED: SQL-only Bundesliga ingest is forbidden")
@@ -93,12 +94,27 @@ def run_bundesliga_ingest_pipeline(
     db_engine = session.get_bind()
     quota = (DurableQuotaTracker(cfg, db_engine)
              if db_engine.dialect.name == "postgresql" else get_quota_tracker(cfg))
+    def reserve_request() -> None:
+        if isinstance(quota, DurableQuotaTracker):
+            quota.reserve_request()
+        else:
+            quota.check_request_quota(1)
+            quota.record_request(1)
+
+    def reserve_upload(size: int) -> None:
+        if isinstance(quota, DurableQuotaTracker):
+            quota.reserve_r2_write(1, size)
+        else:
+            quota.check_r2_write_quota(1, size)
+            quota.record_r2_write(1, size)
+
     own_provider = provider is None
     p = provider or OpenLigaDBProvider(
-        base_url=getattr(cfg, "openligadb_base_url", "https://api.openligadb.de"),
-        timeout_seconds=getattr(cfg, "openligadb_timeout_seconds", 10.0),
-        requests_per_minute=getattr(cfg, "openligadb_requests_per_minute", 1),
+        base_url=cfg.openligadb_base_url,
+        timeout_seconds=cfg.openligadb_timeout_seconds,
+        requests_per_minute=cfg.openligadb_requests_per_minute,
     )
+    previous_callback = getattr(p, "before_request", None)
 
     report: dict[str, Any] = {
         "operation": "BUNDESLIGA_PIPELINE_EXECUTION",
@@ -118,160 +134,191 @@ def run_bundesliga_ingest_pipeline(
         "errors": [],
     }
 
+    lock = None
+    checkpoint = None
     try:
+        # Serialize live pipeline runs across runners while allowing checkpoint
+        # and quota commits to survive a crash. Closing this connection releases the lock.
         if isinstance(quota, DurableQuotaTracker):
-            quota.reserve_request(1)
-        else:
-            quota.check_request_quota(1)
-            quota.record_request(1)
+            lock = db_engine.connect()
+            lock.execute(text("SELECT pg_advisory_xact_lock(:lock)"), {"lock": 57179413026025})
 
-        season_year = target_day.year if target_day.month >= 7 else target_day.year - 1
         if matchday is None:
-            # Daily mode does not assume that a fixed historical matchday is current.
-            # Provider filters kickoff dates in Europe/Istanbul.
-            fetched = p.get_matches(target_day)
+            key = f"bundesliga:daily:2026-2027:{target_day.isoformat()}"
+            checkpoint = session.get(SystemSetting, key)
+            if checkpoint is not None and "completed_at" in checkpoint.value:
+                completed = datetime.fromisoformat(checkpoint.value["completed_at"])
+                if datetime.now(timezone.utc) - completed < timedelta(hours=2):
+                    report["archive_receipt"] = checkpoint.value["archive_receipt"]
+                    report["reused_checkpoint"] = True
+                    return report
+
+        state = checkpoint.value if checkpoint is not None else {}
+        if "archive_rows" in state:
+            # JSONB canonicalizes object keys. Preserve the original column order
+            # so a resumed archive produces the same Parquet bytes and key.
+            archive_rows = json.loads(state["archive_rows"])
         else:
-            fetched = p.get_matchdata_by_group("bl1", season_year, matchday)
-        unique_matches, _ = deduplicate_scope(fetched)
-
-        if isinstance(quota, DurableQuotaTracker):
-            quota.reserve_matches(len(unique_matches))
-        else:
-            quota.check_matches_quota(len(unique_matches))
-            quota.record_matches(len(unique_matches))
-
-        now = datetime.now(timezone.utc)
-        archive_rows: list[dict[str, Any]] = []
-
-        for m in unique_matches:
-            p_id = str(m["provider_match_id"])
-            stmt = select(ActiveMatch).where(
-                (ActiveMatch.provider == "openligadb") &
-                (ActiveMatch.provider_match_id == p_id)
-            )
-            match_row = session.scalars(stmt).one_or_none()
-            is_new = match_row is None
-
-            start_dt = m["start_time"] if isinstance(m["start_time"], datetime) else datetime.fromisoformat(str(m["start_time"]))
-            if start_dt.tzinfo is None:
-                start_dt = start_dt.replace(tzinfo=timezone.utc)
-
-            expires_at = start_dt + timedelta(hours=cfg.operational_retention_hours)
-
-            if is_new:
-                match_id = uuid4()
-                match_row = ActiveMatch(
-                    id=match_id,
-                    provider="openligadb",
-                    provider_match_id=p_id,
-                    league_id="de.bl1",
-                    league_name="Bundesliga",
-                    season="2026-2027",
-                    home_team=m["home_team"],
-                    away_team=m["away_team"],
-                    start_time=start_dt,
-                    status=m["status"],
-                    round=m.get("round"),
-                    country="Germany",
-                    sport="football",
-                    expires_at=expires_at,
-                )
-                session.add(match_row)
-                report["inserted_matches"] += 1
-
-                # Generate MATCH_SCHEDULED notification contract
-                event = create_match_event(
-                    event_type=MatchEventType.MATCH_SCHEDULED,
-                    match_id=match_id,
-                    provider_match_id=p_id,
-                    home_team=m["home_team"],
-                    away_team=m["away_team"],
-                    start_time=start_dt.isoformat(),
-                    status="SCHEDULED",
-                    occurred_at=now.isoformat(),
-                )
-                report["events_generated"].append(event.model_dump())
+            if "matches" in state:
+                unique_matches = state["matches"]
             else:
-                # Update existing match: preserve UUID!
-                match_id = match_row.id
-                match_row.status = m["status"]
-                match_row.start_time = start_dt
-                match_row.home_team = m["home_team"]
-                match_row.away_team = m["away_team"]
-                match_row.round = m.get("round")
-                match_row.expires_at = expires_at
-                report["updated_matches"] += 1
-
-            # Check if match is finished and has verified score
-            if m["status"] == "FINISHED" and m.get("score") is not None:
-                score = m["score"]
-                res_stmt = select(MatchResult).where(MatchResult.match_id == match_id)
-                res_row = session.scalars(res_stmt).one_or_none()
-
-                if res_row is None:
-                    res_row = MatchResult(
-                        id=uuid4(),
-                        match_id=match_id,
-                        provider="openligadb",
-                        provider_result_id=f"openligadb-{p_id}",
-                        home_score=score[0],
-                        away_score=score[1],
-                        status="FINAL",
-                        finished_at=start_dt + timedelta(minutes=105),
-                        result_source=f"{ATTRIBUTION}; {LICENCE_URL}",
-                        verified_at=None,  # Single-source final observation is not independently verified.
-                    )
-                    session.add(res_row)
-                    report["persisted_results"] += 1
+                # Reserve per HTTP attempt, including transport retries.
+                if isinstance(p, OpenLigaDBProvider):
+                    p.before_request = reserve_request
                 else:
-                    # Never silently replace a score that another verification
-                    # workflow has already certified.
-                    if (res_row.verified_at is not None and
-                            (res_row.home_score, res_row.away_score) != tuple(score)):
-                        raise PipelineSafetyError("VERIFIED_RESULT_CONFLICT: manual review required")
-                    if res_row.verified_at is None:
-                        res_row.home_score = score[0]
-                        res_row.away_score = score[1]
-                        res_row.status = "FINAL"
-                # No RESULT_VERIFIED event: this source is only one observation.
-                # Verification is performed by the separate corroboration workflow.
+                    reserve_request()
+                if matchday is None:
+                    fetched = p.get_matches(target_day)
+                else:
+                    season_year = target_day.year if target_day.month >= 7 else target_day.year - 1
+                    fetched = p.get_matchdata_by_group("bl1", season_year, matchday)
+                unique_matches, _ = deduplicate_scope(fetched)
+                if matchday is None:
+                    # Store only fields needed to replay SQL, in JSON-compatible form.
+                    unique_matches = [
+                        {
+                            "provider_match_id": str(m["provider_match_id"]),
+                            "start_time": str(m["start_time"]),
+                            "home_team": m["home_team"],
+                            "away_team": m["away_team"],
+                            "status": m["status"],
+                            "round": m.get("round"),
+                            "score": m.get("score"),
+                        }
+                        for m in unique_matches
+                    ]
+                    if checkpoint is None:
+                        checkpoint = SystemSetting(key=key)
+                        session.add(checkpoint)
+                    checkpoint.value = {"matches": unique_matches}
+                    session.commit()
 
-            # Row for Parquet archival
-            archive_rows.append({
-                "match_id": str(match_id),
-                "provider": "openligadb",
-                "provider_match_id": p_id,
-                "league_id": "de.bl1",
-                "season": "2026-2027",
-                "home_team": m["home_team"],
-                "away_team": m["away_team"],
-                "start_time": start_dt.isoformat(),
-                "status": m["status"],
-                "home_score": (m.get("score") or [None, None])[0],
-                "away_score": (m.get("score") or [None, None])[1],
-                "attribution": ATTRIBUTION,
-                "licence": LICENCE,
-            })
+            if unique_matches:
+                if isinstance(quota, DurableQuotaTracker):
+                    quota.reserve_matches(len(unique_matches))
+                else:
+                    quota.check_matches_quota(len(unique_matches))
+                    quota.record_matches(len(unique_matches))
 
-        # Reserve actual serialized archive bytes BEFORE committing SQL; never
-        # approximate payload length or let a quota error partially commit SQL.
+            now = datetime.now(timezone.utc)
+            archive_rows: list[dict[str, Any]] = []
+            for m in unique_matches:
+                p_id = str(m["provider_match_id"])
+                stmt = select(ActiveMatch).where(
+                    (ActiveMatch.provider == "openligadb") &
+                    (ActiveMatch.provider_match_id == p_id)
+                )
+                match_row = session.scalars(stmt).one_or_none()
+                is_new = match_row is None
+
+                start_dt = m["start_time"] if isinstance(m["start_time"], datetime) else datetime.fromisoformat(str(m["start_time"]))
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+
+                expires_at = start_dt + timedelta(hours=cfg.operational_retention_hours)
+
+                if is_new:
+                    match_id = uuid4()
+                    match_row = ActiveMatch(
+                        id=match_id,
+                        provider="openligadb",
+                        provider_match_id=p_id,
+                        league_id="de.bl1",
+                        league_name="Bundesliga",
+                        season="2026-2027",
+                        home_team=m["home_team"],
+                        away_team=m["away_team"],
+                        start_time=start_dt,
+                        status=m["status"],
+                        round=m.get("round"),
+                        country="Germany",
+                        sport="football",
+                        expires_at=expires_at,
+                    )
+                    session.add(match_row)
+                    report["inserted_matches"] += 1
+
+                    # Generate MATCH_SCHEDULED notification contract
+                    event = create_match_event(
+                        event_type=MatchEventType.MATCH_SCHEDULED,
+                        match_id=match_id,
+                        provider_match_id=p_id,
+                        home_team=m["home_team"],
+                        away_team=m["away_team"],
+                        start_time=start_dt.isoformat(),
+                        status="SCHEDULED",
+                        occurred_at=now.isoformat(),
+                    )
+                    report["events_generated"].append(event.model_dump())
+                else:
+                    # Update existing match: preserve UUID!
+                    match_id = match_row.id
+                    match_row.status = m["status"]
+                    match_row.start_time = start_dt
+                    match_row.home_team = m["home_team"]
+                    match_row.away_team = m["away_team"]
+                    match_row.round = m.get("round")
+                    match_row.expires_at = expires_at
+                    report["updated_matches"] += 1
+
+                # Check if match is finished and has verified score
+                if m["status"] == "FINISHED" and m.get("score") is not None:
+                    score = m["score"]
+                    res_stmt = select(MatchResult).where(MatchResult.match_id == match_id).with_for_update()
+                    res_row = session.scalars(res_stmt).one_or_none()
+
+                    if res_row is None:
+                        res_row = MatchResult(
+                            id=uuid4(),
+                            match_id=match_id,
+                            provider="openligadb",
+                            provider_result_id=f"openligadb-{p_id}",
+                            home_score=score[0],
+                            away_score=score[1],
+                            status="FINAL",
+                            finished_at=start_dt + timedelta(minutes=105),
+                            result_source=f"{ATTRIBUTION}; {LICENCE_URL}",
+                            verified_at=None,  # Single-source final observation is not independently verified.
+                        )
+                        session.add(res_row)
+                        report["persisted_results"] += 1
+                    else:
+                        # Never silently replace a score that another verification
+                        # workflow has already certified.
+                        if (res_row.verified_at is not None and
+                                (res_row.home_score, res_row.away_score) != tuple(score)):
+                            raise PipelineSafetyError("VERIFIED_RESULT_CONFLICT: manual review required")
+                        if res_row.verified_at is None:
+                            res_row.home_score = score[0]
+                            res_row.away_score = score[1]
+                            res_row.status = "FINAL"
+                    # No RESULT_VERIFIED event: this source is only one observation.
+                    # Verification is performed by the separate corroboration workflow.
+
+                # Row for Parquet archival
+                archive_rows.append({
+                    "match_id": str(match_id),
+                    "provider": "openligadb",
+                    "provider_match_id": p_id,
+                    "league_id": "de.bl1",
+                    "season": "2026-2027",
+                    "home_team": m["home_team"],
+                    "away_team": m["away_team"],
+                    "start_time": start_dt.isoformat(),
+                    "status": m["status"],
+                    "home_score": (m.get("score") or [None, None])[0],
+                    "away_score": (m.get("score") or [None, None])[1],
+                    "attribution": ATTRIBUTION,
+                    "licence": LICENCE,
+                })
+
+            if checkpoint is not None:
+                checkpoint.value = {"archive_rows": json.dumps(archive_rows)}
+            session.commit()
+
+        # SQL remains available while the archive is deferred or repaired.
         if archive_rows:
-            archive_payload = parquet_bytes(archive_rows)
-            payload_size = len(archive_payload)
-            # Immutable content-addressed part: later status/score changes create
-            # new objects without overwriting prior verified history.
-            archive_revision = hashlib.sha256(archive_payload).hexdigest()[:16]
-            if isinstance(quota, DurableQuotaTracker):
-                quota.reserve_r2_write(1, payload_size)
-            else:
-                quota.check_r2_write_quota(1, payload_size)
-                quota.record_r2_write(1, payload_size)
-
-        session.commit()
-
-        # SQL rows deliberately remain available when R2 fails: retries must
-        # repair the archive, never delete the source data.
-        if archive_rows:
+            archive_revision = hashlib.sha256(parquet_bytes(archive_rows)).hexdigest()[:16]
             receipt = archive_partition(
                 store,
                 tracker=SQLArchiveTracker(session),
@@ -280,6 +327,7 @@ def run_bundesliga_ingest_pipeline(
                 season="2026-2027",
                 league="de.bl1",
                 rows=archive_rows,
+                before_upload=reserve_upload,
                 part=((f"openligadb-bundesliga-day{target_day:%Y%m%d}" if matchday is None
                        else f"openligadb-bundesliga-md{matchday}")
                       + f"-sha{archive_revision}"),
@@ -291,9 +339,20 @@ def run_bundesliga_ingest_pipeline(
                 "checksum": receipt.checksum,
             }
 
+        if checkpoint is not None:
+            checkpoint.value = {
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "archive_receipt": report["archive_receipt"],
+            }
+            session.commit()
+
     except QuotaExceededError as exc:
         session.rollback()
-        report["status"] = "QUOTA_EXCEEDED"
+        report["status"] = "QUOTA_DEFERRED"
+        report["resume_date"] = target_day.isoformat()
+        report["retry_after_utc"] = (
+            datetime.now(timezone.utc).date() + timedelta(days=1)
+        ).isoformat() + "T00:00:00Z"
         report["errors"].append(str(exc))
     except Exception as exc:
         session.rollback()
@@ -301,8 +360,12 @@ def run_bundesliga_ingest_pipeline(
         report["errors"].append(str(exc))
         raise
     finally:
-        report["quota_summary"] = quota.get_summary()
+        if lock is not None:
+            lock.close()
+        if isinstance(p, OpenLigaDBProvider):
+            p.before_request = previous_callback
         if own_provider:
             p.close()
+        report["quota_summary"] = quota.get_summary()
 
     return report

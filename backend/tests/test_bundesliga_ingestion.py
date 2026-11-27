@@ -7,11 +7,13 @@ Uses:
 """
 from datetime import date, datetime, timedelta, timezone
 import json
+import os
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, select
+from sqlalchemy.engine import make_url
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
@@ -43,7 +45,7 @@ from app.providers.openligadb import (
     OpenLigaDBProvider,
 )
 from app.providers.registry import create_provider
-from app.storage.quota import QuotaExceededError, QuotaTracker
+from app.storage.quota import DurableQuotaTracker, QuotaExceededError, QuotaTracker
 from app.storage.r2 import InMemoryObjectStore
 
 
@@ -566,6 +568,114 @@ def test_r2_failure_preserves_sql_and_next_attempt_repairs_archive(session, stor
     assert {m.provider_match_id: m.id for m in session.scalars(select(ActiveMatch)).all()} == ids
     archive = session.scalars(select(ArchiveJob).where(ArchiveJob.r2_key == repaired["archive_receipt"]["key"])).one()
     assert archive.status == "VERIFIED"
+
+
+@pytest.fixture(params=["sqlite", "postgresql"])
+def resume_session(request):
+    if request.param == "sqlite":
+        yield request.getfixturevalue("session")
+        return
+    url = os.getenv("BUNDESLIGA_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("Ephemeral PostgreSQL URL not configured")
+    assert make_url(url).host in {"localhost", "127.0.0.1", "::1"}
+    engine = create_engine(url)
+    created = []
+    try:
+        for model in (ActiveMatch, MatchResult, SystemSetting, ArchiveJob):
+            model.__table__.create(engine)
+            created.append(model)
+        with Session(engine) as sql:
+            yield sql
+    finally:
+        for model in reversed(created):
+            model.__table__.drop(engine, checkfirst=True)
+        engine.dispose()
+
+
+def test_daily_upload_quota_resume_and_reuse(resume_session, store, mock_openligadb_matches, monkeypatch):
+    from app.jobs import bundesliga_pipeline
+
+    session = resume_session
+    cfg = Settings(
+        bundesliga_ingest_enabled=True, bundesliga_ingest_dry_run=False,
+        bundesliga_daily_max_requests=1, bundesliga_daily_max_r2_writes=1, _env_file=None,
+    )
+    engine = session.get_bind()
+    postgres = engine.dialect.name == "postgresql"
+    if postgres:
+        DurableQuotaTracker(cfg, engine).reserve_r2_write(1, 1)
+    else:
+        quota = QuotaTracker(cfg)
+        quota.record_r2_write(1, 1)
+        monkeypatch.setattr(bundesliga_pipeline, "get_quota_tracker", lambda _: quota)
+    client = MagicMock()
+    client.get.return_value.status_code = 200
+    client.get.return_value.json.return_value = mock_openligadb_matches
+    provider = OpenLigaDBProvider(client=client)
+    kwargs = dict(settings=cfg, dry_run=False, store=store, provider=provider)
+    day = date(2026, 11, 20)
+
+    deferred = run_bundesliga_ingest_pipeline(day, session=session, **kwargs)
+    assert deferred["status"] == "QUOTA_DEFERRED"
+    assert deferred["resume_date"] == day.isoformat()
+    assert deferred["retry_after_utc"].endswith("T00:00:00Z")
+    result = session.scalars(select(MatchResult)).one()
+    result.verified_at = datetime(2026, 11, 21, tzinfo=timezone.utc)
+    session.commit()
+    expected_verified_at = session.scalars(select(MatchResult.verified_at)).one()
+    archive = session.scalars(select(ArchiveJob)).one()
+    assert store.head_object(archive.r2_key) is None
+    original_key = archive.r2_key
+
+    if postgres:
+        key = f"quota:bundesliga:{datetime.now(timezone.utc).date().isoformat()}"
+        ledger = session.get(SystemSetting, key)
+        ledger.value = {**ledger.value, "r2_writes": 0, "r2_bytes": 0}
+        session.commit()
+    else:
+        quota = QuotaTracker(cfg)
+        quota.record_request(1)
+        session.rollback()
+    with Session(engine) as fresh_session:
+        resumed = run_bundesliga_ingest_pipeline(day, session=fresh_session, **kwargs)
+        assert resumed["status"] == "COMPLETED"
+        assert resumed["inserted_matches"] == resumed["updated_matches"] == 0
+        archive = fresh_session.scalars(select(ArchiveJob)).one()
+        assert archive.status == "VERIFIED"
+        assert archive.r2_key == original_key
+        original_archive_verified_at = archive.verified_at
+        reused = run_bundesliga_ingest_pipeline(day, session=fresh_session, **kwargs)
+        assert reused["reused_checkpoint"] is True
+        assert reused["archive_receipt"] == resumed["archive_receipt"]
+        assert fresh_session.scalars(select(ArchiveJob.verified_at)).one() == original_archive_verified_at
+        assert fresh_session.scalars(select(MatchResult.verified_at)).one() == expected_verified_at
+    assert client.get.call_count == 1
+
+
+def test_daily_request_quota_blocks_http_retry(session, store, monkeypatch):
+    from app.jobs import bundesliga_pipeline
+    from app.providers import openligadb
+
+    cfg = Settings(
+        bundesliga_ingest_enabled=True, bundesliga_ingest_dry_run=False,
+        bundesliga_daily_max_requests=3, _env_file=None,
+    )
+    quota = QuotaTracker(cfg)
+    quota.record_request(2)
+    monkeypatch.setattr(bundesliga_pipeline, "get_quota_tracker", lambda _: quota)
+    monkeypatch.setattr(openligadb.time, "sleep", lambda _: None)
+    client = MagicMock()
+    client.get.return_value.status_code = 500
+    provider = OpenLigaDBProvider(client=client)
+    report = run_bundesliga_ingest_pipeline(
+        date(2026, 11, 20), dry_run=False, settings=cfg,
+        session=session, store=store, provider=provider,
+    )
+    assert report["status"] == "QUOTA_DEFERRED"
+    assert report["quota_summary"]["requests"]["used"] == 3
+    assert client.get.call_count == 1
+    assert session.scalars(select(ActiveMatch)).first() is None
 
 
 # --- NOTIFICATION EVENT CONTRACT TESTS ---
