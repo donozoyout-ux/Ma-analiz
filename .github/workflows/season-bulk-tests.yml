@@ -6,6 +6,7 @@ on:
       - 'backend/migrations/versions/0011_season_bulk.py'
       - 'backend/tests/test_season_bulk.py'
       - 'backend/app/jobs/season_staging_rehearsal.py'
+      - 'backend/app/jobs/season_bulk_preflight.py'
       - '.github/workflows/season-bulk-tests.yml'
 permissions:
   contents: read
@@ -39,6 +40,15 @@ jobs:
       - run: python -m pytest -q tests/test_season_bulk.py
         env:
           SEASON_BULK_TEST_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+      - name: Refuse unconfigured and mismatched identity preflight
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: |
+          python - <<'PY'
+          from app.jobs.season_bulk_preflight import main
+          assert main(["--expected-database", "wrong_database"]) == 2
+          print("MISMATCH_PRECHECK_BLOCKED")
+          PY
       - name: Upgrade disposable database to existing Alembic 0010 head
         env:
           DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
@@ -56,10 +66,18 @@ jobs:
               assert c.scalar(text("SELECT COUNT(*) FROM active_matches")) == 0
           print("DISPOSABLE_0010_BASELINE_PASS")
           PY
+      - name: Validate read-only identity before migration
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m app.jobs.season_bulk_preflight --expected-database season_test
       - name: Upgrade disposable PostgreSQL 0010 to 0011
         env:
           DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
         run: python -m alembic upgrade 0011_season_bulk
+      - name: Validate read-only identity after migration
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m app.jobs.season_bulk_preflight --expected-database season_test --require-migrated
       - name: Rehearse pinned 2024-25 UCL 189-match import and replay (no actual R2)
         env:
           DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
