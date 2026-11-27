@@ -68,3 +68,32 @@ def test_archive_replay_and_corruption(db):
     store.put_object(first["matches"]["key"], b"corrupt", content_type="application/octet-stream")
     with pytest.raises(RuntimeError, match="ARCHIVE_RECEIPT_MISMATCH"), db.begin():
         import_season(db, store, SOURCE, RAW, approval=APPROVAL)
+
+
+def test_source_only_preflight_never_connects_to_database_or_r2(monkeypatch):
+    import httpx
+    from test_season_bulk import RAW
+
+    monkeypatch.setattr(operator, "create_engine", lambda *a, **k: pytest.fail("database accessed"))
+    monkeypatch.setattr(operator, "R2ObjectStore", lambda *a, **k: pytest.fail("R2 accessed"))
+    monkeypatch.setattr(operator, "download", lambda *a, **k: RAW)
+    monkeypatch.setattr(operator, "SHA256", operator.hashlib.sha256(RAW).hexdigest())
+    monkeypatch.setattr(operator, "parse_season", lambda *a, **k: [
+        {"regulation": [1, 0]} for _ in range(189)
+    ])
+    result = operator.source_only_preflight()
+    assert result["status"] == "SOURCE_ONLY_PASS"
+    assert result["fixtures"] == result["regulation_scores"] == 189
+    assert result["database"] == result["r2"] == "NOT_CHECKED"
+    assert operator.main(["--source-only"]) == 0
+    assert operator.main(["--source-only", "--live"]) == 1
+    assert operator.main(["--source-only", "--approval", operator.APPROVAL]) == 1
+
+
+def test_source_only_rejects_invalid_hash_without_database_or_r2(monkeypatch):
+    from test_season_bulk import RAW
+    monkeypatch.setattr(operator, "create_engine", lambda *a, **k: pytest.fail("database accessed"))
+    monkeypatch.setattr(operator, "R2ObjectStore", lambda *a, **k: pytest.fail("R2 accessed"))
+    monkeypatch.setattr(operator, "download", lambda *a, **k: RAW)
+    with pytest.raises(RuntimeError, match="SOURCE_SHA256_MISMATCH"):
+        operator.source_only_preflight()
