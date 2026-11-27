@@ -22,7 +22,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.models import ActiveMatch, MatchResult, SystemSetting
+from app.models import ActiveMatch, MatchResult, SystemSetting, ArchiveJob
 from app.notifications.events import (
     MatchEventPayload,
     MatchEventType,
@@ -149,9 +149,33 @@ def run_bundesliga_ingest_pipeline(
             if checkpoint is not None and "completed_at" in checkpoint.value:
                 completed = datetime.fromisoformat(checkpoint.value["completed_at"])
                 if datetime.now(timezone.utc) - completed < timedelta(hours=2):
-                    report["archive_receipt"] = checkpoint.value["archive_receipt"]
-                    report["reused_checkpoint"] = True
-                    return report
+                    receipt = checkpoint.value.get("archive_receipt")
+                    rows_json = checkpoint.value.get("archive_rows")
+                    if receipt is None and rows_json == "[]":
+                        report["reused_checkpoint"] = True
+                        return report
+                    # Do not trust a completed marker alone. A verified SQL
+                    # receipt and an extant R2 object must both still exist.
+                    if receipt and rows_json:
+                        ledger = session.scalar(
+                            select(ArchiveJob).where(ArchiveJob.r2_key == receipt.get("key"))
+                        )
+                        if (ledger is not None and ledger.status == "VERIFIED"
+                                and ledger.verified_at is not None
+                                and ledger.checksum == receipt.get("checksum")
+                                and ledger.row_count == receipt.get("row_count")
+                                and store.head_object(receipt["key"]) is not None):
+                            report["archive_receipt"] = receipt
+                            report["reused_checkpoint"] = True
+                            return report
+                    if not rows_json:
+                        # Older incomplete checkpoint cannot be safely resumed
+                        # without re-reading provider; never claim completion.
+                        raise PipelineSafetyError("INCOMPLETE_CHECKPOINT_REVIEW_REQUIRED")
+                    # Retain durable source rows for archive repair, not an
+                    # unverified completed receipt.
+                    checkpoint.value = {"archive_rows": rows_json}
+                    session.commit()
 
         state = checkpoint.value if checkpoint is not None else {}
         if "archive_rows" in state:
@@ -343,6 +367,7 @@ def run_bundesliga_ingest_pipeline(
             checkpoint.value = {
                 "completed_at": datetime.now(timezone.utc).isoformat(),
                 "archive_receipt": report["archive_receipt"],
+                "archive_rows": json.dumps(archive_rows),
             }
             session.commit()
 
