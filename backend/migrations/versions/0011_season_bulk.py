@@ -37,5 +37,7 @@ def upgrade():
 
 
 def downgrade():
-    for name in ("season_imports", "season_odds", "season_fixtures", "season_teams"):
-        op.drop_table(name)
+    # Never destroy user-imported historical seasons through an automatic rollback.
+    # A manual, independently approved recovery plan must restore from a
+    # database snapshot and reconcile immutable R2 objects.
+    raise RuntimeError("SEASON_BULK_DOWNGRADE_REQUIRES_MANUAL_REVIEW")
