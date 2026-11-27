@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { EuropeanCups } from "@/components/european-cups";
 
 export default function EuropePage() {
@@ -10,6 +11,7 @@ export default function EuropePage() {
       </div>
       <span className="today-chip">Türkiye saati · TSİ</span>
     </header>
+    <p><Link href="/leagues">Lig Seçimi ve sezon kapsamı</Link></p>
     <EuropeanCups />
   </>;
 }

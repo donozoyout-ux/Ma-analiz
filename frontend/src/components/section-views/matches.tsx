@@ -1,2 +1,3 @@
+import Link from "next/link";
 import { MatchCenter } from "@/components/match-center";
-export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Maç Merkezi</h1><p className="page-intro">Bugünün canlı ve oynanacak maçları. Lig, durum, tarih ve takım filtreleriyle arayın.</p></div><span className="today-chip">Türkiye saati · TSİ</span></header><MatchCenter /></>; }
+export default function Page() { return <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Maç Merkezi</h1><p className="page-intro">Bugünün canlı ve oynanacak maçları. Lig, durum, tarih ve takım filtreleriyle arayın.</p></div><span className="today-chip">Türkiye saati · TSİ</span></header><p><Link className="text-link" href="/leagues">Lig Seçimi ve sezon kapsamı</Link></p><MatchCenter /></>; }

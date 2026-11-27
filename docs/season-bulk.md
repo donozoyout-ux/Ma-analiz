@@ -1,0 +1,23 @@
+# Sezonluk futbol veri aktarımı
+
+## Çalıştırma
+
+Backend dizininden sezonluk kaynak önizlemesi için `python -m app.jobs.season_bulk --league uefa.cl --season 2024-2025` çalıştırılır. Parametresiz çağrı Avrupa kupalarının üç sezonunu kapsar. `--isolated` aynı kaynak üzerinden geçici SQLite ve bellek içi R2 simülasyonuyla aktarımı prova eder. Kullanılan girdiler public sezon dosyalarıdır. CLI production bağlantısı kurmaz.
+
+Kodun PostgreSQL/R2 aktarım arayüzü `app.historical.season_transfer.transfer_source` fonksiyonudur. Çağıran işlem PostgreSQL transaction'ını yönetir. Yalnız katalogdaki kaynağı ve açık aktarım onayını kabul eder. Dağıtımda migration ayrı onay almalıdır. Sabit kaynak sürümünü, SQL makbuzundan adreslenen R2 orijinalini boyut ve SHA-256 ile doğrulayıp yeniden kullanır. Sezon dosyası, Parquet ve manifest içerik adreslidir. Başarısız bir SQL işleminden sonra R2 nesneleri yeniden doğrulanabilir. SQL işleminde maç, takım, oran ve makbuz kayıtları birlikte tamamlanır.
+
+Yeni tablolar operasyonel saklama/silme sürecinin dışındadır. Maç kimliği kaynakta yerel kimlik varsa ona bağlanır. OpenFootball ana turnuvalarında lig, sezon, tur ve yönlü takım eşleşmesine bağlanır. Ev/deplasman adları kaynak bazında eşleştirilir. Kaynaklar arasında takım birleştirmesi ancak doğrulanmış eşleme ile yapılmalıdır. Mevcut maç, sonuç ve arşiv tabloları bu aktarımın hedefi değildir.
+
+## Kaynakların kapsamı ve izinler
+
+- **OpenFootball CC0** — 2024–2025 ana turnuvalarında Şampiyonlar Ligi 189 maç, Avrupa Ligi 189 maç, Konferans Ligi 153 maç. 2025–2026 Şampiyonlar Ligi 189 maç. Bu dört dosyada 720 normal süre sonucu ve sıfır oran var. UTC dönüşümünde Orta Avrupa saati ve yaz saati kullanılır. [OpenFootball kaynak ve lisansı](https://github.com/openfootball/champions-league/blob/abfaeddc2ee3d14f99ecc163c9ddb46cb4d67cef/LICENSE.md) · [UEFA Şampiyonlar Ligi saatleri](https://www.uefa.com/uefachampionsleague/news/0299-1dc300759948-6eb1b2f357ae-1000--when-does-the-champions-league-final-start-where-you-are-w/)
+- **OpenLigaDB ODbL 1.0** — 2026–2027 lig aşaması sırasıyla 144/144/108 fikstür ve 90/89/72 kullanılabilir normal süre skoru sundu. Üç çelişkili alan boş bırakıldı. 2025–2026 Avrupa Ligi yanıtında 17 kısmi eleme fikstürü vardı ve güvenle ayrıştırılan 90 dakika skoru yoktu. Atıf ve yeniden dağıtılan türetilmiş veritabanı için aynı lisans koşulları geçerlidir. [Lisans](https://www.openligadb.de/lizenz) · [API koşulları](https://www.openligadb.de/nutzungsbedingungen)
+- **Eksik kapsam** — 2025–2026 Konferans Ligi için doğrulanmış toplu lisans kaynağı yok. Diğer yayımlanmış 2025–2026 Avrupa ve Konferans Ligi dosyalarının ticari depolama ve yeniden kullanım izinleri teyit edilene kadar `BLOCKED_LICENSE_REVIEW`. Avrupa kupası ön eleme kaynakları bu aktarım kapsamına alınmadı. [Fixture Download Avrupa Ligi](https://fixturedownload.com/results/europa-league-2025)
+- **Aşama B** — OpenFootball JSON adaptörleri Süper Lig, Bundesliga ve Belçika Pro League için hazır. Kaynaklarda bazı sezonlar kısmi, saat dilimli başlama zamanı eksik ve dönem belirtmeyen skor dizileri var. Bu alanlar boş kalır. [OpenFootball JSON lisansı](https://github.com/openfootball/football.json/blob/e6744429ee395bc86f247348c6184bb08d4eb361/LICENSE.md)
+- **Oranlar** — Ölçülen kaynaklarda sıfır uygun oran var. Football-Data kullanım amacı sınırlı. Footiqo özel arşiv izni gerektiren bir aday. The Odds API ücretli ve zaman damgalı geçmiş oran sağlar. Koşulları dahili saklama ve türetilmiş analizlere izin veriyor ancak bağımsız ham veri dağıtımı sınırlandırılmış. Abonelik, kapsam ve maliyet onayı ile örnek dosya doğrulaması bekleniyor. [Football-Data](https://football-data.co.uk/data) · [Footiqo lisansı](https://footiqo.com/premium/historical-football-odds/) · [The Odds API koşulları](https://the-odds-api.com/terms-and-conditions.html) · [Geçmiş kapsam](https://the-odds-api.com/historical-odds-data/)
+
+## Üretim yüklemesi için onaylar
+
+Önce migration ve staging provası ile yazma kimliklerinin yeni tablo/prefix kapsamı ve nesne makbuzu kontrol edilir. Başlangıç yükü tek onaylı 2024–2025 Şampiyonlar Ligi sürümüyle sınırlandırılır. Kaynaktan bildirilen skor tek başına bağımsız doğrulama sayılmaz. Oranlar için sağlayıcı hakkı, maliyeti, UTC gözlem zamanı ve maç eşleştirmesi ayrıca doğrulanır. Düzenli güncelleme istenirse OpenLigaDB değişiklik kontrolü ve merkezi önbellek onaylı operasyon planına alınır.
+
+Analiz en az 200 doğrulanmış, pre-match 1-X-2 gözlemi olan maç ister. En yakın tam oran gözlemi kullanılır. Beraberlik dahil ters oranlar normalize edilir. Önceki sezonlarda hesaplanan oran aralığı başarıları sonraki sezonda sınanır. Düşük sürpriz oranı kârlılığı garanti etmez. Aşama C sıralaması için veri yeterli değil.

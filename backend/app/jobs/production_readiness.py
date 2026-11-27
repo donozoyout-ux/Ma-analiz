@@ -29,7 +29,7 @@ from app.providers.registry import ProviderCaller, create_provider
 from app.api.routes import health as internal_health
 
 
-EXPECTED_ALEMBIC_HEAD = "0010_active_statistics"
+EXPECTED_ALEMBIC_HEAD = "0011_season_bulk"
 LEGACY_DATABASE_NAMES = {
     "betappv33", "betappv33333", "kuponanaliziivv7", "kuponanaliziivv755",
 }
