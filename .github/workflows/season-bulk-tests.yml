@@ -114,10 +114,16 @@ jobs:
           PGPASSWORD: test-only
         run: |
           set -euo pipefail
-          pg_dump --version
-          pg_dump -Fc --no-owner --no-acl -d season_test -f /tmp/season-stage.backup
-          createdb season_restore_test
-          pg_restore --no-owner --no-acl --exit-on-error -d season_restore_test /tmp/season-stage.backup
+          # Use the PostgreSQL 16 client image, matching the CI server.
+          # The runner's PostgreSQL 18 pg_dump produces incompatible settings.
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            -v /tmp:/backup postgres:16 pg_dump -Fc --no-owner --no-acl \
+            -d season_test -f /backup/season-stage.backup
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            postgres:16 createdb season_restore_test
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            -v /tmp:/backup postgres:16 pg_restore --no-owner --no-acl --exit-on-error \
+            -d season_restore_test /backup/season-stage.backup
           python - <<'PY'
           from sqlalchemy import create_engine, text
           url = "postgresql+psycopg://test:test-only@localhost:5432/"
