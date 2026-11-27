@@ -48,7 +48,7 @@ def main() -> int:
             after = conn.scalar(text("SELECT COUNT(*) FROM active_matches"))
         if not (first["fixtures"] == first["regulation_scores"] == fixtures == 189
                 and first["verification"] == "ARCHIVE_VERIFIED" and second["reused"]
-                and imports == 1 and baseline == after == 0):
+                and imports == 1 and baseline == after == 1):
             raise RuntimeError("STAGING_REHEARSAL_MISMATCH")
         for key in ("raw", "matches", "manifest"):
             receipt = first[key]
@@ -62,6 +62,7 @@ def main() -> int:
             "regulation_scores": first["regulation_scores"], "imports": imports,
             "objects_verified": 3, "replay_reused": second["reused"],
             "existing_active_matches_unchanged": True,
+            "operational_baseline_matches": baseline,
             "actual_r2_writes": 0, "production_writes": 0,
         }, sort_keys=True))
     finally:
