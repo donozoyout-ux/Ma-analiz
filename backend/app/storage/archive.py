@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from enum import StrEnum
 from typing import Callable, Protocol
 
+from app.storage.quota import QuotaExceededError
 from app.storage.r2 import ObjectStore, parquet_bytes, parquet_row_count, parquet_rows
 
 
@@ -125,6 +126,7 @@ def archive_partition(
     day: date, rows: list[dict], retries: int = 3,
     sleep: Callable[[float], None] = time.sleep,
     tracker: ArchiveTracker | None = None, part: str | None = None,
+    before_upload: Callable[[int], None] | None = None,
 ) -> ArchiveReceipt:
     """Write one deterministic Parquet partition and verify it before reporting VERIFIED."""
     if not rows:
@@ -204,6 +206,8 @@ def archive_partition(
             if tracker:
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.UPLOADING, rows=len(rows))
             if store.head_object(key) is None:
+                if before_upload is not None:
+                    before_upload(len(payload))
                 store.put_object_if_absent(key, payload, content_type="application/vnd.apache.parquet",
                                           metadata={"sha256": checksum, "row-count": str(len(rows)), "archive-key": key})
             if tracker:
@@ -214,6 +218,8 @@ def archive_partition(
                 tracker.set_status(key=key, day=day, dataset=dataset, league=league, status=ArchiveStatus.VERIFIED,
                                    rows=len(rows), size=len(payload), checksum=checksum)
             return ArchiveReceipt(key, len(rows), len(payload), checksum)
+        except QuotaExceededError:
+            raise
         except Exception as exc:
             last_error = exc
             if attempt + 1 < retries:

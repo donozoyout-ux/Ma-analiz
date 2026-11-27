@@ -70,4 +70,6 @@ jobs:
           BUNDESLIGA_INGEST_DRY_RUN: 'true'
           AUTO_RETENTION_DELETE_ENABLED: 'false'
           OPERATIONAL_DELETE_ENABLED: 'false'
-        run: python -m pytest tests/test_bundesliga_postgres_quota.py -q
+        run: |
+          python -m pytest tests/test_bundesliga_postgres_quota.py -q
+          python -m pytest tests/test_bundesliga_ingestion.py -k daily_upload_quota_resume_and_reuse -q

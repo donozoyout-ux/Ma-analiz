@@ -21,6 +21,9 @@ on:
       - '.github/workflows/bundesliga-sql-r2-ingest.yml'
       - 'backend/app/jobs/bundesliga_daily.py'
       - 'backend/app/jobs/bundesliga_pipeline.py'
+      - 'backend/app/providers/openligadb.py'
+      - 'backend/app/storage/archive.py'
+      - 'backend/app/storage/quota.py'
       - 'backend/tests/test_bundesliga_ingestion.py'
 permissions:
   contents: read
@@ -49,7 +52,9 @@ jobs:
         run: python -m pytest -q tests/test_bundesliga_ingestion.py
   ingest:
     needs: validate
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'schedule' && vars.BUNDESLIGA_SCHEDULED_LIVE_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
