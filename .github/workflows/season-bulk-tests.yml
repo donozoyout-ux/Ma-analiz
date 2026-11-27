@@ -66,6 +66,29 @@ jobs:
               assert c.scalar(text("SELECT COUNT(*) FROM active_matches")) == 0
           print("DISPOSABLE_0010_BASELINE_PASS")
           PY
+      - name: Seed operational match and capture baseline before season migration
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: |
+          python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from sqlalchemy import create_engine, select, func
+          from sqlalchemy.orm import Session
+          from app.models import ActiveMatch
+          import os
+          engine = create_engine(os.environ["DATABASE_URL"])
+          now = datetime(2026, 8, 28, tzinfo=timezone.utc)
+          with Session(engine) as session, session.begin():
+              session.add(ActiveMatch(
+                  provider="isolated-fixture", provider_match_id="seed-preservation",
+                  league_id="de.bl1", season="2026-2027",
+                  home_team="Sample Home", away_team="Sample Away",
+                  start_time=now, status="FINISHED", expires_at=now + timedelta(hours=32),
+              ))
+          with Session(engine) as session:
+              assert session.scalar(select(func.count()).select_from(ActiveMatch)) == 1
+          print("OPERATIONAL_BASELINE_SEEDED")
+          PY
       - name: Validate read-only identity before migration
         env:
           SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
@@ -83,3 +106,32 @@ jobs:
           DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
           SEASON_BULK_TEST_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
         run: python -m app.jobs.season_staging_rehearsal
+      - name: Verify Postgres backup and isolated restore of full season dataset
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: test
+          PGPASSWORD: test-only
+        run: |
+          set -euo pipefail
+          pg_dump --version
+          pg_dump -Fc --no-owner --no-acl -d season_test -f /tmp/season-stage.backup
+          createdb season_restore_test
+          pg_restore --no-owner --no-acl --exit-on-error -d season_restore_test /tmp/season-stage.backup
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          url = "postgresql+psycopg://test:test-only@localhost:5432/"
+          counts = []
+          for db in ("season_test", "season_restore_test"):
+              eng = create_engine(url + db)
+              with eng.connect() as c:
+                  counts.append((
+                      c.scalar(text("SELECT version_num FROM alembic_version")),
+                      c.scalar(text("SELECT COUNT(*) FROM active_matches")),
+                      c.scalar(text("SELECT COUNT(*) FROM season_fixtures")),
+                      c.scalar(text("SELECT COUNT(*) FROM season_imports")),
+                  ))
+              eng.dispose()
+          assert counts == [("0011_season_bulk", 1, 189, 1)] * 2, counts
+          print("ISOLATED_BACKUP_RESTORE_VERIFIED: matches=1 fixtures=189 receipts=1")
+          PY
