@@ -27,6 +27,9 @@ def test_database_identity_and_migration_fail_closed():
     connection = MagicMock()
     connection.scalar.return_value = operator.DATABASE
     connection.execute.return_value.scalars.return_value.all.return_value = ["0010_active_statistics"]
+    with pytest.raises(RuntimeError, match="MIGRATION_REQUIRED"):
+        operator.check_database(connection)
+    connection.execute.return_value.scalars.return_value.all.return_value = ["0009_historical_coverage"]
     with pytest.raises(RuntimeError, match="MIGRATION_VERSION_MISMATCH"):
         operator.check_database(connection)
     connection.scalar.return_value = "wrong"
