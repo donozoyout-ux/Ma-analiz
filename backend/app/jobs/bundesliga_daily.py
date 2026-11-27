@@ -71,8 +71,20 @@ def main(argv: list[str] | None = None) -> int:
         }
     print(json.dumps(report, ensure_ascii=False, default=str))
     if report["status"] == "QUOTA_DEFERRED":
-        print(f"Bundesliga quota deferred {report['resume_date']}. Retry this date after {report['retry_after_utc']}.")
-    return 0 if report["status"] in {"DRY_RUN", "COMPLETED", "QUOTA_DEFERRED"} else 1
+        # A deferred run did not finish loading: never report a green ingest job.
+        notice = (
+            f"Bundesliga ingest DEFERRED for {report['resume_date']}; "
+            f"retry no earlier than {report['retry_after_utc']}; "
+            "no completed ingestion receipt for this attempt."
+        )
+        print("::warning::" + notice, flush=True)
+        import os
+        summary = os.getenv("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a", encoding="utf-8") as out:
+                out.write("### Bundesliga ingest deferred\\n" + notice + "\\n")
+        return 3
+    return 0 if report["status"] in {"DRY_RUN", "COMPLETED"} else 1
 
 
 if __name__ == "__main__":
