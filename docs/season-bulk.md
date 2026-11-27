@@ -21,3 +21,14 @@ Yeni tablolar operasyonel saklama/silme sürecinin dışındadır. Maç kimliği
 Önce migration ve staging provası ile yazma kimliklerinin yeni tablo/prefix kapsamı ve nesne makbuzu kontrol edilir. Başlangıç yükü tek onaylı 2024–2025 Şampiyonlar Ligi sürümüyle sınırlandırılır. Kaynaktan bildirilen skor tek başına bağımsız doğrulama sayılmaz. Oranlar için sağlayıcı hakkı, maliyeti, UTC gözlem zamanı ve maç eşleştirmesi ayrıca doğrulanır. Düzenli güncelleme istenirse OpenLigaDB değişiklik kontrolü ve merkezi önbellek onaylı operasyon planına alınır.
 
 Analiz en az 200 doğrulanmış, pre-match 1-X-2 gözlemi olan maç ister. En yakın tam oran gözlemi kullanılır. Beraberlik dahil ters oranlar normalize edilir. Önceki sezonlarda hesaplanan oran aralığı başarıları sonraki sezonda sınanır. Düşük sürpriz oranı kârlılığı garanti etmez. Aşama C sıralaması için veri yeterli değil.
+
+
+## Migration ve ilk yükleme kontrol listesi (onay gerektirir)
+
+- **Ortam ayrımı:** `--isolated` yalnızca geçici SQLite ve bellekte R2 simülasyonu kullanır; production/staging R2 aktarımı değildir. İzole PostgreSQL CI da production veritabanına bağlanmaz.
+- **Gerçek production DB kimliği:** Render servisinin `DATABASE_URL` hedefi (şifreyi/logları ifşa etmeden) servis yapılandırmasında ayrı doğrulanmalıdır. Workspace'de görünen bir Postgres instance'ı otomatik olarak bu servisin bağlı olduğu instance sayılmaz.
+- **Mevcut sürüm:** Belirlenen hedef DB salt okunur olarak Alembic `0010_active_statistics` ise yeni `0011_season_bulk` için migration gerekir. Mevcut `production_readiness.py` içindeki eski veritabanı kimliği reddetme davranışı sezonluk yükleyici tarafından aşılmamalıdır.
+- **Staging provası:** Production kopyası olmayan yalıtılmış PostgreSQL'de önce `0010_active_statistics` şemasıyla başla, sonra `0011_season_bulk` migration'ını uygula. Yeni dört tabloyu doğrula, mevcut tabloların veri ve satır sayılarını önce/sonra karşılaştır. İzole R2 veya bellek deposuna 2024–2025 UCL aktarımını yap; aynı aktarımı iki kez çalıştırıp aynı SHA-256/manifest makbuzunu aldığını kontrol et.
+- **Rollback:** `0011_season_bulk` otomatik downgrade'i veri kaybını önlemek için kasıtlı olarak engeller. Production öncesi bağımsız PostgreSQL yedeği, yedek geri yükleme provası, kaynak sürümü kaydı ve R2 manifest kontrolü gereklidir. Eski şemaya dönüş ancak ayrıca onaylanan manuel kurtarma planıyla yapılabilir.
+- **İlk production yüklemesi:** Yalnız `uefa.cl`, `2024-2025`, açık onaylı ve sabitlenmiş CC0 kaynak revizyonu. Önce kaynak doğrulaması, ardından migration onayı, sonrasında ayrı ingest onayı. Birbirinden bağımsız bu üç aşama tamamlanmadan canlı yazma yapılmamalıdır.
+- **Oran verisi:** Ölçülen %0 kapsama nedeniyle analiz sonuçlarında favori/sürpriz oranı üretilmez; sonraki kaynaklar için ayrıca hukuki ve mali inceleme gerekir.
