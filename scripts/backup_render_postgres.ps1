@@ -17,9 +17,23 @@ if ($HostName -ne $ExpectedInstance -and
 if ($DatabaseUser -ne "cbcxbcxbcv_user") {
     throw "TARGET_USER_MISMATCH: verify the database username in Render."
 }
+# PostgreSQL Windows installers usually do not add the tools to PATH.
+# Support Windows PowerShell 5.1 and discover the installed clients automatically.
+$tools = @{}
 foreach ($binary in @("pg_dump", "pg_restore")) {
-    if (-not (Get-Command $binary -ErrorAction SilentlyContinue)) {
-        throw "$binary is not on PATH. Install PostgreSQL command-line utilities first."
+    $command = Get-Command "$binary.exe" -ErrorAction SilentlyContinue
+    if ($command) {
+        $tools[$binary] = $command.Source
+    } else {
+        $installRoot = Join-Path $env:ProgramFiles "PostgreSQL"
+        $candidates = @(Get-ChildItem -LiteralPath $installRoot -Directory -ErrorAction SilentlyContinue |
+            Sort-Object { try { [version]$_.Name } catch { [version]"0.0" } } -Descending |
+            ForEach-Object { Join-Path $_.FullName "bin\\$binary.exe" } |
+            Where-Object { Test-Path -LiteralPath $_ })
+        if ($candidates.Count -eq 0) {
+            throw "$binary not found. Install PostgreSQL Command Line Tools (version 16 or later)."
+        }
+        $tools[$binary] = $candidates[0]
     }
 }
 New-Item -ItemType Directory -Force -Path $OutputFolder | Out-Null
@@ -34,12 +48,12 @@ try {
 }
 $env:PGSSLMODE = "require"
 try {
-    & pg_dump --host=$HostName --port=5432 --username=$DatabaseUser --dbname=$DatabaseName --format=custom --no-owner --no-acl --file=$backup
+    & $tools['pg_dump'] --host=$HostName --port=5432 --username=$DatabaseUser --dbname=$DatabaseName --format=custom --no-owner --no-acl --file=$backup
     if ($LASTEXITCODE -ne 0) {
         Remove-Item -LiteralPath $backup -ErrorAction SilentlyContinue
         throw "PG_DUMP_FAILED"
     }
-    & pg_restore --list $backup | Out-Null
+    & $tools['pg_restore'] --list $backup | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "PG_RESTORE_LIST_FAILED: backup was not validated"
     }
