@@ -701,7 +701,7 @@ def test_completed_checkpoint_without_archive_receipt_fails_closed(session, stor
     assert client.get.call_count == 0
 
 
-def test_cli_deferred_is_not_reported_as_success(monkeypatch, capsys):
+def test_cli_deferred_is_not_reported_as_success(session, store, monkeypatch, capsys):
     """A quota-deferred manual live ingest must fail visibly, not appear green."""
     from app.jobs import bundesliga_daily
     from app.jobs import bundesliga_pipeline
