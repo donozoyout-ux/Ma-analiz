@@ -678,6 +678,54 @@ def test_daily_request_quota_blocks_http_retry(session, store, monkeypatch):
     assert session.scalars(select(ActiveMatch)).first() is None
 
 
+
+
+def test_completed_checkpoint_without_archive_receipt_fails_closed(session, store, monkeypatch):
+    """Never treat a completed marker without archived rows as a verified upload."""
+    key = "bundesliga:daily:2026-2027:2026-08-29"
+    session.add(SystemSetting(key=key, value={
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+        "archive_receipt": None,
+    }))
+    session.commit()
+    config = Settings(
+        bundesliga_ingest_enabled=True, bundesliga_ingest_dry_run=False, _env_file=None,
+    )
+    client = MagicMock()
+    provider = OpenLigaDBProvider(client=client)
+    with pytest.raises(PipelineSafetyError, match="INCOMPLETE_CHECKPOINT_REVIEW_REQUIRED"):
+        run_bundesliga_ingest_pipeline(
+            date(2026, 8, 29), dry_run=False,
+            settings=config, session=session, store=store, provider=provider,
+        )
+    assert client.get.call_count == 0
+
+
+def test_cli_deferred_is_not_reported_as_success(monkeypatch, capsys):
+    """A quota-deferred manual live ingest must fail visibly, not appear green."""
+    from app.jobs import bundesliga_daily
+    from app.jobs import bundesliga_pipeline
+    from app.db import session as db_session
+    from app.storage import r2
+
+    cfg = Settings(
+        bundesliga_ingest_enabled=True, bundesliga_ingest_dry_run=False,
+        r2_endpoint="https://example.r2.cloudflarestorage.com",
+        r2_access_key_id="fake-test", r2_secret_access_key="fake-test",
+        r2_bucket="fake-test", _env_file=None,
+    )
+    monkeypatch.setattr(bundesliga_daily, "get_settings", lambda: cfg)
+    monkeypatch.setattr(db_session, "SessionLocal", lambda: session)
+    monkeypatch.setattr(r2, "R2ObjectStore", lambda settings: store)
+    monkeypatch.setattr(bundesliga_pipeline, "run_bundesliga_ingest_pipeline",
+        lambda *args, **kwargs: {
+            "status": "QUOTA_DEFERRED",
+            "resume_date": "2026-08-29",
+            "retry_after_utc": "2026-11-28T00:00:00Z",
+        })
+    assert bundesliga_daily.main(["--live", "--date", "2026-08-29"]) == 3
+    assert "DEFERRED" in capsys.readouterr().out
+
 # --- NOTIFICATION EVENT CONTRACT TESTS ---
 
 
