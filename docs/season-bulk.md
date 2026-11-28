@@ -126,3 +126,15 @@ Provider'ın tüm Bundesliga girişleri, scheduled GitHub Actions ve Render sür
 ## Test secret güvenliği
 
 Pytest conftest başlamadan gerçek proje .env dosyasını test yapılandırması olarak yüklemez. Test alt süreçleri test modunu devralır. Test database URL'leri yalnızca kodda listelenen yerel ve sentetik CI değerlerine izin verir. Başarısız test ve test toplama raporlarında hata ayrıntısı ve yakalanmış çıktılar, secret sızıntısını engellemek için bastırılır. Bu sınır tüm uygulama günlüklerini veya dış servis günlüklerini kapsamaz.
+
+## Bundesliga 2024–2027 R2-only hazırlığı
+
+`python -m app.jobs.bundesliga_season_r2` üç sabit OpenFootball dosyasını doğrular, Parquet oluşturup geri okur ve sadece R2'den mevcut günlük nesneleri ve aday anahtarları okur. PostgreSQL kullanmaz. 2026–27 Parquet kayıtları 28 Kasım 2026 dahil önceki tarihlerle sınırlıdır. Orijinal kaynak dosyası kaynak bütünlüğü için filtrelenmeden saklanacak ve sonraki fikstürleri de içerecektir.
+
+2024–25 için 306 maç/306 skor, 2025–26 için 306/294 ve 2026–27 için tarih sınırında 96/33 bulundu. 2025–26 sezonundaki 12 skor kaynağın alanında dönem belirtilmemiş dizi biçimindedir; 2026–27 sınırında 63 kayıt için güvenli normal süre skoru yoktur. Null bırakılır ve durum UNKNOWN olur. Kaynaktan bildirilen skorlar bağımsız doğrulama değildir. Saat dilimi belirsiz olduğunda UTC başlama saati uydurulmaz.
+
+28 Kasım günlük R2 snapshot'ında 5 farklı OpenLigaDB kimliği aynı tarih, ev sahibi ve deplasman adı ile eşleşir. 2026–27 manifesti bu kaynak kimliği bağlarını tutar; kaynak kayıtları birleştirilmez. Farklı veya belirsiz kimlik eşleşmesinde canlı aktarım durur. Beklenen bucket sdfgdsgdg'dir.
+
+Football-Data Almanya sayfasında üç sezonun D1 CSV dosyaları listeleniyor. Kullanım koşulları kişisel/akademik kullanımı sınırlıyor ve ticari/AI kullanımı için izin vermiyor; dosyalar indirilmedi, arşivlenmedi, oran kapsamı ölçülmedi. Bakınız https://football-data.co.uk/contact.php ve https://football-data.co.uk/germanym.php .
+
+Bu hazırlık üretim yazma izni vermez. Üç sezon ve bucket için ayrı açık onay alındığında operatör komutu `python -m app.jobs.bundesliga_season_r2 --live --approval ARCHIVE_BUNDESLIGA_2024_2027_R2_ONLY` olur. Komut sabit hashleri, hedef bucketı ve günlük arşiv eşleşmelerini yeniden doğrular, var olan nesneleri doğrular ve koşullu PUT kullanır. Kısmi sonuçları silmez; hata giderildikten sonra aynı komut mevcut nesneleri doğrulayarak tamamlayabilir.
