@@ -101,6 +101,14 @@ def test_cli_reads_only_local_files_and_reports_unapproved_source(tmp_path):
                             capture_output=True, text=True,
                             cwd=Path(__file__).resolve().parents[1],
                             env={**os.environ, "MAC_ANALIZ_TEST_MODE": "1"})
+    if result.returncode != 2:
+        # Diagnostic contains only status codes/known error categories, never stderr, env or secrets.
+        print('SAFE_CLI_DIAGNOSTIC', {'returncode': result.returncode,
+            'stdout_json': result.stdout.lstrip().startswith('{'),
+            'invalid_offline_input': 'INVALID_OFFLINE_INPUT' in result.stdout,
+            'module_missing': 'ModuleNotFoundError' in result.stderr,
+            'parquet_readback': 'PARQUET_READBACK_MISMATCH' in result.stderr,
+            'traceback': 'Traceback' in result.stderr})
     assert result.returncode == 2
     report = json.loads(result.stdout)
     assert report["status"] == "BLOCKED_SOURCE_OR_LICENCE" and report["matched"] == 1
