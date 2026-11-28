@@ -101,6 +101,9 @@ def main(argv=None) -> int:
             raise DestinationBlocked("DATABASE_NOT_CONFIGURED")
         # SQL schema and connection must be verified before touching R2.
         with SessionLocal() as session:
+            # Defence in depth: PostgreSQL itself rejects any accidental SQL
+            # writes in this diagnostic transaction.
+            session.execute(text("SET TRANSACTION READ ONLY"))
             observed_db = session.execute(text("SELECT current_database()")).scalar_one()
             if observed_db != database_name:
                 raise DestinationBlocked("DATABASE_CONNECTION_IDENTITY_MISMATCH")
