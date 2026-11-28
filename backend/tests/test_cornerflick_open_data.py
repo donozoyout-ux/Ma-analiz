@@ -114,3 +114,21 @@ def test_second_read_is_throttled_instead_of_silent_auto_retry():
         with pytest.raises(ProviderRateLimited, match="LOCAL_COOLDOWN"):
             source.season_results()
     assert len(count) == 1
+
+
+@pytest.mark.parametrize("raw", [
+    b'{"score":1,"score":2}',
+    b'{"score":NaN}',
+    b'{"score":Infinity}',
+    b'{"score":-Infinity}',
+    b'{"details":{"status":1,"status":2}}',
+])
+def test_ambiguous_numeric_or_duplicate_json_rejected(raw):
+    """Never accept ambiguous source data or non-finite values as real match facts."""
+    with CornerflickOpenData(
+        enabled=True,
+        client=client_with(lambda _request: httpx.Response(
+            200, headers={"content-type": "application/json"}, content=raw)),
+    ) as source:
+        with pytest.raises(ProviderInvalidResponse, match="CORNERFLICK_INVALID_JSON"):
+            source.season_results()
