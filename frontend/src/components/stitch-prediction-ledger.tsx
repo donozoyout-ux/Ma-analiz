@@ -35,6 +35,28 @@ export function StitchPredictionLedger() {
    <label><span>Bitiş · TSİ</span><input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label>
    {[{label:"Lig",value:league,set:setLeague,values:options([...byId.values()].map(x=>x.league_name))},{label:"Pazar",value:market,set:setMarket,values:options(valid.map(x=>x.market))},{label:"Model sürümü",value:model,set:setModel,values:options(valid.map(x=>x.model_version))},{label:"Durum",value:status,set:setStatus,values:options(valid.map(x=>x.status))}].map(f=><label key={f.label}><span>{f.label}</span><select value={f.value} onChange={e=>f.set(e.target.value)}><option value="">Tümü</option>{f.values.map(v=><option key={v} value={v}>{v}</option>)}</select></label>)}
   </div></div>
-  {predictions.error || matches.error ? <div className="card empty" role="alert">Kayıtlar okunamadı. <button className="quiet-button" onClick={()=>{predictions.refresh();matches.refresh();}}>Yeniden dene</button></div> : !loaded ? <div className="card empty" role="status">Tahmin kayıtları yükleniyor…</div> : !shown.length ? <div className="card empty">Bu filtrelerde geçici tahmin kaydı bulunamadı.</div> : <div className="card records-scroll" tabIndex={0} role="region" aria-label="Geçici tahmin kayıtları"><p className="scope-note">Gösterilen kayıt: {shown.length}; yayın kanıtı olan örneklem: bilinmiyor.</p><table className="records-table"><caption className="sr-only">Yayın kanıtı bulunmayan geçici tahmin kayıtları</caption><thead><tr>{["Maç", "Pazar", "Seçim", "Kayıt · TSİ", "Yayın", "Model", "Oran", "Durum", "Sonuç zamanı"].map(x=><th key={x} scope="col">{x}</th>)}</tr></thead><tbody>{shown.map((p,i)=>{const m=byId.get(p.match_id); const label=m ? `${m.home_team} – ${m.away_team}` : "Maç kaydı bulunamadı";return <tr key={p.id || `${p.match_id}-${i}`}><td>{m && UUID.test(p.match_id) ? <Link href={`/matches/${encodeURIComponent(p.match_id)}`}>{label}</Link> : label}</td><td>{text(p.market)}</td><td>{text(p.selection)}</td><td>{formatMatchTime(p.created_at)}</td><td>Doğrulanmadı</td><td>{text(p.model_version)}</td><td>Doğrulanmış oran yok</td><td>{text(p.status)}</td><td>{formatMatchTime(p.settled_at)}</td></tr>})}</tbody></table></div>}
+  {predictions.error || matches.error ? <div className="card empty" role="alert">Kayıtlar okunamadı. <button className="quiet-button" onClick={()=>{predictions.refresh();matches.refresh();}}>Yeniden dene</button></div> : !loaded ? <div className="card empty" role="status">Tahmin kayıtları yükleniyor…</div> : !shown.length ? <div className="card empty">Bu filtrelerde geçici tahmin kaydı bulunamadı.</div> : <div className="stitch-prediction-results">
+   <div className="stitch-prediction-section-head">
+    <div><h3 className="section-title">Kayıtlı model seçimleri</h3><p className="scope-note">İlk {Math.min(shown.length,24)} kayıt kartlarda · {shown.length} filtrelenmiş kayıt</p></div>
+    <span className="stitch-evidence-tag">YAYIN KANITI BEKLENİYOR</span>
+   </div>
+   <ul className="stitch-prediction-cards" aria-label="AI tahmin kartları">
+    {shown.slice(0,24).map((p,i) => {
+      const m=byId.get(p.match_id);
+      const label=m ? `${m.home_team} — ${m.away_team}` : "Maç bilgisi bulunamadı";
+      return <li className="stitch-prediction-card" key={p.id || `${p.match_id}-card-${i}`}>
+       <div className="stitch-prediction-card-top"><span>{m?.league_name || "Lig bilinmiyor"}</span><span className="stitch-evidence-tag">Doğrulanmamış</span></div>
+       <h3>{m && UUID.test(p.match_id) ? <Link href={`/matches/${encodeURIComponent(p.match_id)}`}>{label}</Link> : label}</h3>
+       <div className="stitch-prediction-card-selection"><small>MODEL SEÇİMİ</small><strong>{text(p.selection)}</strong><span>{text(p.market)}</span></div>
+       <div className="stitch-prediction-card-bottom"><span>Kayıt: {formatMatchTime(p.created_at)}</span><span>Model: {text(p.model_version)}</span></div>
+       <p className="stitch-prediction-card-note">Geçici analiz kaydıdır. Kamuya teslim edildiği veya sonucunun doğrulandığı kanıtlanmadı; oran gösterilmez.</p>
+      </li>;
+    })}
+   </ul>
+   <details className="stitch-prediction-audit">
+    <summary>Kayıtların teknik tablosunu göster ({shown.length})</summary>
+    <div className="card records-scroll" tabIndex={0} role="region" aria-label="Geçici tahmin kayıtları"><p className="scope-note">Gösterilen kayıt: {shown.length}; yayın kanıtı olan örneklem: bilinmiyor.</p><table className="records-table"><caption className="sr-only">Yayın kanıtı bulunmayan geçici tahmin kayıtları</caption><thead><tr>{["Maç", "Pazar", "Seçim", "Kayıt · TSİ", "Yayın", "Model", "Oran", "Durum", "Sonuç zamanı"].map(x=><th key={x} scope="col">{x}</th>)}</tr></thead><tbody>{shown.map((p,i)=>{const m=byId.get(p.match_id); const label=m ? `${m.home_team} – ${m.away_team}` : "Maç kaydı bulunamadı";return <tr key={p.id || `${p.match_id}-${i}`}><td>{m && UUID.test(p.match_id) ? <Link href={`/matches/${encodeURIComponent(p.match_id)}`}>{label}</Link> : label}</td><td>{text(p.market)}</td><td>{text(p.selection)}</td><td>{formatMatchTime(p.created_at)}</td><td>Doğrulanmadı</td><td>{text(p.model_version)}</td><td>Doğrulanmış oran yok</td><td>{text(p.status)}</td><td>{formatMatchTime(p.settled_at)}</td></tr>})}</tbody></table></div>
+   </details>
+  </div>}
  </section>;
 }
