@@ -7,7 +7,7 @@ import { type Match, istanbulDay, summarizeTodaysMatches } from "@/lib/matches";
 import { performanceSummary, type DailyPerformance, type PredictionSummary } from "@/lib/football-summary";
 import { SourceBulletin } from "./source-bulletin";
 import { OverviewMetrics } from "./overview-metrics";
-export function FootballHome() {
+export function FootballHome({stitchTitle=false}: {stitchTitle?:boolean} = {}) {
  const matches = useApiList<Match>("matches?limit=500");
  const predictions = useApiList<PredictionSummary>("predictions?limit=500");
  const performance = useApiList<DailyPerformance>("performance?limit=30");
@@ -20,7 +20,7 @@ export function FootballHome() {
  const refreshAll = () => { matches.refresh(); predictions.refresh(); performance.refresh(); };
  return <div className="premium-dashboard">
   <div className="dashboard-context"><span>Çalışma alanı <span aria-hidden="true">/</span> <strong>Genel Bakış</strong></span><span className="dashboard-edition">MAÇ ANALİZ <span aria-hidden="true">●</span> FUTBOL ODAKLI</span></div>
-  <header className="topbar football-heading"><div><div className="eyebrow"><span aria-hidden="true"/> OYUNU VERİYLE OKUYUN</div><h1 className="title">Futbol Analiz Merkezi<span aria-hidden="true">.</span></h1><p className="page-intro">Günün maçları, sahadaki veriler ve analizler.<br className="dashboard-intro-break"/> Futbola daha yakından bakın.</p></div><div className="heading-actions"><span className="today-chip"><CalendarDays size={17}/>{today ? new Date(`${today}T12:00:00+03:00`).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"}) : "Bugün"}</span><button className="quiet-button home-refresh" onClick={refreshAll}><RefreshCw size={16}/>Verileri yenile</button></div></header>
+  <header className="topbar football-heading"><div><div className="eyebrow"><span aria-hidden="true"/> OYUNU VERİYLE OKUYUN</div><h1 className="title">{stitchTitle ? "Genel Bakış" : "Futbol Analiz Merkezi"}{!stitchTitle && <span aria-hidden="true">.</span>}</h1><p className="page-intro">Günün maçları, sahadaki veriler ve analizler.<br className="dashboard-intro-break"/> Futbola daha yakından bakın.</p></div><div className="heading-actions"><span className="today-chip"><CalendarDays size={17}/>{today ? new Date(`${today}T12:00:00+03:00`).toLocaleDateString("tr-TR",{day:"numeric",month:"long",year:"numeric"}) : "Bugün"}</span><button className="quiet-button home-refresh" onClick={refreshAll}><RefreshCw size={16}/>Verileri yenile</button></div></header>
   <p className="scope-note home-scope" role="status"><strong>BETA / TEST SÜRÜMÜ</strong> — Maç bülteni OpenLigaDB’den okunur; yukarıdaki analiz sayaçları yalnızca veritabanına kaydedilmiş verileri sayar. Kaynağın sunmadığı oranlar ve tahminler üretilmez.</p>
   <section className="home-match-section" aria-labelledby="daily-matches-heading"><div className="section-heading-row"><div><div className="section-kicker">BUGÜN & YAKLAŞAN</div><h2 className="section-heading" id="daily-matches-heading">Canlı ve oynanacak maçlar</h2></div><Link className="text-link dashboard-center-link" href="/matches">Tüm maçlar ve filtreler <ArrowUpRight size={16}/></Link></div><SourceBulletin variant="home" /></section>
   <OverviewMetrics matches={matchSummary?.total ?? null} analyzed={matchSummary?.analyzed ?? null} rate={summary?.rate ?? null} loading={!matches.rows && !matches.error}/>

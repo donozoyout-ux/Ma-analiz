@@ -37,7 +37,7 @@ try {
   }
   if(message.method==='Runtime.exceptionThrown') errors.push('UNHANDLED_BROWSER_EXCEPTION');
   if(message.method==='Runtime.consoleAPICalled'&&['error','warning'].includes(message.params.type)) errors.push('CONSOLE_WARNING_OR_ERROR');
-  if(message.method==='Fetch.requestPaused') void intercept(message.params).catch(()=>errors.push('INTERCEPTION_FAILED'));
+  if(message.method==='Fetch.requestPaused') void intercept(message.params).catch(error=>errors.push('INTERCEPTION_FAILED:' + error.message));
  });
  async function intercept({requestId,request}) {
   const url=new URL(request.url);
@@ -95,7 +95,9 @@ try {
   console.log(`VIEWPORT_${width}_ALL_${routes.length}_ROUTES_PASS`);
  }
  await size(1440);mode='fixture';await navigate('/matches');
- await wait(`!!document.querySelector('.football-match-card')`);
+ await wait(`!!document.querySelector('.source-fixtures-table tbody tr')`);
+ await check('source_bulletin_fixture',`document.querySelector('.source-fixtures-table').textContent.includes('SENTETİK Ev Takımı')`);
+ await navigate('/archive'); await wait(`!!document.querySelector('.football-match-card')`);
  const moveTo=async selector=>{
   await evaluate(`document.querySelector('${selector}').scrollIntoView({block:'center'})`);await sleep(100);
   const point=await evaluate(`(()=>{const r=document.querySelector('${selector}').getBoundingClientRect();return {x:r.x+r.width*.8,y:r.y+r.height*.3}})()`);
@@ -118,7 +120,7 @@ try {
  await moveTo('.center-provenance');await check('provenance_card_tilt',`!!document.querySelector('.center-provenance[data-tilt-active]')`);
  await navigate('/archive');await evaluate(`document.querySelector('.football-match-card a').click()`);await wait(`location.pathname==='/matches/${uid}'&&location.search==='?source=history'`);passCheck('history_link_keeps_source');
  function passCheck(name){checks.push(name);}
- await navigate('/matches');await evaluate(`document.querySelector('[aria-label="Tablo görünümü"]').click()`);await wait(`!!document.querySelector('.records-table')`);
+ await navigate('/archive');await evaluate(`document.querySelector('[aria-label="Tablo görünümü"]').click()`);await wait(`!!document.querySelector('.records-table')`);
  await evaluate(`document.querySelector('.records-scroll').focus()`);await key('Tab','Tab',9);
  await check('keyboard_table_links_visible_focus',`document.activeElement.matches(':focus-visible')&&getComputedStyle(document.activeElement).outlineWidth==='3px'`);
  await check('scroll_regions_keyboard_accessible',`document.querySelector('.records-scroll').tabIndex===0`);
@@ -129,7 +131,8 @@ try {
   mode=state;
   for(const path of dataRoutes) {
    await navigate(path);
-   await check(`state_${state}_${path}`,`document.body.innerText.toLocaleLowerCase('tr-TR').includes('${state==='loading'?'yükleniyor':state==='error'?'ulaşılamadı':'yok'}')||document.body.innerText.includes('Bu kapsamda maç bulunamadı')`);
+   const expected = path==='/matches' ? (state==='loading'?'Güncel fikstür okunuyor':state==='error'?'Veri kaynağına bağlanılamadı':'Seçilen filtrelerde maç bulunamadı') : null;
+   await check(`state_${state}_${path}`, expected ? `document.body.innerText.includes(${JSON.stringify(expected)})` : `document.body.innerText.toLocaleLowerCase('tr-TR').includes('${state==='loading'?'yükleniyor':state==='error'?'ulaşılamadı':'yok'}')||document.body.innerText.includes('Bu kapsamda maç bulunamadı')`);
    await check(`state_surface_${state}_${path}`,`[...document.querySelectorAll('.card')].every(e=>getComputedStyle(e).backgroundColor==='rgb(255, 255, 255)')`);
    if(state==='loading'){mode='empty';for(const [requestId,request]of held){held.delete(requestId);await intercept({requestId,request});}mode='loading';}
   }

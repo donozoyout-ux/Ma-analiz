@@ -9,7 +9,7 @@ import { SourceBulletin } from "./source-bulletin";
 
 type Page = {items:Match[]; next_cursor:string|null; as_of:string; history_status:string; warnings:string[];
  scope:{scanned:number; limit:number; start_utc:string; end_utc:string}};
-export function MatchCenter({initialSource="all"}:{initialSource?:MatchFilters["source"]}) {
+export function MatchCenter({initialSource="all", lockHistory=false}:{initialSource?:MatchFilters["source"]; lockHistory?:boolean}) {
  const defaults:MatchFilters = {day:"",league:"",team:"",status:"",source:initialSource};
  const [filters,setFilters] = useState(defaults), [draft,setDraft] = useState(defaults);
  const [cursors,setCursors] = useState<(string|undefined)[]>([undefined]);
@@ -32,7 +32,7 @@ export function MatchCenter({initialSource="all"}:{initialSource?:MatchFilters["
     <label><span>Lig</span><select value={draft.league} onChange={e=>setDraft({...draft,league:e.target.value})}><option value="">Tüm ligler</option><option value="de.bl1">Bundesliga</option><option value="en.pl">Premier League</option><option value="tr.sl">Süper Lig</option></select></label>
     <label><span>Takım adı</span><input maxLength={80} placeholder="Takım ara…" value={draft.team} onChange={e=>setDraft({...draft,team:e.target.value})}/></label>
     <label><span>Maç durumu</span><select value={draft.status} onChange={e=>setDraft({...draft,status:e.target.value})}><option value="">Tüm durumlar</option><option value="scheduled">Planlanan</option><option value="in_progress">Devam eden</option><option value="finished">Tamamlanan</option></select></label>
-    <label><span>Kayıt kapsamı</span><select value={draft.source} onChange={e=>setDraft({...draft,source:e.target.value as MatchFilters["source"]})}><option value="all">Aktif ve tarihsel · tek liste</option><option value="active">Aktif · PostgreSQL</option><option value="history">Tarihsel · doğrulanmış arşiv</option></select></label>
+    {!lockHistory && <label><span>Kayıt kapsamı</span><select value={draft.source} onChange={e=>setDraft({...draft,source:e.target.value as MatchFilters["source"]})}><option value="all">Aktif ve tarihsel · tek liste</option><option value="active">Aktif · PostgreSQL</option><option value="history">Tarihsel · doğrulanmış arşiv</option></select></label>}
     <button className="quiet-button center-submit" type="submit"><Search size={16}/> Filtrele</button>
    </div>
   </form>
