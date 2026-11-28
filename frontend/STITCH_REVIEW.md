@@ -43,10 +43,14 @@ uygulamaya veri olarak aktarılmadı.
   erişilebilir bir `details/summary` açılır bölümüyle korunur.
 - Mobilde tek sütun, geniş ekranda iki sütun; kaynak mint/koyu tonlar,
   klavye focus halkası ve `prefers-reduced-motion` korunur.
+- AI ekranında `Tümü`, `Bekleyen` hızlı filtreleri ve erişilebilir
+  `Diğer filtreler` açılır kontrolü önce gelir; kartlar boş yayın
+  sayaçlarından önce görünür. Analiz ekranındaki ayrıntılı filtreler ve
+  güvenilir olmayan başarı KPI'larının açıklaması korunur.
 - Salt lokal 127.0.0.1 üzerinde çalışan ayrı CI eklendi:
   `Stitch preview QA (isolated)`. Kaynak ZIP GitHub'a yüklenmez.
 - CI `46178441353` sonucu: frontend unit, typecheck, build ve
-  **81 tarayıcı kontrolü** başarılı; 390 ve 1440 pikselde altışar
+  ilk CI'da **81 tarayıcı kontrolü** başarılıydı; son hızlı-filtre kontrolleriyle güncel CI sonucu ayrıca doğrulanmalıdır. Önceki koşuda 390 ve 1440 pikselde altışar
   sayfa, toplam **12 gerçek render ekran görüntüsü** artifacts olarak saklanır.
   360/1280 için ayrıca taşma ve navigasyon kontrolü çalışır.
   Tüm tarayıcı API cevapları yalnız **sentetik** fixture'dır; production
