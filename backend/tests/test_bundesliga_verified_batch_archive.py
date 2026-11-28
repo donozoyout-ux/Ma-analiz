@@ -17,26 +17,6 @@ NOW = datetime(2026, 11, 27, tzinfo=timezone.utc)
 KICKOFF = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
 
 
-@pytest.fixture(autouse=True)
-def deterministic_archive_verification_clock(monkeypatch):
-    """Keep fixture archive receipts at the same synthetic time as reads.
-
-    The test passes NOW=2026-11-27 to the batch reader. If ArchiveJob is
-    stamped with real CI wall-clock time, the verified R2 partition appears
-    to be from the future and historical readback correctly blocks it.
-    Production archive clocks and logic are not changed.
-    """
-    import app.storage.archive as archive
-
-    class SyntheticArchiveDateTime(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            anchored = NOW - timedelta(minutes=5)
-            return anchored.astimezone(tz) if tz else anchored.replace(tzinfo=None)
-
-    monkeypatch.setattr(archive, "datetime", SyntheticArchiveDateTime)
-
-
 @pytest.fixture
 def setup():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
@@ -48,12 +28,14 @@ def setup():
             league_id="de.bl1", season="2026-2027", league_name="Bundesliga",
             home_team="FC Bayern München", away_team="VfB Stuttgart",
             start_time=KICKOFF, status="FINISHED",
+            last_updated_at=NOW-timedelta(days=1),
             expires_at=KICKOFF+timedelta(hours=32))
         db.add(match)
         db.flush()
         result = MatchResult(match_id=match.id, provider="openligadb",
             home_score=5, away_score=1, status="FINAL",
-            result_source="OpenLigaDB", verified_at=NOW-timedelta(days=1))
+            result_source="OpenLigaDB", verified_at=NOW-timedelta(days=1),
+            updated_at=NOW-timedelta(days=1))
         db.add(result)
         db.commit()
         store = InMemoryObjectStore()
@@ -104,7 +86,7 @@ def test_live_writes_two_verified_parts_and_history_reads_5_1(setup):
     original = result.verified_at
     out = run(db, store, day=DAY, now=NOW, live=True,
               approval="ARCHIVE_VERIFIED_BATCH_ONLY")
-    assert out["status"] == "SUCCESS" and out["archived"] == 1
+    assert out["status"] == "SUCCESS" and out["archived"] == 1, out
     receipt = out["results"][0]
     assert receipt["status"] == "ARCHIVED_AND_HISTORY_READBACK_VERIFIED"
     assert {r["dataset"] for r in receipt["receipts"]} == {"matches", "results"}
