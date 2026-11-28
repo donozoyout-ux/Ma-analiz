@@ -1,0 +1,19 @@
+name: Cornerflick offline pilot
+on:
+  pull_request:
+    paths:
+      - backend/app/providers/cornerflick_offline.py
+      - backend/tests/test_cornerflick_offline.py
+      - .github/workflows/cornerflick-offline.yml
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run isolated standard-library tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -p test_cornerflick_offline.py
