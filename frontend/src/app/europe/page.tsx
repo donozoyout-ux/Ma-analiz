@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EuropeanCups } from "@/components/european-cups";
+import { R2ChampionsArchive } from "@/components/r2-champions-archive";
 
 export default function EuropePage() {
   return <>
@@ -13,5 +14,6 @@ export default function EuropePage() {
     </header>
     <p><Link href="/leagues">Lig Seçimi ve sezon kapsamı</Link></p>
     <EuropeanCups />
+    <R2ChampionsArchive />
   </>;
 }
