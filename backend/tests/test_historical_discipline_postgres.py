@@ -115,3 +115,71 @@ def test_csv_rows_refused_without_verified_r2_receipt():
             write_verified_file(db,report=report([row()]),permission_reference="APPROVED-LOCAL-TEST-ONLY",receipt=bogus)
         db.rollback()
     engine.dispose()
+
+
+def test_complete_nine_file_r2_first_import_and_repeat_is_idempotent():
+    """Only synthetic stats; exercise all league/season combinations in real PostgreSQL."""
+    from hashlib import sha256
+    from sqlalchemy.orm import sessionmaker
+    from app.historical.discipline_csv import LEAGUES, SEASONS
+    from app.jobs.discipline_source_download import SCOPE
+    from app.jobs.discipline_batch_upload import run_upload
+
+    plans = []
+    for season_code, league_code in SCOPE:
+        season, (league, league_name) = SEASONS[season_code], LEAGUES[league_code]
+        year = int(season[:4])
+        key = sha256(f"SYNTHETIC_TEST:{season_code}:{league_code}".encode()).hexdigest()
+        source_file_sha256 = sha256(f"SYNTHETIC_FILE:{season_code}:{league_code}".encode()).hexdigest()
+        example = DisciplineRow(
+            key, league, league_name, season, date(year, 8, 17),
+            f"TEST ONLY HOME {season_code} {league_code}",
+            f"TEST ONLY AWAY {season_code} {league_code}",
+            0, 8, 2, None, 0, 1,
+        )
+        plans.append({
+            "source": "football-data.co.uk",
+            "source_url": f"https://www.football-data.co.uk/mmz4281/{season_code}/{league_code}.csv",
+            "file_sha256": source_file_sha256,
+            "league": league,
+            "season": season,
+            "rows": [example],
+        })
+
+    store = InMemoryObjectStore()
+    engine = create_engine(URL)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    rights = "SYNTHETIC-ISOLATED-NOT-A-REAL-LICENCE"
+    first = run_upload(factory, store, plans, permission_reference=rights)
+    assert len(first) == 9
+    assert sum(item["inserted"] for item in first) == 9
+    assert all(item["archive_status"] == "VERIFIED" and item["r2_rows"] == 1 for item in first)
+    assert len(store.list_objects(prefix="match-statistics/")) == 9
+
+    with Session(engine) as session:
+        keys = [entry["r2_key"] for entry in first]
+        ledger = session.scalars(select(ArchiveJob).where(ArchiveJob.r2_key.in_(keys))).all()
+        assert len(ledger) == 9 and all(job.status == "VERIFIED" for job in ledger)
+        persisted = session.scalars(select(H).where(H.r2_archive_key.in_(keys))).all()
+        assert len(persisted) == 9
+        assert all(record.home_corners == 0 and record.away_yellows is None for record in persisted)
+
+    second = run_upload(factory, store, plans, permission_reference=rights)
+    assert len(second) == 9
+    assert sum(item["inserted"] for item in second) == 0
+    assert sum(item["unchanged"] for item in second) == 9
+    assert len(store.list_objects(prefix="match-statistics/")) == 9
+    engine.dispose()
+
+
+def test_nine_file_upload_rejects_incomplete_plan_before_any_r2_write():
+    """Fail closed if one league-season source file is absent."""
+    from sqlalchemy.orm import sessionmaker
+    from app.jobs.discipline_batch_upload import run_upload
+
+    engine = create_engine(URL)
+    store = InMemoryObjectStore()
+    with pytest.raises(ValueError, match="UPLOAD_REQUIRES_COMPLETE_NINE_FILE_PLAN"):
+        run_upload(sessionmaker(bind=engine), store, [], permission_reference="TEST")
+    assert store.list_objects(prefix="match-statistics/") == []
+    engine.dispose()
