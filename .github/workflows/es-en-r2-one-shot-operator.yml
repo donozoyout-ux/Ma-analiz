@@ -1,0 +1,26 @@
+name: Guarded ES/EN archive startup hook checks
+on:
+  pull_request:
+    paths:
+      - 'frontend/scripts/run-single-service.mjs'
+      - '.github/workflows/es-en-r2-one-shot-operator.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: node --check frontend/scripts/run-single-service.mjs
+      - name: Verify disabled by default and scoped to explicit operator token
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          text=Path('frontend/scripts/run-single-service.mjs').read_text()
+          assert 'process.env.ES_EN_R2_ONE_SHOT_APPROVAL !== expected' in text
+          assert 'ARCHIVE_ES_EN_2024_2027_R2_ONLY' in text
+          assert '--live' in text and 'app.jobs.es_en_season_r2' in text
+          print('operator hook syntax and approval guard verified')
+          PY
