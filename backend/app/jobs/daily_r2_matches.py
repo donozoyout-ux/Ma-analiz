@@ -45,7 +45,7 @@ def validate_matches(matches: list[dict], day: date, league: str) -> list[dict]:
             raise ValueError("DAILY_INCOMPLETE_MATCH")
         serialized = {k: (v.isoformat() if isinstance(v, (date, datetime)) else v) for k, v in row.items()}
         safe.append(serialized)
-    return safe
+    return sorted(safe, key=lambda row: row["provider_match_id"])
 
 
 def run(*, day: date, live: bool = False, approval: str = "",
@@ -84,7 +84,6 @@ def run(*, day: date, live: bool = False, approval: str = "",
                 "league": league, "date": day.isoformat(), "timezone": "Europe/Istanbul",
                 "provider": "openligadb", "licence": "ODbL-1.0",
                 "source": "https://www.openligadb.de",
-                "observed_at": datetime.now(TZ).isoformat(),
                 "matches": rows, "odds_available": False,
             })
             digest = hashlib.sha256(payload).hexdigest()
