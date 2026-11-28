@@ -17,6 +17,26 @@ NOW = datetime(2026, 11, 27, tzinfo=timezone.utc)
 KICKOFF = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
 
 
+@pytest.fixture(autouse=True)
+def deterministic_archive_verification_clock(monkeypatch):
+    """Keep fixture archive receipts at the same synthetic time as reads.
+
+    The test passes NOW=2026-11-27 to the batch reader. If ArchiveJob is
+    stamped with real CI wall-clock time, the verified R2 partition appears
+    to be from the future and historical readback correctly blocks it.
+    Production archive clocks and logic are not changed.
+    """
+    import app.storage.archive as archive
+
+    class SyntheticArchiveDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            anchored = NOW - timedelta(minutes=5)
+            return anchored.astimezone(tz) if tz else anchored.replace(tzinfo=None)
+
+    monkeypatch.setattr(archive, "datetime", SyntheticArchiveDateTime)
+
+
 @pytest.fixture
 def setup():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False},
