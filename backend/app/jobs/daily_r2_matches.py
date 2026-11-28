@@ -7,7 +7,7 @@ Schedule this command only after a separately reviewed deployment and R2 access.
 from __future__ import annotations
 
 import argparse
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import hashlib
 import json
 import os
@@ -49,13 +49,16 @@ def validate_matches(matches: list[dict], day: date, league: str) -> list[dict]:
             k: (v.isoformat() if isinstance(v, (date, datetime)) else v)
             for k, v in row.items() if k != "raw_source_updated_at"
         }
+        if serialized.get("status") == "LIVE":
+            serialized["status"] = "IN_PROGRESS_UNCONFIRMED"
         safe.append(serialized)
     return sorted(safe, key=lambda row: row["provider_match_id"])
 
 
 def run(*, day: date, live: bool = False, approval: str = "",
         leagues: tuple[str, ...] = ("bundesliga",),
-        provider_factory=OpenLigaDBProvider, store_factory=R2ObjectStore) -> dict:
+        provider_factory=OpenLigaDBProvider, store_factory=R2ObjectStore,
+        include_previous_day: bool = False) -> dict:
     if not date(2026, 7, 1) <= day <= date(2027, 6, 30):
         raise RuntimeError("DAY_OUT_OF_REVIEWED_SEASON")
     if live and approval != APPROVAL:
@@ -64,19 +67,30 @@ def run(*, day: date, live: bool = False, approval: str = "",
         raise RuntimeError("DRY_RUN_APPROVAL_CONFLICT")
     if not leagues or len(set(leagues)) != len(leagues) or any(league not in SOURCES for league in leagues):
         raise RuntimeError("UNSUPPORTED_LEAGUE")
+    if include_previous_day and (leagues != ("bundesliga",) or day <= date(2026, 7, 1)):
+        raise RuntimeError("PREVIOUS_DAY_SCOPE_UNSUPPORTED")
     results = []
     with provider_factory(max_retries=1) as provider:
         for slug in leagues:
             league = SOURCES[slug]["league"]
-            matches = (provider.get_matches(day) if slug == "bundesliga" else
-                       provider.get_competition_matches(SOURCES[slug]["shortcut"], day))
-            rows = validate_matches(matches, day, league)
-            results.append((slug, league, rows))
+            if include_previous_day:
+                previous_day = day - timedelta(days=1)
+                matches = provider.get_competition_window("bl1", previous_day, day)
+                if any(row.get("match_date") not in (previous_day, day) for row in matches):
+                    raise ValueError("DAILY_MATCH_SCOPE_MISMATCH")
+                for target in (previous_day, day):
+                    rows = validate_matches([row for row in matches if row["match_date"] == target], target, league)
+                    results.append((slug, league, target, rows))
+            else:
+                matches = (provider.get_matches(day) if slug == "bundesliga" else
+                           provider.get_competition_matches(SOURCES[slug]["shortcut"], day))
+                rows = validate_matches(matches, day, league)
+                results.append((slug, league, day, rows))
     # Never call R2 until every requested league was successfully fetched and validated.
     if not live:
         return {"status": "DRY_RUN", "day": day.isoformat(), "timezone": "Europe/Istanbul",
-                "leagues": [{"slug": slug, "league": league, "matches": len(rows)}
-                            for slug, league, rows in results],
+                "leagues": [{"slug": slug, "league": league, "date": target.isoformat(), "matches": len(rows)}
+                            for slug, league, target, rows in results],
                 "postgresql": "NOT_USED", "r2": "NOT_ACCESSED"}
     expected_bucket = os.environ.get("DAILY_R2_EXPECTED_BUCKET", "").strip()
     if not expected_bucket:
@@ -86,20 +100,20 @@ def run(*, day: date, live: bool = False, approval: str = "",
         if store.bucket != expected_bucket:
             raise RuntimeError("DAILY_R2_BUCKET_MISMATCH")
         receipts = []
-        for slug, league, rows in results:
+        for slug, league, target, rows in results:
             if not rows:
-                receipts.append({"league": league, "status": "NO_MATCHES_REPORTED", "matches": 0})
+                receipts.append({"league": league, "date": target.isoformat(), "status": "NO_MATCHES_REPORTED", "matches": 0})
                 continue
             payload = canonical({
-                "league": league, "date": day.isoformat(), "timezone": "Europe/Istanbul",
+                "league": league, "date": target.isoformat(), "timezone": "Europe/Istanbul",
                 "provider": "openligadb", "licence": "ODbL-1.0",
                 "source": "https://www.openligadb.de",
                 "matches": rows, "odds_available": False,
             })
             digest = hashlib.sha256(payload).hexdigest()
-            key = f"daily/openligadb/season=2026-2027/league={league}/date={day.isoformat()}/{digest}.json"
+            key = f"daily/openligadb/season=2026-2027/league={league}/date={target.isoformat()}/{digest}.json"
             verified = archive_verified(store, key, payload, "application/json")
-            receipts.append({"league": league, "status": "R2_VERIFIED", "matches": len(rows), **verified})
+            receipts.append({"league": league, "date": target.isoformat(), "status": "R2_VERIFIED", "matches": len(rows), **verified})
         return {"status": "R2_DAILY_ARCHIVE_VERIFIED", "date": day.isoformat(),
                 "leagues": receipts, "postgresql": "NOT_USED"}
     finally:
@@ -112,13 +126,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--date", default=datetime.now(TZ).date().isoformat())
     parser.add_argument("--league", action="append", choices=tuple(SOURCES))
+    parser.add_argument("--include-previous-day", action="store_true")
     parser.add_argument("--live", action="store_true")
     parser.add_argument("--approval", default="")
     args = parser.parse_args(argv)
     try:
         day = date.fromisoformat(args.date)
         report = run(day=day, live=args.live, approval=args.approval,
-                     leagues=tuple(args.league or ("bundesliga",)))
+                     leagues=tuple(args.league or ("bundesliga",)),
+                     include_previous_day=args.include_previous_day)
     except Exception:
         print(json.dumps({"status": "BLOCKED", "reason": "DAILY_ARCHIVE_PRECHECK_FAILED"}))
         return 1

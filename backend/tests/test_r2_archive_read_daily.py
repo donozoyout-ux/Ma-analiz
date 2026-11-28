@@ -182,3 +182,24 @@ def test_daily_partial_archive_retries_without_overwriting(monkeypatch):
                        provider_factory=FakeProvider, store_factory=lambda: store)
     assert result["leagues"][0]["status"] == "R2_VERIFIED"
     assert len(store.list_objects()) == 1
+
+
+def test_previous_day_and_today_share_one_request_across_istanbul_midnight(monkeypatch):
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("Europe/Istanbul")
+    current = datetime(2026, 11, 28, 21, 5, tzinfo=timezone.utc).astimezone(tz).date()
+    calls = []
+    class WindowProvider(FakeProvider):
+        def get_competition_window(self, shortcut, start, end):
+            calls.append((shortcut, start, end))
+            return [{**match("1"), "match_date": start}, {**match("2"), "match_date": end}]
+    report = daily.run(day=current, include_previous_day=True, provider_factory=WindowProvider,
+                       store_factory=lambda: pytest.fail("R2 accessed"))
+    assert calls == [("bl1", date(2026, 11, 28), date(2026, 11, 29))]
+    assert [(item["date"], item["matches"]) for item in report["leagues"]] == [
+        ("2026-11-28", 1), ("2026-11-29", 1)]
+
+
+def test_elapsed_kickoff_status_is_not_certified_live():
+    data = daily.validate_matches([{**match(), "status": "LIVE"}], date(2026, 11, 28), "de.bl1")
+    assert data[0]["status"] == "IN_PROGRESS_UNCONFIRMED"
