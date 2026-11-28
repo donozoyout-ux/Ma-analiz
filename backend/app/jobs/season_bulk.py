@@ -50,7 +50,7 @@ def main() -> int:
                         raw = download(source, client, budget)
                         report = summarize_source(source, raw, parse_season(source, raw))
                 except (httpx.HTTPError, ValueError, KeyError, TypeError, RuntimeError) as exc:
-                    report = {"league": league, "season": season, "status": "SOURCE_ERROR", "error": str(exc)}
+                    report = {"league": league, "season": season, "status": "SOURCE_ERROR", "error": "SOURCE_FETCH_OR_VALIDATION_FAILED"}
                     failure = True
                 print(json.dumps(report, ensure_ascii=True))
     return int(failure)

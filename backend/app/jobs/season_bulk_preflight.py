@@ -63,4 +63,10 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        exit_code = main()
+    except Exception:
+        # Database and SDK exceptions may contain connection credentials.
+        print(json.dumps({"status": "BLOCKED", "reason": "OPERATION_FAILED"}))
+        exit_code = 1
+    raise SystemExit(exit_code)
