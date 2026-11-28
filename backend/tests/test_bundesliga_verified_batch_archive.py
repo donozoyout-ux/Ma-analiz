@@ -6,6 +6,8 @@ import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
 
 from app.jobs.bundesliga_verified_batch_archive import run, BatchArchiveBlocked
 from app.models import ActiveMatch, ArchiveJob, MatchResult, SystemSetting
@@ -15,6 +17,11 @@ from app.storage.r2 import InMemoryObjectStore
 DAY = date(2026, 8, 28)
 NOW = datetime(2026, 11, 27, tzinfo=timezone.utc)
 KICKOFF = datetime(2026, 8, 28, 18, 30, tzinfo=timezone.utc)
+
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_for_isolated_sqlite(_type, _compiler, **_kwargs):
+    return "JSON"
 
 
 @pytest.fixture
@@ -28,12 +35,15 @@ def setup():
             league_id="de.bl1", season="2026-2027", league_name="Bundesliga",
             home_team="FC Bayern München", away_team="VfB Stuttgart",
             start_time=KICKOFF, status="FINISHED",
+            # History reads only revisions available at NOW, not the host clock.
+            last_updated_at=NOW-timedelta(days=1),
             expires_at=KICKOFF+timedelta(hours=32))
         db.add(match)
         db.flush()
         result = MatchResult(match_id=match.id, provider="openligadb",
             home_score=5, away_score=1, status="FINAL",
-            result_source="OpenLigaDB", verified_at=NOW-timedelta(days=1))
+            result_source="OpenLigaDB", verified_at=NOW-timedelta(days=1),
+            updated_at=NOW-timedelta(days=1))
         db.add(result)
         db.commit()
         store = InMemoryObjectStore()
