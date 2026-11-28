@@ -113,12 +113,16 @@ def metrics(start: date | None = None, end: date | None = None, tz: str = "UTC",
         exists(select(1).where(S.id == selected.c.sid, S.evidence_id.is_not(None))),
         selected.c.outcome.in_(("WON", "LOST"))).subquery()
     sample, wins = db.execute(select(func.count(), func.coalesce(func.sum(case((eligible.c.outcome == "WON", 1), else_=0)), 0))).one()
+    delivered = db.scalar(select(func.count()).select_from(selected).where(
+        exists(select(1).where(E.publication_id == selected.c.id, E.kind == "DELIVERY"))))
     return {"total": total, "won": won, "lost": lost, "pending": pending, "void": void,
             "unscored": unscored, "provisional_sample_size": won + lost, "sample_size": int(sample),
             "verified_won": int(wins), "verified_lost": int(sample-wins),
             "hit_rate": float(wins/sample) if sample else None,
-            "verification_status": "VERIFIED_EVIDENCE_SUBSET" if sample else "PUBLICATION_DELIVERY_UNVERIFIED",
-            "timezone": tz, "legacy_included": False, "publication_delivery_verified": bool(sample)}
+            "delivery_verified_count": int(delivered),
+            "verification_status": "VERIFIED_EVIDENCE_SUBSET" if sample else (
+                "RESULT_EVIDENCE_PENDING_OR_UNSCORED" if delivered else "PUBLICATION_DELIVERY_UNVERIFIED"),
+            "timezone": tz, "legacy_included": False, "publication_delivery_verified": bool(total) and delivered == total}
 
 
 @router.get("/prediction-ledger/{publication_id}/events")

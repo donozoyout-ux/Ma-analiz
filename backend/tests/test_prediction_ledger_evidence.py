@@ -74,6 +74,8 @@ def test_signed_delivery_retention_correction_and_replay(db):
     d = accept(db,p,payload,policy,private)
     assert accept(db,p,payload,policy,private).id == d.id
     assert stats(db,p)["hit_rate"] is None
+    assert stats(db,p)["publication_delivery_verified"] is True
+    assert stats(db,p)["verification_status"] == "RESULT_EVIDENCE_PENDING_OR_UNSCORED"
     time.sleep(3.2)
     db.delete(match); db.commit()  # remove all expiring sources BEFORE first result arrives
     payload, policy, private = envelope(p,"RESULT")
