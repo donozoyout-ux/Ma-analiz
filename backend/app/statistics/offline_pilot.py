@@ -95,7 +95,8 @@ def build_pilot(fixtures: list[dict], observations: list[dict], *, season: str, 
               "fixtures": len(fixtures), "matched": len(matched), "rejected": dict(rejected),
               "coverage": coverage, "matched_incomplete": incomplete, "unmatched_fixtures": len(fixtures)-len(matched),
               "archive": None}
-    if matched:
+    # Unapproved data must not be serialized even in the offline staging plan.
+    if matched and licensed:
         matched.sort(key=lambda row: (row["match_id"], row["source"], row["source_match_id"]))
         payload = parquet_bytes(matched)
         if parquet_rows(payload) != matched:
