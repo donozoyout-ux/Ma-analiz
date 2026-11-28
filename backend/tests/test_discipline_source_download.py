@@ -96,3 +96,39 @@ def test_invalid_source_never_passes(payload,mime):
                             headers={"Content-Type":mime},content=payload)) as client:
         with pytest.raises(SourceDownloadBlocked):
             fetch_one(client,season="2425",league="D1")
+
+
+def test_batch_plan_refuses_symlink_directory(tmp_path):
+    """A manifest cannot be substituted through a directory symlink."""
+    target = tmp_path / "real"
+    target.mkdir()
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation unavailable in this test environment")
+    with pytest.raises(ValueError, match="SOURCE_DIRECTORY_SYMLINK_REFUSED"):
+        load_batch_plan(link, rights_ref="TEST-NONPRODUCTION-MOCK-ONLY")
+
+
+def test_batch_upload_never_initializes_r2_without_confirmed_bucket(tmp_path, capsys):
+    """Even a well-formed nine-file manifest must not trigger a write."""
+    from app.jobs.discipline_batch_upload import main as upload_main
+
+    def handler(req):
+        parts = str(req.url).split("/")
+        return httpx.Response(200, headers={"Content-Type": "text/csv"},
+                              content=csv_bytes(parts[-2], parts[-1].removesuffix(".csv")))
+
+    rights = "TEST-NONPRODUCTION-MOCK-ONLY"
+    with make_client(handler) as client:
+        download_all(directory=tmp_path, permission_reference=rights, client=client,
+                     pause_seconds=0)
+    result = upload_main([
+        "--directory", str(tmp_path), "--permission-reference", rights,
+        "--apply", "--acknowledge-source-terms", "--confirm-r2-upload",
+        "--confirm-database-name", "isolated_test_database",
+        # --confirm-r2-bucket intentionally absent
+    ])
+    assert result == 2
+    assert "LIVE_PERMISSION_TARGET_AND_R2_CONFIRMATION_REQUIRED" in capsys.readouterr().out
