@@ -123,3 +123,36 @@ instead.
 
 **Do not run this command in production, CI or a server/cron.** It is
 a human-controlled diagnostic step only.
+
+## Provider identity safety gate (not a match importer)
+
+`app.providers.cornerflick_identity.propose_reconciliation` is a conservative
+**candidate review** helper built for a future separately licensed, typed
+Cornerflick response. It must not be called with guessed fields from an
+uninspected JSON document.
+
+Only source identities already verified by the respective typed readers are
+eligible. Bundesliga (`de.bl1`), exact season, team order and conservatively
+Unicode-normalized team names and UTC kickoff (at most 60 seconds apart)
+must agree. The provider's IDs stay **different**:
+`cornerflick:match:<documented-slug>` vs. the independent OpenLigaDB match ID.
+A unique match returns **REVIEW_REQUIRED**, never `VERIFIED`.
+Ambiguous matches, conflicting provider IDs, changed team names,
+unknown aliases or nonmatching kickoffs fail closed. No canonical SQL/R2
+identity is updated, and no scores, odds or statistics are imported.
+
+This is important because a Cornerflick page can write "Bayern München"
+while an OpenLigaDB record may use "FC Bayern München": guessing alias
+rules or building slugs from team names would risk overwriting the wrong
+fixture. A human-reviewed alias dictionary with provenance, negative tests
+and an independent source mapping PR is required before automating links.
+
+The JSON transport now rejects duplicate JSON object keys and non-finite
+numbers (`NaN`, `Infinity`) as invalid data. Missing fields must remain
+missing, not zero; `null` must remain distinct from missing. Cornerflick's
+[data documentation](https://cornerflick.com/data) explicitly distinguishes
+data not recorded from values recorded as none.
+
+**Status:** still a Draft read-only research pilot. Real JSON and upstream
+reuse rights are not independently verified, and the current app/provider
+registry remains unchanged.
