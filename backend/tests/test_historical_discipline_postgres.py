@@ -13,7 +13,9 @@ if os.environ.get("DISCIPLINE_TEST_DATABASE_URL") != URL:
     pytest.skip("explicit local isolated discipline test DB required", allow_module_level=True)
 
 from app.historical.discipline_csv import DisciplineRow
-from app.jobs.historical_discipline_import import write_verified_file
+from app.jobs.historical_discipline_import import archive_then_index, write_verified_file
+from app.storage.r2 import InMemoryObjectStore
+from app.models.metadata import ArchiveJob
 from app.models.historical_discipline import HistoricalDisciplineMatch as H
 
 
@@ -25,24 +27,28 @@ def row():
 def report(records):
     return {"source":"football-data.co.uk",
             "source_url":"https://www.football-data.co.uk/mmz4281/2425/E0.csv",
-            "file_sha256":"b"*64,"rows":records}
+            "file_sha256":"b"*64, "league":"en.pl", "season":"2024-2025", "rows":records}
 
 
 def test_persist_idempotent_immutable_and_no_expiring_match_foreign_key():
     engine=create_engine(URL)
     with Session(engine,expire_on_commit=False) as db:
-        inserted=write_verified_file(db,report=report([row()]),permission_reference="APPROVED-LOCAL-TEST-ONLY")
+        store=InMemoryObjectStore()
+        inserted=archive_then_index(db,store,report=report([row()]),permission_reference="APPROVED-LOCAL-TEST-ONLY")
         assert inserted["inserted"]==1
         db.commit()
-        assert write_verified_file(db,report=report([row()]),
+        assert archive_then_index(db,store,report=report([row()]),
                                    permission_reference="APPROVED-LOCAL-TEST-ONLY")["unchanged"]==1
         db.commit()
         saved=db.get(H,row().source_key)
         assert saved is not None and saved.home_corners==0 and saved.away_yellows is None
+        assert saved.r2_archive_key.startswith("match-statistics/season=2024-2025/league=en.pl/")
+        assert len(store.list_objects())==1
+        assert db.scalar(select(ArchiveJob).where(ArchiveJob.r2_key==saved.r2_archive_key)).status=="VERIFIED"
         assert not any(fk.target_fullname.startswith("active_matches")
                        for fk in H.__table__.foreign_keys)
         with pytest.raises(ValueError,match="SOURCE_CONFLICT"):
-            write_verified_file(db,report=report([replace(row(),home_corners=2)]),
+            archive_then_index(db,store,report=report([replace(row(),home_corners=2)]),
                                 permission_reference="APPROVED-LOCAL-TEST-ONLY")
         db.rollback()
         with pytest.raises(DBAPIError):
@@ -82,4 +88,30 @@ def test_as_of_before_import_cannot_see_historical_data():
         query=filtered_query(league="en.pl",season="2024-2025",team=None,
                              as_of=datetime(2025,1,1,tzinfo=timezone.utc))
         assert db.scalars(query).all()==[]
+    engine.dispose()
+
+
+def test_unverified_r2_archive_rows_are_excluded_from_public_api():
+    from app.api.historical_discipline import summary
+    from sqlalchemy import update
+    engine=create_engine(URL)
+    with Session(engine) as db:
+        key=db.get(H,row().source_key).r2_archive_key
+        db.execute(update(ArchiveJob).where(ArchiveJob.r2_key==key).values(status="FAILED"))
+        db.flush()
+        result=summary(league="en.pl",season="2024-2025",team=None,db=db)
+        assert result["match_count"]==0
+        assert result["archive_integrity"]=="NO_VERIFIED_ARCHIVE_ROWS"
+        db.rollback()
+    engine.dispose()
+
+
+def test_csv_rows_refused_without_verified_r2_receipt():
+    from app.storage.archive import ArchiveReceipt
+    engine=create_engine(URL)
+    with Session(engine) as db:
+        bogus=ArchiveReceipt("match-statistics/bogus.parquet", 1, 10, "c"*64)
+        with pytest.raises(ValueError,match="VERIFIED_R2_RECEIPT_REQUIRED"):
+            write_verified_file(db,report=report([row()]),permission_reference="APPROVED-LOCAL-TEST-ONLY",receipt=bogus)
+        db.rollback()
     engine.dispose()
