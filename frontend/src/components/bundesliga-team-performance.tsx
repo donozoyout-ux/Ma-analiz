@@ -9,6 +9,17 @@ type Stats = {
   form: string[]; warnings: string[];
 };
 
+function validStats(value: unknown): value is Stats {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const data = value as Record<string, unknown>;
+  const counts = ["played", "wins", "draws", "losses", "goals_for", "goals_against", "home_played", "home_wins", "away_played", "away_wins"];
+  return typeof data.team === "string" && data.team.trim().length > 0 &&
+    counts.every(key => typeof data[key] === "number" && Number.isSafeInteger(data[key]) && (data[key] as number) >= 0) &&
+    typeof data.goal_difference === "number" && Number.isSafeInteger(data.goal_difference) &&
+    Array.isArray(data.form) && data.form.every(item => typeof item === "string") &&
+    Array.isArray(data.warnings) && data.warnings.every(item => typeof item === "string");
+}
+
 export function BundesligaTeamPerformance({ strictResponse = false }: { strictResponse?: boolean }) {
   const [team, setTeam] = useState("FC Bayern München");
   const [query, setQuery] = useState("FC Bayern München");
@@ -26,8 +37,7 @@ export function BundesligaTeamPerformance({ strictResponse = false }: { strictRe
       .then(async response => {
         if (!response.ok) throw new Error("TEAM_STATS_UNAVAILABLE");
         const value: unknown = await response.json();
-        if (strictResponse && (!value || typeof value !== "object" || Array.isArray(value) ||
-            typeof (value as Stats).played !== "number" || !Array.isArray((value as Stats).form))) {
+        if (strictResponse && !validStats(value)) {
           throw new Error("TEAM_STATS_UNAVAILABLE");
         }
         return value as Stats;

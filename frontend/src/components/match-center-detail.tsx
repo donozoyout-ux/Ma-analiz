@@ -35,7 +35,7 @@ export function MatchCenterDetail({id,source="all"}:{id:string;source?:"all"|"hi
    </section>
   </div>
   <section className="card insight-card"><h2 className="section-title">Oran ve gelişmiş analiz kayıtları</h2><p className="scope-note">Yalnız mevcut kayıtlar gösterilir. Bu ekran analiz çalıştırmaz veya veri üretmez.</p>
-   {match.storage==="POSTGRESQL" ? <button className="quiet-button" aria-expanded={legacy} onClick={()=>setLegacy(!legacy)}>{legacy?"Kayıtları kapat":"Mevcut kayıtları aç"}</button>:<p className="insight-empty">Bu tarihsel görünümde doğrulanmış oran kaydı sunulmuyor.</p>}
+   {match.storage==="POSTGRESQL" ? <button className="quiet-button" aria-expanded={legacy} onClick={()=>setLegacy(!legacy)}>{legacy?"Kayıtları kapat":"Mevcut kayıtları aç"}</button>:<p className="insight-empty">Doğrulanmış oran verisi bulunmuyor.</p>}
   </section>
   {legacy&&match.storage==="POSTGRESQL"&&<MatchOdds matchId={match.id}/>}
   <p className="scope-note">Saatler Europe/Istanbul saat dilimindedir. Görünüm kendiliğinden canlı yenilenmez; doğrulama zamanı son okumayı, güncelleme zamanı kaynak kaydını belirtir.</p>

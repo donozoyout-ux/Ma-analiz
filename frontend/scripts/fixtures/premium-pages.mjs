@@ -8,6 +8,8 @@ export const routes = ['/', '/matches', '/matches?tab=odds', '/matches/'+uid, '/
 export function fixture(url, mode) {
  const path=url.pathname;
  if(mode==='error')return {status:503,body:{detail:'SYNTHETIC_UNAVAILABLE'}};
+ if(path==='/api/v1/source-bulletin') return {body:{matches:mode==='empty'?[]:[{id:'openligadb:synthetic',provider_match_id:'synthetic',league_id:'de.bl1',league_name:'Bundesliga',home_team:'SENTETİK Ev Takımı',away_team:'SENTETİK Konuk Takımı',start_time:'2026-11-25T18:00:00Z',status:'SCHEDULED',score:null,source:'OpenLigaDB'}],available_leagues:['de.bl1'],failures:[],window_start:'2026-11-22',window_end:'2026-12-02',last_observed_at:clock,live_guaranteed:false}};
+ if(path==='/api/v1/bundesliga/team-performance')return {body:{team:'SENTETİK takım',played:1,wins:0,draws:1,losses:0,goals_for:1,goals_against:1,goal_difference:0,home_played:1,home_wins:0,away_played:0,away_wins:0,form:['D'],warnings:[]}};
  if(path==='/api/v1/health')return {body:{status:'degraded',database:'NOT_CONFIGURED',database_schema:'NOT_VERIFIED',r2:'NOT_CONFIGURED',worker:'NOT_RUN',archive:'NOT_RUN',telegram:'NOT_CONFIGURED',services:{provider:'NOT_CONFIGURED',goaloo:'NOT_CONFIGURED',sportmonks:'NOT_CONFIGURED',odds:'NOT_CONFIGURED',historical_data:'NOT_CONFIGURED',scanner:'NOT_CONFIGURED',groq:'NOT_CONFIGURED'}}};
  if(path==='/api/v1/storage')return {body:{postgres:{status:'NOT_CONFIGURED',bytes:null,thresholds_mb:{normal:300,warning:500,high:750,critical:750},largest_tables:[]},r2:{status:'NOT_CONFIGURED',bytes:null,object_count:null,daily_growth_bytes:null}}};
  if(path==='/api/v1/match-center') {
