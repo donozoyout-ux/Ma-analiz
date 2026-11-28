@@ -95,4 +95,4 @@ def test_invalid_score_and_missing_fixture_fail_before_store():
         bulk.prepare(source.league, source.season, json.dumps(rows).encode())
     rows["matches"].pop()
     with pytest.raises(ValueError, match="SOURCE_EXPECTED_380_FIXTURES"):
-        bulk.prepare(source.league, source.season, json.dumps(rows).encode()
+        bulk.prepare(source.league, source.season, json.dumps(rows).encode())
