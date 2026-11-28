@@ -12,9 +12,9 @@ class HistoricalDisciplineMatch(Base):
     __table_args__ = (
         CheckConstraint("league_id IN ('en.pl','de.bl1','es.ll')", name="discipline_known_league"),
         CheckConstraint("season IN ('2024-2025','2025-2026','2026-2027')", name="discipline_known_season"),
-        CheckConstraint("source_key ~ '^[0-9a-f]{64}$'", name="discipline_source_key_hash"),
-        CheckConstraint("source_file_sha256 ~ '^[0-9a-f]{64}$'", name="discipline_file_hash"),
-        CheckConstraint("r2_archive_checksum ~ '^[0-9a-f]{64}$'", name="discipline_r2_hash"),
+        CheckConstraint("source_key ~ '^[0-9a-f]{64}$'", name="discipline_source_key_hash").ddl_if(dialect="postgresql"),
+        CheckConstraint("source_file_sha256 ~ '^[0-9a-f]{64}$'", name="discipline_file_hash").ddl_if(dialect="postgresql"),
+        CheckConstraint("r2_archive_checksum ~ '^[0-9a-f]{64}$'", name="discipline_r2_hash").ddl_if(dialect="postgresql"),
         CheckConstraint(
             "home_corners IS NOT NULL OR away_corners IS NOT NULL OR "
             "home_yellows IS NOT NULL OR away_yellows IS NOT NULL OR "
