@@ -91,6 +91,8 @@ def download_all(*, directory: Path, permission_reference: str,
     ref = _approved_permission(permission_reference)
     if pause_seconds < 0 or len(scopes) != MAX_REQUESTS or tuple(scopes) != SCOPE:
         raise SourceDownloadBlocked("INVALID_BOUNDED_DOWNLOAD_SCOPE")
+    if directory.is_symlink():
+        raise SourceDownloadBlocked("SYMLINK_DIRECTORY_NOT_SUPPORTED")
     directory = directory.resolve()
     if not directory.is_dir():
         raise SourceDownloadBlocked("DESTINATION_DIRECTORY_MISSING")
@@ -102,7 +104,7 @@ def download_all(*, directory: Path, permission_reference: str,
         raise SourceDownloadBlocked("DESTINATION_ALREADY_CONTAINS_SOURCE_DATA")
     rows = []
     for i, (season, league) in enumerate(scopes):
-        if i:
+        if i and pause_seconds > 0:
             sleep(pause_seconds)
         data = fetch_one(client, season=season, league=league)
         name = f"{season}_{league}.csv"
