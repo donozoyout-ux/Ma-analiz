@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.api.match_center import read_db
 from app.historical.discipline_stats import summarize
 from app.models.historical_discipline import HistoricalDisciplineMatch as H
+from app.models.metadata import ArchiveJob as A
 
 router = APIRouter(prefix="/historical-discipline", tags=["Historical corners and cards"])
 LEAGUES = {"en.pl", "de.bl1", "es.ll"}
@@ -30,7 +31,10 @@ def filtered_query(*, league: str | None, season: str | None,
         raise HTTPException(422, detail="INVALID_SEASON")
     if team and (len(team) > 150 or not team.strip()):
         raise HTTPException(422, detail="INVALID_TEAM")
-    stmt = select(H)
+    # Only SQL rows whose read-back-verified R2 ledger is still VERIFIED.
+    stmt = select(H).join(A, (A.r2_key == H.r2_archive_key) &
+        (A.checksum == H.r2_archive_checksum) &
+        (A.status == "VERIFIED") & (A.dataset_type == "match-statistics"))
     if league:
         stmt = stmt.where(H.league_id == league)
     if season:
@@ -76,6 +80,8 @@ def summary(
         "team": team,
         **payload,
         "verified_match_outcomes": False,
+        "archive_integrity": "VERIFIED_R2_LEDGER" if rows else "NO_VERIFIED_ARCHIVE_ROWS",
+        "verified_r2_partitions": len({row.r2_archive_key for row in rows}),
         "odds_included": False,
         "last_observed_at": max((row.ingested_at for row in rows), default=None),
         "note": "Kaynakça bildirilen korner/kart istatistikleri; eksik veriler sıfır sayılmaz. Lisanslı içe aktarım yoksa kayıt bulunmaz.",
@@ -105,8 +111,10 @@ def matches(
             "home_yellows": row.home_yellows, "away_yellows": row.away_yellows,
             "home_reds": row.home_reds, "away_reds": row.away_reds,
             "source_url": row.source_url, "ingested_at": row.ingested_at,
+            "archive_status": "VERIFIED_R2_LEDGER",
         } for row in rows[:limit]],
         "next_offset": offset + limit if len(rows) > limit else None,
         "source": "football-data.co.uk",
         "official_result_verified": False,
+        "archive_integrity": "VERIFIED_R2_LEDGER" if rows else "NO_VERIFIED_ARCHIVE_ROWS",
     }
