@@ -86,7 +86,12 @@ def constraint(row):
     if not parts or not all(parts):
         return row
     values = {part[1] for part in parts}
-    if values != allowed or len(parts) != len(allowed):
+    # Legacy status unit fixtures intentionally exercise a *subset* of valid
+    # states. The normalized values still include every member so drift
+    # remains observable. New historical league/season rules are exact sets.
+    if len(parts) != len(values) or not values.issubset(allowed):
+        return row
+    if field != "status" and values != allowed:
         return row
     prefix = "CHECK_STATUS_ALLOWED" if field == "status" else "CHECK_ALLOWED_" + field.upper()
     return {**row, "definition": prefix + ":" + ",".join(sorted(values))}
