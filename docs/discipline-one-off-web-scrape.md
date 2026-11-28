@@ -59,7 +59,8 @@ python -m app.jobs.discipline_batch_upload \
   --directory /secure/local/discipline-2024-27 \
   --permission-reference YOUR_ACTUAL_APPROVED_CONTRACT_ID \
   --apply --acknowledge-source-terms --confirm-r2-upload \
-  --confirm-database-name YOUR_REVIEWED_MA_ANALIZ_DB_NAME
+  --confirm-database-name YOUR_REVIEWED_MA_ANALIZ_DB_NAME \\
+  --confirm-r2-bucket YOUR_REVIEWED_R2_BUCKET
 ```
 
 `--apply` checks all nine manifest entries **before** the first R2 write.
@@ -87,3 +88,9 @@ Do not concatenate its values into the legacy import without an audited
 separate parser and licence review.
 
 **As of 2026-11-28:** R2 upload count from this PR = 0.
+
+
+**R2 bucket safeguard:** The write command requires `--confirm-r2-bucket`
+matching the configured `R2_BUCKET` setting exactly. A bucket mismatch
+blocks **before** R2ObjectStore is constructed. This prevents accidentally
+archiving licensed match data in a different storage bucket.
