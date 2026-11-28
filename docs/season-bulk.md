@@ -81,3 +81,17 @@ Yazma davranışı üç değişmez nesneyle sınırlıdır: orijinal kaynak dosy
 - **Yazma yetkilendirmesi ayrı:** `python -m app.jobs.daily_r2_matches --date 2026-11-28 --live --approval ARCHIVE_DAILY_2026_2027_R2_ONLY` yalnızca açıkça onaylı operator ortamında kullanılmalıdır. İçerik-adresli günlük snapshot'lar R2'de `daily/openligadb/season=2026-2027/league=.../date=YYYY-MM-DD/<sha256>.json` yolunda saklanır. Var olan snapshot değiştirilmez, SHA256 ile geri okunarak kontrol edilir. Kaynak güncellenirse yeni snapshot eklenir.
 - **Otomatik zamanlama henüz etkin değil.** Günlük işin gerçekten kendiliğinden işlemesi için güvenilir, secret'ları gizli tutan bir scheduler/worker ve ayrıca dağıtım/yazma yetkisi gerekir. Kaynağın döndürdüğü 0 maç, "tüm maçlar arşivlendi" anlamına gelmez.
 - **Daha önce onaylanmış 189 maçlık R2 yazma izni, 28 Kasım 2026 canlı günlük veri yazmalarını otomatik olarak kapsamaz.** Yeni canlı iş için ayrı açık operasyon onayı alınmalıdır.
+
+
+## Günlük R2 otomasyon kapısı — henüz devreye alınmadı
+
+`daily_r2_matches` işinin canlı modunda bundan böyle `DAILY_R2_EXPECTED_BUCKET` ortam değişkeni zorunludur. İzin verilmiş bucket ile R2 istemcisinin gerçek bucket'ı eşleşmezse **hiç yazmadan** durur. İlk hedef bucket `sdfgdsgdg`; bu ad, Codex'e güvenli biçimde yapılandırılır. `--live` ve ayrı onay token'ı yine gereklidir.
+
+28 Kasım 2026 Bundesliga snapshot'ı 5 planlanmış maç/0 skorla R2'ye arşivlenmiş olarak Codex tarafından raporlandı; sonraki gerçek sonuçlar yeni SHA256 nesne anahtarına kaydedilmeli, eskiler değiştirilmemelidir. Bu noktada saatlik/15 dakikalık canlı görev **başlatılmamıştır**.
+
+Gelecekteki zamanlayıcının önerilen teknik gereksinimleri:
+- TSİ tarihli günü ve gece yarısı sonrası bir önceki günü ele al; kaynak çağrılarını lig başına >=60 saniye arayla sınırla, 429 yanıtında geriye çekil, boş sonuçları eksiksiz arşiv sayma.
+- Sadece açıkça yetkilendirilmiş Bundesliga 2026–27 kapsamını ilk aşamada aç; UEFA ligleri, yeni sezonlar ve diğer kaynaklar için ayrı inceleme gerekir.
+- Tekrar çağrılarında aynı içerik hash'i değişmez nesneyi kullan; skor/durum değiştiğinde yeni nesne oluştur; zaman damgası gibi kaynaktan bağımsız değişken alanları hash'e dahil etme.
+- Her denemede gizli bilgileri yazdırmadan kaynak durumu, 5 maç gibi doğrulanmış kayıt sayısı, skor sayısı, yeni/reuse nesneler ve SHA256 doğrulamasını raporla; hatalar görünür olsun.
+- GitHub Actions, Render Cron veya worker'da gerçek zamanlayıcı kullanmak ayrı **deploy/cron** ve devam eden gerçek R2 yazma/onay kapsamıdır. Otomatik etkinleştirme, herhangi bir zamanlayıcı workflow'u veya secret güncellemesi bu PR değişikliğiyle yapılmadı.
