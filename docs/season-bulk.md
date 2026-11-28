@@ -57,3 +57,17 @@ pwsh -File scripts/backup_render_postgres.ps1 -HostName "<Render External Hostna
 ```
 
 Bu örnek parola veya URL içermez. Script, döküm dosyasının boyutunu, SHA-256'sını ve `pg_restore --list` başarısını raporlar; gerçek veri geri yüklemesi yapmaz. Döküm dosyasını GitHub'a, herkese açık depoya veya sohbete göndermeyin. `PGSSLMODE=require` taşıma şifrelemesini zorunlu kılar; ek sertifika doğrulaması altyapı imkânlarına göre ele alınmalıdır. Tam bağımsız `pg_restore` provası, şifreli/offline yedek saklama ve DB kaynağı eşleştirmesi ayrı kontrol kapılarıdır.
+
+
+## Alternatif: PostgreSQL'e dokunmadan R2-only sezon arşivi
+
+`python -m app.jobs.first_ucl_r2_archive` varsayılan olarak yalnızca 2024–2025 Şampiyonlar Ligi dosyasını indirir; SHA-256, kaynak revizyonu, 189 fikstür ve 189 normal süre skorunu kontrol eder. Veritabanına **hiç bağlanmaz**, R2'ye hiçbir istek göndermez.
+
+Gerçek R2 arşivleme ayrı ve açık operatör izni gerektirir:
+```bash
+python -m app.jobs.first_ucl_r2_archive --live --approval ARCHIVE_UCL_2024_2025_R2_ONLY
+```
+
+Komut `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` yapılandırması olan **yetkili yürütme ortamında** çalıştırılmalıdır; gizli anahtarları GitHub'a/sohbete taşımayın. Bu özellik PR #57 Draft iken mevcut canlı servise dağıtılmış değildir. Ayrı bucket testi veya açık production bucket yetkisi olmadan çalıştırılmamalıdır.
+
+Yazma davranışı üç değişmez nesneyle sınırlıdır: orijinal kaynak dosyası, 189 satırlık Parquet, doğrulama manifesti. İçerik-adresli anahtarlarda önceden nesne varsa tekrar yazmaz; HEAD+GET+SHA-256 kontrolü yapar; uyuşmazlıkta durur. Hata sonrası geride kalan nesneler bir sonraki çağrıda doğrulanarak yeniden kullanılabilir. Silme yoktur. Bu mod **PostgreSQL tablosu veya arayüz maç listesi oluşturmaz**; sonradan arşivden veritabanına aktarma ayrıca planlanabilir. Gerçek yüklemenin tamamlandığı ancak gerçek R2 okumalı SHA-256 doğrulaması ve bağımsız makbuzlarla ilan edilir.
