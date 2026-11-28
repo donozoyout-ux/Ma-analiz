@@ -23,14 +23,26 @@ def run():
     env = {k:v for k,v in os.environ.items() if k.upper() in {"PATH","SYSTEMROOT","WINDIR","TEMP","TMP","COMSPEC","PATHEXT"}}
     source = dict(host="127.0.0.1",port=55471,user="ledger_test",dbname="ledger71")
     target = dict(host="127.0.0.1",port=55472,user="restore_admin",dbname="ledger71_restore")
+    image=os.environ.get("LEDGER_TEST_CLIENT_IMAGE")
+    if image not in (None,"postgres:16"):
+        raise RuntimeError("UNAPPROVED_ISOLATED_CLIENT_IMAGE")
+    workspace=None
+    def client_args(args):
+        if not image:
+            return args
+        # CI uses its already-pulled server image, avoiding runner client drift.
+        prefix=["docker","run","--rm","--pull=never","--network=host"]
+        if workspace:
+            prefix += ["--mount",f"type=bind,src={workspace},dst={workspace}"]
+        return [*prefix,image,*args]
     def command(*args):
-        subprocess.run(args,env=env,check=True,capture_output=True)
+        subprocess.run(client_args(args),env=env,check=True,capture_output=True)
     with psycopg.connect(**source) as conn:
         major=conn.info.server_version//10000
     with psycopg.connect(**dict(target,dbname="postgres")) as conn:
         assert conn.info.server_version//10000==major, "RESTORE_SERVER_MAJOR_MISMATCH"
     for binary in ("pg_dump","pg_dumpall","pg_restore","psql","createdb"):
-        version=subprocess.check_output([binary,"--version"],env=env,text=True)
+        version=subprocess.check_output(client_args([binary,"--version"]),env=env,text=True)
         assert int(re.search(r"(\d+)\.",version)[1])==major, "MATCHING_POSTGRES_CLIENT_REQUIRED"
     tables = ("prediction_publications","prediction_settlements","prediction_evidence")
     def snapshot(config):
@@ -46,6 +58,7 @@ def run():
     before=snapshot(source)
     assert all(count>0 for count,_ in before[0]), "run synthetic ledger tests first"
     with tempfile.TemporaryDirectory(prefix="ledger71-synthetic-backup-") as directory:
+        workspace=directory
         dump=str(Path(directory)/"ledger.dump"); roles=str(Path(directory)/"roles.sql")
         command("pg_dump","-h","127.0.0.1","-p","55471","-U","ledger_test","-Fc","-f",dump,"ledger71")
         command("pg_dumpall","-h","127.0.0.1","-p","55471","-U","ledger_test","--roles-only","--no-role-passwords","-f",roles)
