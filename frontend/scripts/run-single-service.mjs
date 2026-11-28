@@ -108,6 +108,22 @@ async function waitForBackend(child) {
   throw new Error("Backend did not become ready before the startup timeout.");
 }
 
+
+function launchScopedArchive() {
+  // Explicit, temporary operator opt-in. Never triggered by the normal web deployment.
+  const expected = "ARCHIVE_ES_EN_2024_2027_R2_ONLY";
+  if (process.env.ES_EN_R2_ONE_SHOT_APPROVAL !== expected) return;
+  console.log("ES_EN_R2_ARCHIVE_ONE_SHOT_STARTED");
+  const child = spawn(pythonCommand,
+    ["-m", "app.jobs.es_en_season_r2", "--live", "--approval", expected],
+    { cwd: backendRoot, env: runtimeEnv, stdio: "inherit", windowsHide: true });
+  child.once("error", () => console.error("ES_EN_R2_ARCHIVE_ONE_SHOT_SPAWN_FAILED"));
+  child.once("exit", (code, signal) => {
+    console.log(code === 0 && !signal ? "ES_EN_R2_ARCHIVE_ONE_SHOT_COMPLETED" :
+      "ES_EN_R2_ARCHIVE_ONE_SHOT_FAILED");
+  });
+}
+
 async function main() {
   const backend = startChild(
     "FastAPI",
@@ -128,6 +144,7 @@ async function main() {
       frontendRoot,
       { ...runtimeEnv, HOSTNAME: "0.0.0.0", PORT: String(renderPort) },
     );
+    launchScopedArchive();
   } catch (error) {
     console.error(`Single-service startup failed: ${error.message}`);
     await shutdown(1);
