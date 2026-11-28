@@ -87,6 +87,12 @@ try {
     await wait(`!!document.querySelector('.stitch-prediction-card')`);
     await check(`ai_cards_from_source_${width}`,`document.querySelector('.stitch-prediction-card').textContent.includes('SENTETİK Ev Takımı') && document.querySelector('.stitch-prediction-card').textContent.includes('SENTETİK Konuk Takımı')`);
     await check(`ai_cards_no_fabricated_evidence_${width}`,`document.querySelector('.stitch-prediction-card').textContent.includes('Doğrulanmamış') && document.querySelector('.stitch-prediction-card').textContent.includes('oran gösterilmez') && !document.querySelector('.stitch-prediction-card').textContent.includes('%')`);
+    await check(`ai_compact_filter_aria_${width}`,`document.querySelectorAll('.stitch-prediction-quick-filters button').length===3 && document.querySelector('.stitch-prediction-quick-filters button[aria-pressed="true"]').textContent==='Tümü' && !document.querySelector('.stitch-view-predictions .filter-panel')`);
+    await evaluate(`document.querySelector('.stitch-prediction-quick-filters button:last-child').click()`);
+    await wait(`!!document.querySelector('.stitch-view-predictions .filter-panel input[type="date"]')`);
+    await check(`ai_advanced_filter_opens_${width}`,`document.querySelector('.stitch-prediction-quick-filters button:last-child').getAttribute('aria-expanded')==='true'`);
+    await evaluate(`document.querySelector('.stitch-prediction-quick-filters button:last-child').click()`);
+    await wait(`!document.querySelector('.stitch-view-predictions .filter-panel')`);
    }
    if(i===3) {
     await wait(`!!document.querySelector('[aria-label="Geçici tahmin kayıtları"] table tbody tr')`);
