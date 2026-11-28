@@ -99,3 +99,27 @@ normalizer. A future Codex review must inspect actual files,
 document versioning and provenance, then separately approve
 narrow field mappings and tests before activating any preview API.
 The adapter remains default-disabled, and this PR is still Draft.
+
+### Optional single permitted live probe (no SQL/R2)
+
+If an operator has **independently reviewed** the access conditions, they
+may run **one** manual bounded JSON GET through the existing safe adapter
+without enabling an application endpoint:
+
+```bash
+cd backend
+python -m app.providers.cornerflick_probe --season --allow-one-request --acknowledge-source-terms
+python -m app.providers.cornerflick_probe --match-slug bayern-munchen-vs-1-fc-koln-bundesliga-2026-11-20 --allow-one-request --acknowledge-source-terms
+```
+
+These are **separate commands**, each performs at most one read; execute
+only a permitted bounded probe (do not interpret the pair as permission to
+mass download a season). The match slug above is grounded in the public
+Cornerflick page. Neither CLI prints raw field values nor persists data.
+A valid JSON response is still **NOT** proof of 90-minute result
+semantics, reuse rights, or correctness. HTTP denials fail closed.
+If no external request is authorized, use the offline file inspector
+instead.
+
+**Do not run this command in production, CI or a server/cron.** It is
+a human-controlled diagnostic step only.
