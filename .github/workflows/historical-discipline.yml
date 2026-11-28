@@ -14,10 +14,15 @@ on:
 
 jobs:
   isolated-postgres:
+    name: isolated-postgres-pg${{ matrix.pg_version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        pg_version: ["16", "18"]
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.pg_version }}
         env:
           POSTGRES_USER: discipline_test
           POSTGRES_PASSWORD: isolated-test-only
