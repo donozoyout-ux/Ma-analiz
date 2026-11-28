@@ -63,10 +63,10 @@ export function StitchPreview() {
         setDetail({id:found[1], source:new URL(anchor.href).searchParams.get("source") === "history" ? "history" : "all"});
         select("detail");
       }}>
-        {view === "overview" && <FootballHome />}
+        {view === "overview" && <FootballHome stitchTitle />}
         {view === "matches" && <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Maç Merkezi</h1><p className="page-intro">Lig, tarih ve takım filtreleriyle güncel kaynak bültenine erişin.</p></div></header><MatchCenter /></>}
         {view === "predictions" && <div className="stitch-view-predictions"><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / AI TAHMİNLERİ</div><h1 className="title">AI Tahminleri</h1><p className="page-intro">Kayıtlı model seçimleri, kanıt durumu ve analiz zamanı.</p></div></header><StitchPredictionLedger /></div>}
-        {view === "analysis" && <Performance strictResponse />}
+        {view === "analysis" && <Performance strictResponse stitchTitle />}
         {view === "archive" && <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / VERİ ARŞİVİ</div><h1 className="title">Veri Arşivi</h1><p className="page-intro">PostgreSQL ve doğrulanmış arşiv kayıtları. Maç sayıları API kapsamına bağlıdır.</p></div></header><MatchCenter initialSource="history" lockHistory /></>}
         {view === "detail" && (detail ? <><header className="topbar"><h1 className="title">Maç Analiz Detayı</h1></header><MatchCenterDetail id={detail.id} source={detail.source}/></> : <section className="card stitch-preview-detail"><div className="eyebrow">MA-ANALİZ / MAÇ ANALİZ DETAYI</div><h1 className="title">Maç Analiz Detayı</h1><p className="page-intro">Bir maç seçerek gerçek kaydın detayına ulaşın. Maç seçilmeden skor veya tahmin gösterilmez.</p><p>Doğrulanmış oran verisi bulunmuyor.</p><button type="button" className="primary-button" onClick={() => select("archive")}>Arşivden maç seç</button></section>)}
       </div>
