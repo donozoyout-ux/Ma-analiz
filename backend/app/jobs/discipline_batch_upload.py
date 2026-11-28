@@ -23,6 +23,8 @@ MAX_MANIFEST_BYTES = 15_000
 def load_batch_plan(directory: Path, *, rights_ref: str) -> list[dict]:
     """Exactly 9 source files, current hashes, source identities and coverage."""
     ref = _approved_permission(rights_ref)
+    if directory.is_symlink():
+        raise ValueError("SOURCE_DIRECTORY_SYMLINK_REFUSED")
     directory = directory.resolve(strict=True)
     path = directory / "manifest.json"
     if not path.is_file() or path.is_symlink() or path.stat().st_size > MAX_MANIFEST_BYTES:
@@ -104,6 +106,7 @@ def main(argv=None) -> int:
     parser.add_argument("--acknowledge-source-terms", action="store_true")
     parser.add_argument("--confirm-r2-upload", action="store_true")
     parser.add_argument("--confirm-database-name", help="Exact operator-reviewed target PostgreSQL name")
+    parser.add_argument("--confirm-r2-bucket", help="Exact operator-reviewed target R2 bucket")
     args = parser.parse_args(argv)
     try:
         plan = load_batch_plan(args.directory, rights_ref=args.permission_reference)
@@ -115,7 +118,7 @@ def main(argv=None) -> int:
                               "sql_written":False, "coverage":coverage}, ensure_ascii=False,indent=2))
             return 0
         if not (args.acknowledge_source_terms and args.confirm_r2_upload
-                and args.confirm_database_name):
+                and args.confirm_database_name and args.confirm_r2_bucket):
             raise ValueError("LIVE_PERMISSION_TARGET_AND_R2_CONFIRMATION_REQUIRED")
 
         from sqlalchemy.engine import make_url
@@ -129,6 +132,8 @@ def main(argv=None) -> int:
         if (db_name != args.confirm_database_name or
                 db_name.casefold() in LEGACY_DATABASE_NAMES or db_name.casefold().startswith("cb")):
             raise ValueError("DATABASE_TARGET_REVIEW_REQUIRED")
+        if not cfg.r2_bucket or cfg.r2_bucket != args.confirm_r2_bucket:
+            raise ValueError("R2_BUCKET_REVIEW_REQUIRED")
         store = R2ObjectStore(settings=cfg)
         try:
             results = run_upload(SessionLocal,store,plan,permission_reference=args.permission_reference)
