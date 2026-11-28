@@ -33,3 +33,6 @@ app.include_router(european_cups_router, prefix="/api/v1")
 app.include_router(source_bulletin_router, prefix="/api/v1")
 
 app.include_router(bundesliga_analysis_router, prefix="/api/v1")
+
+from app.api.bundesliga_r2_archive import router as bundesliga_r2_archive_router
+app.include_router(bundesliga_r2_archive_router, prefix="/api/v1")
