@@ -34,7 +34,7 @@ def test_probabilities_margin_favourite_draw_and_loss():
     assert league["favourite_draw_rate"] == pytest.approx(1 / 3)
     assert league["favourite_loss_rate"] == pytest.approx(1 / 3)
     assert league["mean_overround"] == pytest.approx(0.0)
-    assert league["calibration"]["<50%"]["n"] == 3 or league["calibration"]["<60%"]["n"] == 3
+    assert league["calibration"]["<60%"]["n"] == 3
     assert math.isfinite(league["brier_multiclass"])
     assert math.isfinite(league["log_loss"])
 
