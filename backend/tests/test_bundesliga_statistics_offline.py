@@ -6,7 +6,7 @@ import pytest
 from app.statistics.goaloo_offline import parse_statistics
 from app.statistics.offline_pilot import build_pilot, valid_permission, summarize
 
-PAGE = '''<script>var m={sId:parseInt("42"),sclassId:parseInt("8")};</script>
+PAGE = '''<script>var m={sId:parseInt("42"),sclassId:parseInt("8"),state:parseInt("-1")};</script>
 <div id="ftstat"><ul>
 <li><span class="stat-title">Corner Kicks</span><span class="stat-c">0</span><span class="stat-c">7</span></li>
 <li><span class="stat-title">Yellow Cards</span><span class="stat-c">2</span><span class="stat-c">1</span></li>
@@ -22,7 +22,7 @@ def fixture():
 
 def observation():
     return {**fixture(), "source": "offline-synthetic", "source_match_id": "42",
-            "observed_at": "2024-09-02T12:00:00Z", "statistics": parse_statistics(PAGE, 42, 8)}
+            "observed_at": "2024-09-02T12:00:00Z", "is_final": True, "statistics": parse_statistics(PAGE, 42, 8)}
 
 
 def test_identity_parsing_and_explicit_zero_vs_missing():
@@ -100,3 +100,12 @@ def test_cli_reads_only_local_files_and_reports_unapproved_source(tmp_path):
     assert result.returncode == 2
     report = json.loads(result.stdout)
     assert report["status"] == "BLOCKED_SOURCE_OR_LICENCE" and report["matched"] == 1
+
+
+def test_nonfinal_observation_is_not_archived():
+    with pytest.raises(ValueError, match="SOURCE_NOT_FINAL"):
+        parse_statistics(PAGE.replace('state:parseInt("-1")', 'state:parseInt("1")'), 42, 8)
+    obs = {**observation(), "is_final": False}
+    report = build_pilot([fixture()], [obs], season="2024-2025", permission={})
+    assert report["matched"] == 0 and report["rejected"]["STATISTICS_NOT_FINAL"] == 1
+    assert report["archive"] is None

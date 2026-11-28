@@ -52,6 +52,9 @@ def build_pilot(fixtures: list[dict], observations: list[dict], *, season: str, 
         except (KeyError, TypeError, ValueError):
             rejected["INVALID_IDENTITY_OR_TIME"] += 1
             continue
+        if obs.get("is_final") is not True:
+            rejected["STATISTICS_NOT_FINAL"] += 1
+            continue
         source, source_id = obs.get("source"), obs.get("source_match_id")
         if not isinstance(source, str) or not source.strip() or not isinstance(source_id, str) or not source_id.strip():
             rejected["MISSING_SOURCE_ID"] += 1

@@ -76,6 +76,9 @@ def parse_statistics(source: str, match_id: int, league_id: int) -> dict:
         match = re.search(r"\b" + key + r"\s*:\s*parseInt\(['\"](-?\d+)['\"]\)", source)
         if not match or int(match.group(1)) != expected:
             raise ValueError("SOURCE_IDENTITY_MISMATCH")
+    state = re.search(r"\bstate\s*:\s*parseInt\(['\"](-?\d+)['\"]\)", source)
+    if not state or int(state.group(1)) != -1:
+        raise ValueError("SOURCE_NOT_FINAL")
     page = Page(source)
     stats = {f"{side}_{name}": None for name in FIELDS.values() for side in ("home", "away")}
     for block_id in ("ftstat", "hf1stat"):
