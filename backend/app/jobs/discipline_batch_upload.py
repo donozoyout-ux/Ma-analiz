@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 
 from app.historical.discipline_csv import LEAGUES, SEASONS, preview
-from app.jobs.discipline_source_download import SCOPE, _approved_permission
+from app.jobs.discipline_source_download import SCOPE, SourceDownloadBlocked, _approved_permission
 from app.jobs.historical_discipline_import import archive_then_index, LEGACY_DATABASE_NAMES
 
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -138,8 +138,8 @@ def main(argv=None) -> int:
         print(json.dumps({"status":"ALL_NINE_R2_VERIFIED_AND_SQL_INDEXED",
                           "file_count":len(results),"files":results},ensure_ascii=False,indent=2))
         return 0
-    except (ValueError,OSError) as exc:
-        code = str(exc) if isinstance(exc, ValueError) and str(exc).isupper() and len(str(exc)) < 120 else "BATCH_UPLOAD_FAILED"
+    except (ValueError,OSError,SourceDownloadBlocked) as exc:
+        code = str(exc) if isinstance(exc, (ValueError, SourceDownloadBlocked)) and str(exc).isupper() and len(str(exc)) < 120 else "BATCH_UPLOAD_FAILED"
         print(json.dumps({"status":"BLOCKED_OR_PARTIAL","reason":code,
                           "all_nine_verified":False},ensure_ascii=False))
         return 2
