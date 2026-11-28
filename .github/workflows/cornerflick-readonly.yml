@@ -4,8 +4,10 @@ on:
     paths:
       - 'backend/app/providers/cornerflick_open_data.py'
       - 'backend/app/providers/cornerflick_schema_inspect.py'
+      - 'backend/app/providers/cornerflick_probe.py'
       - 'backend/tests/test_cornerflick_open_data.py'
       - 'backend/tests/test_cornerflick_schema_inspect.py'
+      - 'backend/tests/test_cornerflick_probe.py'
       - '.github/workflows/cornerflick-readonly.yml'
   workflow_dispatch:
 
@@ -24,4 +26,4 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
       - name: Offline Cornerflick HTTP and JSON schema tests
-        run: python -m pytest tests/test_cornerflick_open_data.py tests/test_cornerflick_schema_inspect.py -q
+        run: python -m pytest tests/test_cornerflick_open_data.py tests/test_cornerflick_schema_inspect.py tests/test_cornerflick_probe.py -q
