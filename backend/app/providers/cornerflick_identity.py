@@ -46,7 +46,7 @@ def _validate(identity: SourceIdentity) -> None:
     match = _SEASON.fullmatch(identity.season) if isinstance(identity.season, str) else None
     if match is None or int(match.group(2)) != int(match.group(1)) + 1:
         raise ValueError("INVALID_SEASON")
-    if identity.kickoff_at.tzinfo is None or identity.kickoff_at.utcoffset() is None:
+    if not isinstance(identity.kickoff_at, datetime) or identity.kickoff_at.tzinfo is None or identity.kickoff_at.utcoffset() is None:
         raise ValueError("TIMEZONE_AWARE_KICKOFF_REQUIRED")
     for field in (identity.provider_match_id, identity.home_team, identity.away_team):
         if not isinstance(field, str) or not field.strip() or len(field) > 200:
@@ -82,7 +82,9 @@ def propose_reconciliation(
 
     matches: list[SourceIdentity] = []
     by_id: dict[str, SourceIdentity] = {}
-    for candidate in openligadb_candidates:
+    for index, candidate in enumerate(openligadb_candidates):
+        if index >= 500:
+            raise ValueError("CANDIDATE_LIMIT_EXCEEDED")
         _validate(candidate)
         if candidate.provider != "openligadb":
             raise ValueError("OPENLIGADB_IDENTITY_REQUIRED")
