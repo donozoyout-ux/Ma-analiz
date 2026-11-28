@@ -1,7 +1,7 @@
 export const sections = {
  matches: { title: "Maç Merkezi", href: "/matches", tabs: [{ id: "matches", label: "Günün maçları" }, { id: "odds", label: "Oran analizi" }] },
  predictions: { title: "AI Tahminleri", href: "/predictions", tabs: [{ id: "predictions", label: "Yapay zekâ tahminleri" }, { id: "coupons", label: "Kupon simülasyonu" }] },
- analysis: { title: "İstatistik & Analiz", href: "/analysis", tabs: [{ id: "performance", label: "Tahmin performansı" }, { id: "lessons", label: "Eğitim merkezi" }] },
+ analysis: { title: "İstatistik & Analiz", href: "/analysis", tabs: [{ id: "performance", label: "Tahmin performansı" }, { id: "discipline", label: "Korner & Kart" }, { id: "lessons", label: "Eğitim merkezi" }] },
  archive: { title: "Veri Arşivi", href: "/archive", tabs: [{ id: "archive", label: "Geçmiş maçlar" }, { id: "storage", label: "Veri deposu" }] },
  management: { title: "Yönetim & Ayarlar", href: "/management", tabs: [{ id: "system", label: "Sistem durumu" }, { id: "settings", label: "Ayarlar" }] },
 } as const;

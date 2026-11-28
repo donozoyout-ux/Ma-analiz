@@ -7,6 +7,7 @@ from app.api.match_center import router as match_center_router
 from app.api.european_cups import router as european_cups_router
 from app.api.source_bulletin import router as source_bulletin_router
 from app.api.bundesliga_analysis import router as bundesliga_analysis_router
+from app.api.historical_discipline import router as historical_discipline_router
 from app.core.config import get_settings
 
 app = FastAPI(title="Maç Analiz API", version="0.1.0")
@@ -33,3 +34,4 @@ app.include_router(european_cups_router, prefix="/api/v1")
 app.include_router(source_bulletin_router, prefix="/api/v1")
 
 app.include_router(bundesliga_analysis_router, prefix="/api/v1")
+app.include_router(historical_discipline_router, prefix="/api/v1")

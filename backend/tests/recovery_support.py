@@ -54,23 +54,47 @@ def digest(value):
 
 
 def constraint(row):
-    """Normalize only two known status checks' equivalent PG16 cast layouts.
+    """Normalize ONLY explicitly known PG16 equivalent enum-check cast layouts.
 
-    pg_dump reparses varchar[]::text[] as per-element text casts. No arbitrary
-    SQL, casts, predicates or constraints are stripped from the comparison.
+    pg_dump reparses varchar[]::text[] as per-element text casts. Exactly
+    known allowed member sets are required, so a semantic constraint drift
+    still fails the backup/restore contract. Other checks remain byte-exact.
     """
-    known = {("archive_jobs", "ck_archive_jobs_valid_archive_status"), ("job_runs", "ck_job_runs_valid_job_status")}
-    if row.get("contype") != "c" or (row.get("table_name"), row.get("conname")) not in known:
+    known = {
+        ("archive_jobs", "ck_archive_jobs_valid_archive_status"):
+            ("status", {"PENDING", "UPLOADING", "UPLOADED", "VERIFIED", "FAILED", "DELETED"}),
+        ("job_runs", "ck_job_runs_valid_job_status"):
+            ("status", {"RUNNING", "SUCCESS", "PARTIAL", "SKIPPED", "FAILED"}),
+        ("historical_discipline_matches", "ck_historical_discipline_matches_discipline_known_league"):
+            ("league_id", {"en.pl", "de.bl1", "es.ll"}),
+        ("historical_discipline_matches", "ck_historical_discipline_matches_discipline_known_season"):
+            ("season", {"2024-2025", "2025-2026", "2026-2027"}),
+    }
+    kind = known.get((row.get("table_name"), row.get("conname")))
+    if row.get("contype") != "c" or kind is None:
         return row
-    value=row["definition"]
-    array=re.fullmatch(r"CHECK \(\(\(status\)::text = ANY \(\(ARRAY\[(.*)\]\)::text\[\]\)\)\)",value)
-    elements=re.fullmatch(r"CHECK \(\(\(status\)::text = ANY \(ARRAY\[(.*)\]\)\)\)",value)
-    match=array or elements
-    if not match: return row
-    pattern=r"'([A-Z_]+)'::character varying" if array else r"\('([A-Z_]+)'::character varying\)::text"
-    parts=[re.fullmatch(pattern,item) for item in match[1].split(", ")]
-    if not parts or not all(parts): return row
-    return {**row,"definition":"CHECK_STATUS_ALLOWED:"+",".join(sorted({p[1] for p in parts}))}
+    field, allowed = kind
+    value = row["definition"]
+    array = re.fullmatch(rf"CHECK \(\(\({re.escape(field)}\)::text = ANY \(\(ARRAY\[(.*)\]\)::text\[\]\)\)\)", value)
+    elements = re.fullmatch(rf"CHECK \(\(\({re.escape(field)}\)::text = ANY \(ARRAY\[(.*)\]\)\)\)", value)
+    match = array or elements
+    if not match:
+        return row
+    pattern = (r"'([A-Za-z0-9._-]+)'::character varying" if array
+               else r"\('([A-Za-z0-9._-]+)'::character varying\)::text")
+    parts = [re.fullmatch(pattern, item) for item in match[1].split(", ")]
+    if not parts or not all(parts):
+        return row
+    values = {part[1] for part in parts}
+    # Legacy status unit fixtures intentionally exercise a *subset* of valid
+    # states. The normalized values still include every member so drift
+    # remains observable. New historical league/season rules are exact sets.
+    if len(parts) != len(values) or not values.issubset(allowed):
+        return row
+    if field != "status" and values != allowed:
+        return row
+    prefix = "CHECK_STATUS_ALLOWED" if field == "status" else "CHECK_ALLOWED_" + field.upper()
+    return {**row, "definition": prefix + ":" + ",".join(sorted(values))}
 
 
 def snapshot(engine):
