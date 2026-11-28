@@ -28,7 +28,14 @@ const SEASONS = [
   { id: "2026-2027", name: "2026–27 · 28 Kasım'a kadar" },
 ];
 
+const LEAGUES = [
+  { id: "de.bl1", name: "Bundesliga" },
+  { id: "es.1", name: "La Liga" },
+  { id: "en.pl", name: "Premier League" },
+];
+
 export function R2BundesligaArchive() {
+  const [league, setLeague] = useState("de.bl1");
   const [season, setSeason] = useState("2024-2025");
   const [team, setTeam] = useState("");
   const [page, setPage] = useState(1);
@@ -42,7 +49,9 @@ export function R2BundesligaArchive() {
     setError(false);
     setReport(null);
     const params = new URLSearchParams({ season, team, page: String(page), page_size: "25" });
-    fetch(`/api/v1/archive/r2/bundesliga?${params}`, {
+    if (league !== "de.bl1") params.set("league", league);
+    const path = league === "de.bl1" ? "/api/v1/archive/r2/bundesliga" : "/api/v1/archive/r2/es-en";
+    fetch(`${path}?${params}`, {
       cache: "no-store", signal: controller.signal,
     })
       .then(response => {
@@ -50,7 +59,7 @@ export function R2BundesligaArchive() {
         return response.json() as Promise<ArchiveResponse>;
       })
       .then(data => {
-        if (data.season !== season || data.league !== "de.bl1" ||
+        if (data.season !== season || data.league !== league ||
             data.source !== "R2" || !Array.isArray(data.matches)) {
           throw new Error("Invalid R2 archive");
         }
@@ -59,35 +68,39 @@ export function R2BundesligaArchive() {
       .catch(() => { if (!controller.signal.aborted) setError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [season, team, page]);
+  }, [league, season, team, page]);
 
   const total = report?.total ?? 0;
-  return <section className="card match-list-panel" aria-label="Bundesliga R2 maç arşivi">
+  return <section className="card match-list-panel" aria-label="Üç büyük lig R2 maç arşivi">
     <div className="list-toolbar">
       <div>
-        <strong>Bundesliga · Doğrulanmış R2 arşivi</strong>
+        <strong>{LEAGUES.find(item => item.id === league)?.name} · Doğrulanmış R2 arşivi</strong>
         <span>{loading ? "Arşiv okunuyor…" : error ? "Arşive ulaşılamıyor" : `${total} maç bulundu`}</span>
       </div>
       <span className="today-chip">OpenFootball · CC0</span>
     </div>
     <div className="filter-grid center-filter-grid">
+      <label><span>Lig</span><select aria-label="Arşiv ligi" value={league}
+        onChange={event => { setLeague(event.target.value); setPage(1); }}>
+        {LEAGUES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+      </select></label>
       <label>
         <span>Sezon</span>
-        <select aria-label="Bundesliga sezonu" value={season}
+        <select aria-label="Arşiv sezonu" value={season}
           onChange={event => { setSeason(event.target.value); setPage(1); }}>
           {SEASONS.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select>
       </label>
       <label>
         <span>Takım ara</span>
-        <input aria-label="Bundesliga arşivinde takım ara" placeholder="Bayern, Dortmund…"
+        <input aria-label="Arşivde takım ara" placeholder="Takım adı…"
           value={team} onChange={event => { setTeam(event.target.value); setPage(1); }} />
       </label>
     </div>
     {loading ? <p role="status">R2 manifesti ve maç dosyası SHA-256 ile doğrulanıyor…</p> :
-     error ? <p role="alert">Bundesliga R2 arşivine erişilemiyor. Dosya doğrulaması veya sunucu bağlantısı başarısız olabilir.</p> :
+     error ? <p role="alert">R2 arşivine erişilemiyor. Dosya doğrulaması veya sunucu bağlantısı başarısız olabilir.</p> :
      report && report.matches.length === 0 ? <p>Bu filtrede maç bulunamadı.</p> :
-     <div className="records-scroll" role="region" tabIndex={0} aria-label="Bundesliga maç sonuçları">
+     <div className="records-scroll" role="region" tabIndex={0} aria-label="Seçili lig maç sonuçları">
        <table className="records-table">
          <thead><tr><th>Tarih</th><th>Hafta</th><th>Maç</th><th>90 dakika</th><th>Durum</th></tr></thead>
          <tbody>{report?.matches.map(match => <tr key={match.id}>
