@@ -10,12 +10,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const text = (value: unknown) => typeof value === "string" && value.trim() ? value : "—";
 
 /** Active records have no immutable publication evidence and must not be called a ledger. */
-export function StitchPredictionLedger() {
+export function StitchPredictionLedger({compactFilters = false}:{compactFilters?:boolean} = {}) {
  const predictions = useApiList<Prediction>("predictions?limit=500");
  const matches = useApiList<Match>("matches?limit=500");
  const [market,setMarket] = useState(""); const [model,setModel] = useState("");
  const [status,setStatus] = useState(""); const [league,setLeague] = useState("");
  const [start,setStart] = useState(""); const [end,setEnd] = useState("");
+ const [filtersExpanded,setFiltersExpanded] = useState(false);
  const byId = useMemo(() => new Map((matches.rows ?? []).filter(x=>x && typeof x.id === "string").map(x=>[x.id,x])), [matches.rows]);
  const valid = (predictions.rows ?? []).filter(p=>p && typeof p === "object" && typeof p.match_id === "string");
  const options = (values:unknown[]) => [...new Set(values.filter((v):v is string => typeof v === "string" && !!v.trim()))].sort();
@@ -30,11 +31,16 @@ export function StitchPredictionLedger() {
    <div className="grid performance-kpis">{["Yayınlanmış tahmin", "Sonuçlanan", "Tutan", "Tutmayan", "Bekleyen", "İptal / void", "Yayın isabeti"].map(label=><div className="card" key={label}><div className="kpi-label">{label}</div><div className="kpi-value">—</div></div>)}</div>
    <p className="scope-note">Yayın defteri ve uygun oran kanıtı bulunmadığından lig/pazar/model kırılımları, kalibrasyon ve oran grafiği doğrulanmış performans olarak hesaplanamaz. Doğrulanmış oran verisi bulunmuyor.</p>
   </div>
-  <div className="card filter-panel"><div className="filter-grid center-filter-grid">
+  {compactFilters && <div className="stitch-prediction-quick-filters" role="group" aria-label="Tahmin kayıt durumu filtreleri">
+   <button type="button" aria-pressed={status === ""} onClick={()=>setStatus("")}>Tümü</button>
+   <button type="button" aria-pressed={status === "PENDING"} onClick={()=>setStatus("PENDING")}>Bekleyen</button>
+   <button type="button" aria-expanded={filtersExpanded} onClick={()=>setFiltersExpanded(open=>!open)}>{filtersExpanded ? "Filtreleri kapat" : "Diğer filtreler"}</button>
+  </div>}
+  {(!compactFilters || filtersExpanded) && <div className="card filter-panel"><div className="filter-grid center-filter-grid">
    <label><span>Başlangıç · TSİ</span><input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label>
    <label><span>Bitiş · TSİ</span><input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label>
    {[{label:"Lig",value:league,set:setLeague,values:options([...byId.values()].map(x=>x.league_name))},{label:"Pazar",value:market,set:setMarket,values:options(valid.map(x=>x.market))},{label:"Model sürümü",value:model,set:setModel,values:options(valid.map(x=>x.model_version))},{label:"Durum",value:status,set:setStatus,values:options(valid.map(x=>x.status))}].map(f=><label key={f.label}><span>{f.label}</span><select value={f.value} onChange={e=>f.set(e.target.value)}><option value="">Tümü</option>{f.values.map(v=><option key={v} value={v}>{v}</option>)}</select></label>)}
-  </div></div>
+  </div></div>}
   {predictions.error || matches.error ? <div className="card empty" role="alert">Kayıtlar okunamadı. <button className="quiet-button" onClick={()=>{predictions.refresh();matches.refresh();}}>Yeniden dene</button></div> : !loaded ? <div className="card empty" role="status">Tahmin kayıtları yükleniyor…</div> : !shown.length ? <div className="card empty">Bu filtrelerde geçici tahmin kaydı bulunamadı.</div> : <div className="stitch-prediction-results">
    <div className="stitch-prediction-section-head">
     <div><h3 className="section-title">Kayıtlı model seçimleri</h3><p className="scope-note">İlk {Math.min(shown.length,24)} kayıt kartlarda · {shown.length} filtrelenmiş kayıt</p></div>
