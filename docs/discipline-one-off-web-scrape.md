@@ -39,6 +39,33 @@ A failed download produces no complete manifest; remove/quarantine partial
 files only after recording the failure, and do not treat it as a complete
 archive. Do not commit CSVs or include them in CI artifacts.
 
+## Read-only destination check (before any uploading)
+
+The branch now includes a **no-write** preflight command. It verifies the
+PostgreSQL connection's actual database name, current Alembic head, required
+SQL tables, and one bounded `list_objects_v2(MaxKeys=1)` request against
+the explicitly confirmed R2 bucket's `match-statistics/` prefix:
+
+```bash
+cd backend
+python -m app.jobs.discipline_target_preflight \
+  --expected-database YOUR_VERIFIED_MA_ANALIZ_DB_NAME \
+  --expected-r2-bucket YOUR_VERIFIED_R2_BUCKET_NAME
+```
+
+The command performs **zero** SQL INSERT/UPDATE/DELETE, R2 PUT/GET/DELETE,
+downloads or migrations. It never prints secrets. It rejects the previously
+flagged legacy database names/prefix, missing historical tables, and any
+Alembic head other than `0011_historical_discipline`. This is important:
+the currently observed Render database had `0010_active_statistics`
+and therefore will correctly be **blocked** until a separately approved
+migration is reconciled and applied; do not bypass that gate.
+
+A successful report proves only that the named SQL schema and R2 prefix
+are **readable**, not that R2 writes are permitted or that source data is
+licensed, complete, or already uploaded. A passed preflight alone must
+never trigger the live importer.
+
 ## R2-first upload, only after target and migration readiness
 
 Offline, no-DB/no-R2 audit of all nine files and their hashes:
