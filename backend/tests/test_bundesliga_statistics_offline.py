@@ -85,6 +85,8 @@ def test_red_card_summary_preserves_missing_and_explicit_zero():
 
 def test_cli_reads_only_local_files_and_reports_unapproved_source(tmp_path):
     import json
+    import os
+    from pathlib import Path
     import subprocess
     import sys
 
@@ -96,7 +98,9 @@ def test_cli_reads_only_local_files_and_reports_unapproved_source(tmp_path):
     result = subprocess.run([sys.executable, "-m", "app.jobs.bundesliga_statistics_pilot",
                              "--fixtures", files["fixtures"], "--observations", files["observations"],
                              "--permission", files["permission"], "--season", "2024-2025"],
-                            capture_output=True, text=True)
+                            capture_output=True, text=True,
+                            cwd=Path(__file__).resolve().parents[1],
+                            env={**os.environ, "MAC_ANALIZ_TEST_MODE": "1"})
     assert result.returncode == 2
     report = json.loads(result.stdout)
     assert report["status"] == "BLOCKED_SOURCE_OR_LICENCE" and report["matched"] == 1
