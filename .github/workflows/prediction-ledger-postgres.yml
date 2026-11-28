@@ -56,7 +56,11 @@ jobs:
       - run: python -m alembic downgrade 0010_active_statistics
       - run: python -m alembic upgrade head
       - run: python -m pytest tests/test_prediction_ledger_rules.py tests/test_prediction_ledger_postgres.py tests/test_prediction_ledger_evidence.py -q
-      - run: python tests/ledger_restore_rehearsal.py
+      - name: Restore with matching PostgreSQL 16 client tools
+        run: |
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          pg_dump --version
+          python tests/ledger_restore_rehearsal.py
       - name: Reject downgrade of nonempty ledger
         shell: bash
         run: |

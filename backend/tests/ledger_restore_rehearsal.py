@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import re
 
 import psycopg
 from psycopg import sql
@@ -24,6 +25,13 @@ def run():
     target = dict(host="127.0.0.1",port=55472,user="restore_admin",dbname="ledger71_restore")
     def command(*args):
         subprocess.run(args,env=env,check=True,capture_output=True)
+    with psycopg.connect(**source) as conn:
+        major=conn.info.server_version//10000
+    with psycopg.connect(**dict(target,dbname="postgres")) as conn:
+        assert conn.info.server_version//10000==major, "RESTORE_SERVER_MAJOR_MISMATCH"
+    for binary in ("pg_dump","pg_dumpall","pg_restore","psql","createdb"):
+        version=subprocess.check_output([binary,"--version"],env=env,text=True)
+        assert int(re.search(r"(\d+)\.",version)[1])==major, "MATCHING_POSTGRES_CLIENT_REQUIRED"
     tables = ("prediction_publications","prediction_settlements","prediction_evidence")
     def snapshot(config):
         with psycopg.connect(**config) as conn:
