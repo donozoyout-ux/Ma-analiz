@@ -22,7 +22,7 @@ Kaynak commit `35a2c1bba013d09177694aea67bf156eb572e07a`. `src/scrapers/goaloo/s
 
 `app.statistics.goaloo_offline.parse_statistics` yalnız verilmiş HTML metnini ayrıştırır. `app.statistics.offline_pilot.build_pilot` `season`, `league=de.bl1`, tarih, ev/deplasman eşleşmesi, kaynak maç kimliği ve kaynakta final durumu ister. Unicode NFKC ve büyük/küçük harf normalizasyonu dışında isim tahmini yoktur. Aynı tarihte eşleşme belirsizliği veya yinelenen kayıt reddedilir. Eksik değer NULL, açık sıfır sıfırdır. Ölçümler ve gözlem zamanı ayrı ayrı saklanır.
 
-Offline komut yerel JSON dosyalarını okur, Parquet'i yalnız bellekte üretip geri okur ve hash/manifest planı raporlar. Yerel dosya veya R2 yazmaz. Uygunluk raporu kaynak adı, lisans, atıf ve açık saklama, yeniden yayınlama, ticari izin kanıtı gerektirir; bu girdiler hukuki inceleme yerine geçmez. İzin bulunmadığında BLOCKED durumuna düşer. Yalnızca üretim dışı sentetik fixture için test edilmiştir.
+Offline komut yerel JSON dosyalarını okur. Yalnızca açık izin onayı verilmiş kaynak için Parquet'i bellekte üretip geri okur ve hash/manifest planı raporlar. İzin reddinde veri serileştirilmez ve arşiv planı `null` döner. Yerel dosya veya R2 yazmaz. Uygunluk raporu kaynak adı, lisans, atıf ve açık saklama, yeniden yayınlama, ticari izin kanıtı gerektirir; bu girdiler hukuki inceleme yerine geçmez. İzin bulunmadığında BLOCKED durumuna düşer. Yalnızca üretim dışı sentetik fixture için test edilmiştir.
 
 `python -m app.jobs.bundesliga_statistics_pilot --fixtures FIXTURES.json --observations OBSERVATIONS.json --permission PERMISSION.json --season 2024-2025`
 
