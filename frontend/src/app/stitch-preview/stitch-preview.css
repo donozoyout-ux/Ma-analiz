@@ -109,3 +109,10 @@
  .stitch-stage .insight-card,
  .stitch-stage .football-match-card { transition:none!important; transform:none!important; }
 }
+
+/* The source's AI page prioritizes filtering and matchup cards, not
+   unpublished success KPIs. Keep evidence placeholders available below. */
+.stitch-stage .stitch-view-predictions > .explorer-stack { display:flex; flex-direction:column; gap:18px; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .filter-panel { order:1; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .stitch-prediction-results { order:2; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .card:first-child { order:3; }
