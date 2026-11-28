@@ -17,6 +17,8 @@ from typing import Any
 
 import httpx
 
+from app.providers.cornerflick_schema_inspect import _unique_pairs, _reject_constant
+
 from app.providers.base import (
     ProviderAccessRestricted,
     ProviderInvalidResponse,
@@ -164,8 +166,8 @@ class CornerflickOpenData:
             raise ProviderUnavailable("CORNERFLICK_NETWORK_UNAVAILABLE") from exc
 
         try:
-            payload = json.loads(buffer)
-        except (ValueError, UnicodeDecodeError) as exc:
+            payload = json.loads(buffer, object_pairs_hook=_unique_pairs, parse_constant=_reject_constant)
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise ProviderInvalidResponse("CORNERFLICK_INVALID_JSON") from exc
         if type(payload) not in (dict, list):
             raise ProviderInvalidResponse("CORNERFLICK_INVALID_ROOT")
