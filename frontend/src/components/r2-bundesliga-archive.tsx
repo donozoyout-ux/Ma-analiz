@@ -31,6 +31,8 @@ const SEASONS = [
 export function R2BundesligaArchive() {
   const [season, setSeason] = useState("2024-2025");
   const [team, setTeam] = useState("");
+  const [matchDate, setMatchDate] = useState("");
+  const [scoreFilter, setScoreFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [report, setReport] = useState<ArchiveResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,7 +43,8 @@ export function R2BundesligaArchive() {
     setLoading(true);
     setError(false);
     setReport(null);
-    const params = new URLSearchParams({ season, team, page: String(page), page_size: "25" });
+    const params = new URLSearchParams({ season, team, page: String(page), page_size: "25", score_filter: scoreFilter });
+    if (matchDate) params.set("match_date", matchDate);
     fetch(`/api/v1/archive/r2/bundesliga?${params}`, {
       cache: "no-store", signal: controller.signal,
     })
@@ -59,7 +62,7 @@ export function R2BundesligaArchive() {
       .catch(() => { if (!controller.signal.aborted) setError(true); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [season, team, page]);
+  }, [season, team, matchDate, scoreFilter, page]);
 
   const total = report?.total ?? 0;
   return <section className="card match-list-panel" aria-label="Bundesliga R2 maç arşivi">
@@ -83,6 +86,23 @@ export function R2BundesligaArchive() {
         <input aria-label="Bundesliga arşivinde takım ara" placeholder="Bayern, Dortmund…"
           value={team} onChange={event => { setTeam(event.target.value); setPage(1); }} />
       </label>
+      <label>
+        <span>Tarih</span>
+        <input type="date" aria-label="Bundesliga arşivi maç tarihi" value={matchDate}
+          onChange={event => { setMatchDate(event.target.value); setPage(1); }} />
+      </label>
+      <label>
+        <span>Skor durumu</span>
+        <select aria-label="Bundesliga arşivi skor durumu" value={scoreFilter}
+          onChange={event => { setScoreFilter(event.target.value); setPage(1); }}>
+          <option value="all">Tüm maçlar</option>
+          <option value="scored">Skoru bulunanlar</option>
+          <option value="unknown">Skoru belirsiz olanlar</option>
+        </select>
+      </label>
+      <button type="button" className="quiet-button" onClick={() => {
+        setSeason("2024-2025"); setTeam(""); setMatchDate(""); setScoreFilter("all"); setPage(1);
+      }}>Filtreleri temizle</button>
     </div>
     {loading ? <p role="status">R2 manifesti ve maç dosyası SHA-256 ile doğrulanıyor…</p> :
      error ? <p role="alert">Bundesliga R2 arşivine erişilemiyor. Dosya doğrulaması veya sunucu bağlantısı başarısız olabilir.</p> :
