@@ -183,3 +183,37 @@ def test_nine_file_upload_rejects_incomplete_plan_before_any_r2_write():
         run_upload(sessionmaker(bind=engine), store, [], permission_reference="TEST")
     assert store.list_objects(prefix="match-statistics/") == []
     engine.dispose()
+
+
+def test_read_only_target_preflight_against_isolated_postgres_without_r2_mutations():
+    """Real SQL metadata checks, stubbed R2 LIST only, zero SQL writes."""
+    from app.jobs.discipline_target_preflight import inspect_destination
+
+    class ReadOnlyBucket:
+        def __init__(self):
+            self.calls = []
+        def list_objects_v2(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"KeyCount": 0}
+        def put_object(self, **kwargs):
+            raise AssertionError("preflight must never upload")
+        def delete_object(self, **kwargs):
+            raise AssertionError("preflight must never delete")
+
+    engine = create_engine(URL)
+    bucket = ReadOnlyBucket()
+    with Session(engine) as db:
+        # Current Alembic head and real table presence from CI migration.
+        before = db.execute(text("SELECT COUNT(*) FROM historical_discipline_matches")).scalar_one()
+        report = inspect_destination(
+            db, bucket, database_name="discipline_test", bucket="isolated-r2-test",
+        )
+        after = db.execute(text("SELECT COUNT(*) FROM historical_discipline_matches")).scalar_one()
+        assert before == after
+        assert report["status"] == "READ_ONLY_TARGET_PREFLIGHT_PASSED"
+        assert report["write_operations_performed"] == 0
+        assert report["r2_write_capability_tested"] is False
+        assert bucket.calls == [{
+            "Bucket": "isolated-r2-test", "Prefix": "match-statistics/", "MaxKeys": 1,
+        }]
+    engine.dispose()
