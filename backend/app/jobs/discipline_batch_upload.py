@@ -138,8 +138,13 @@ def main(argv=None) -> int:
         print(json.dumps({"status":"ALL_NINE_R2_VERIFIED_AND_SQL_INDEXED",
                           "file_count":len(results),"files":results},ensure_ascii=False,indent=2))
         return 0
-    except (ValueError,OSError,SourceDownloadBlocked) as exc:
-        code = str(exc) if isinstance(exc, (ValueError, SourceDownloadBlocked)) and str(exc).isupper() and len(str(exc)) < 120 else "BATCH_UPLOAD_FAILED"
+    except Exception as exc:
+        # Never expose credentials, object-store endpoints, DB URLs or third-
+        # party response bodies in a CLI error. Prior immutable partitions
+        # may persist after partial failure and are idempotently recoverable.
+        code = (str(exc) if isinstance(exc, (ValueError, SourceDownloadBlocked))
+                and str(exc).isupper() and len(str(exc)) < 120
+                else "BATCH_UPLOAD_FAILED")
         print(json.dumps({"status":"BLOCKED_OR_PARTIAL","reason":code,
                           "all_nine_verified":False},ensure_ascii=False))
         return 2
