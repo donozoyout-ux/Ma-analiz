@@ -113,6 +113,11 @@
 /* The source's AI page prioritizes filtering and matchup cards, not
    unpublished success KPIs. Keep evidence placeholders available below. */
 .stitch-stage .stitch-view-predictions > .explorer-stack { display:flex; flex-direction:column; gap:18px; }
-.stitch-stage .stitch-view-predictions > .explorer-stack > .filter-panel { order:1; }
-.stitch-stage .stitch-view-predictions > .explorer-stack > .stitch-prediction-results { order:2; }
-.stitch-stage .stitch-view-predictions > .explorer-stack > .card:first-child { order:3; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .stitch-prediction-quick-filters { order:1; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .filter-panel { order:2; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .stitch-prediction-results { order:3; }
+.stitch-stage .stitch-view-predictions > .explorer-stack > .card:first-child { order:4; }
+.stitch-stage .stitch-prediction-quick-filters { display:flex; flex-wrap:wrap; gap:9px; }
+.stitch-stage .stitch-prediction-quick-filters button { min-height:44px; padding:10px 16px; border-radius:999px; border:1px solid var(--line-strong); color:var(--text); background:var(--panel); font-size:12px; font-weight:650; }
+.stitch-stage .stitch-prediction-quick-filters button[aria-pressed="true"] { background:#003824; color:var(--mint); border-color:#006C49; }
+.stitch-stage .stitch-prediction-quick-filters button[aria-expanded="true"] { border-color:var(--mint); }
