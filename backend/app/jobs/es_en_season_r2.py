@@ -6,15 +6,16 @@ approval and a correctly configured R2 bucket. Never edits Bundesliga objects.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import date
 import hashlib
 import json
+from uuid import uuid5, NAMESPACE_URL
+import unicodedata
 
 import httpx
 
 from app.core.config import get_settings
-from app.jobs.first_ucl_r2_archive import archive_verified
-from app.providers.season_files import Source, DownloadBudget, download, parse_season
 from app.storage.r2 import R2ObjectStore, parquet_bytes, parquet_rows
 
 BUCKET = "sdfgdsgdg"
@@ -24,6 +25,100 @@ APPROVAL = "ARCHIVE_ES_EN_2024_2027_R2_ONLY"
 LEAGUES = {"es.1": "La Liga", "en.pl": "Premier League"}
 FILES = {"es.1": "es.1.json", "en.pl": "en.1.json"}
 SEASONS = ("2024-2025", "2025-2026", "2026-2027")
+
+@dataclass(frozen=True)
+class Source:
+    league: str
+    season: str
+    provider: str
+    format: str
+    url: str
+    licence: str
+    licence_url: str
+    revision: str
+
+
+@dataclass
+class DownloadBudget:
+    remaining_attempts: int = 6
+    remaining_bytes: int = 12 * 1024 * 1024
+
+
+def download(source: Source, client, budget: DownloadBudget) -> bytes:
+    if budget.remaining_attempts <= 0:
+        raise ValueError("SOURCE_DOWNLOAD_BUDGET")
+    budget.remaining_attempts -= 1
+    with client.stream("GET", source.url, follow_redirects=False,
+                       timeout=httpx.Timeout(15, connect=5)) as response:
+        response.raise_for_status()
+        data = bytearray()
+        for chunk in response.iter_bytes(64 * 1024):
+            budget.remaining_bytes -= len(chunk)
+            if budget.remaining_bytes < 0 or len(data) + len(chunk) > 2 * 1024 * 1024:
+                raise ValueError("SOURCE_SIZE_LIMIT")
+            data.extend(chunk)
+    return bytes(data)
+
+
+def _name(value: str) -> str:
+    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def parse_season(source: Source, raw: bytes) -> list[dict]:
+    result = []
+    for match in json.loads(raw)["matches"]:
+        day = date.fromisoformat(match["date"])
+        if not date(int(source.season[:4]), 7, 1) <= day < date(int(source.season[-4:]), 7, 1):
+            raise ValueError("FIXTURE_OUTSIDE_SEASON")
+        home, away = match["team1"], match["team2"]
+        if not isinstance(home, str) or not isinstance(away, str) or not home.strip() or not away.strip() or _name(home) == _name(away):
+            raise ValueError("INVALID_TEAM_IDENTITY")
+        if not isinstance(match["round"], str) or not match["round"].strip():
+            raise ValueError("INVALID_ROUND")
+        scores = match.get("score")
+        if not isinstance(scores, dict):
+            scores = {}
+        identity = "|".join((match["round"], _name(home), _name(away)))
+        value = lambda suffix: str(uuid5(NAMESPACE_URL, suffix))
+        row = {
+            "id": value(f"ma-analiz/season/{source.league}/{source.season}/{source.provider}/{identity}"),
+            "league": source.league, "season": source.season, "provider": source.provider,
+            "source_match_id": identity, "home_team": home, "away_team": away,
+            "home_team_id": value(f"ma-analiz/team/{source.provider}/{_name(home)}"),
+            "away_team_id": value(f"ma-analiz/team/{source.provider}/{_name(away)}"),
+            "date": day.isoformat(), "kickoff_utc": None, "stage": "DOMESTIC_LEAGUE",
+            "round": match["round"], "tie_id": None, "leg": None,
+            "status": "FINISHED" if scores.get("ft") is not None else "SCHEDULED",
+            "half_time": scores.get("ht"), "regulation": scores.get("ft"),
+            "extra_time": None, "penalties": None,
+            "verification": "SOURCE_REPORTED", "odds_status": "ODDS_UNAVAILABLE",
+            "licence": source.licence, "licence_url": source.licence_url, "source_url": source.url,
+        }
+        result.append(row)
+    if len({r["id"] for r in result}) != len(result):
+        raise ValueError("DUPLICATE_SOURCE_IDENTITY")
+    return result
+
+
+def archive_verified(store, key, payload, content_type, *, rows=None):
+    checksum = digest(payload)
+    head = store.head_object(key)
+    if head is None:
+        try:
+            store.put_object_if_absent(key, payload, content_type=content_type,
+                                       metadata={"sha256": checksum})
+        except FileExistsError:
+            pass
+    head = store.head_object(key)
+    if head is None or head.size != len(payload) or (head.metadata or {}).get("sha256") != checksum:
+        raise ValueError("R2_ARCHIVE_RECEIPT_MISMATCH")
+    body = store.get_object(key)
+    if digest(body) != checksum:
+        raise ValueError("R2_ARCHIVE_SHA256_MISMATCH")
+    if rows is not None and len(parquet_rows(body)) != rows:
+        raise ValueError("R2_ARCHIVE_ROW_COUNT_MISMATCH")
+    return {"key": key, "sha256": checksum, "size": len(payload)}
+
 
 
 def digest(data: bytes) -> str:
