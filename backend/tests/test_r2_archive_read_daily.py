@@ -72,8 +72,10 @@ def test_daily_r2_dry_run_avoids_storage():
     assert report["r2"] == "NOT_ACCESSED"
 
 
-def test_daily_r2_snapshot_reuses_and_changes_when_score_changes():
+def test_daily_r2_snapshot_reuses_and_changes_when_score_changes(monkeypatch):
+    monkeypatch.setenv("DAILY_R2_EXPECTED_BUCKET", "test-daily-bucket")
     store = InMemoryObjectStore()
+    store.bucket = "test-daily-bucket"
     day = date(2026, 11, 28)
     try:
         FakeProvider.data = [match()]
@@ -98,3 +100,21 @@ def test_daily_rejects_wrong_date_and_duplicate_without_writes():
         daily.run(day=date(2025, 11, 28), provider_factory=FakeProvider)
     with pytest.raises(ValueError, match="DAILY_DUPLICATE_MATCH_ID"):
         daily.validate_matches([match(), match()], date(2026, 11, 28), "de.bl1")
+
+
+def test_daily_live_rejects_unexpected_bucket_without_writes(monkeypatch):
+    monkeypatch.setenv("DAILY_R2_EXPECTED_BUCKET", "approved-bucket")
+    store = InMemoryObjectStore()
+    store.bucket = "different-bucket"
+    with pytest.raises(RuntimeError, match="DAILY_R2_BUCKET_MISMATCH"):
+        daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                  provider_factory=FakeProvider, store_factory=lambda: store)
+    assert store.list_objects() == []
+
+
+def test_daily_live_requires_explicit_target_bucket(monkeypatch):
+    monkeypatch.delenv("DAILY_R2_EXPECTED_BUCKET", raising=False)
+    with pytest.raises(RuntimeError, match="DAILY_R2_EXPECTED_BUCKET_REQUIRED"):
+        daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                  provider_factory=FakeProvider,
+                  store_factory=lambda: pytest.fail("R2 accessed"))
