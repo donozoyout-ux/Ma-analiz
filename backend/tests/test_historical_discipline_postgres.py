@@ -57,3 +57,29 @@ def test_persist_idempotent_immutable_and_no_expiring_match_foreign_key():
             db.commit()
         db.rollback()
     engine.dispose()
+
+
+def test_read_only_summary_and_match_row_contract():
+    from app.api.historical_discipline import summary, matches
+    engine=create_engine(URL)
+    with Session(engine) as db:
+        total=summary(league="en.pl", season="2024-2025", team=None, db=db)
+        assert total["match_count"]>=1
+        assert total["metrics"]["corners"]["sample"]>=1
+        assert total["verified_match_outcomes"] is False and total["odds_included"] is False
+        found=matches(league="en.pl", season="2024-2025", team="SYNTHETIC Home",
+                      limit=20, offset=0, db=db)
+        assert any(row["home_corners"]==0 and row["away_yellows"] is None for row in found["items"])
+        assert found["official_result_verified"] is False
+    engine.dispose()
+
+
+def test_as_of_before_import_cannot_see_historical_data():
+    from app.api.historical_discipline import filtered_query
+    from datetime import datetime, timezone
+    engine=create_engine(URL)
+    with Session(engine) as db:
+        query=filtered_query(league="en.pl",season="2024-2025",team=None,
+                             as_of=datetime(2025,1,1,tzinfo=timezone.utc))
+        assert db.scalars(query).all()==[]
+    engine.dispose()
