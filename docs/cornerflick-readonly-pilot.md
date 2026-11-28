@@ -67,3 +67,35 @@ records. Do not bypass 401/403/429 or anti-automation controls.
 
 This draft is a standalone starting point and makes **no claim that Cornerflick
 is already connected to live MA-ANALİZ**.
+
+## 28 Nov 2026 follow-up: offline JSON schema inventory
+
+The official [Cornerflick data page](https://cornerflick.com/data)
+still describes free JSON/CSV exports. The finished-match page
+[`bayern-munchen-vs-1-fc-koln-bundesliga-2026-11-20`](https://cornerflick.com/football/bundesliga/matches/bayern-munchen-vs-1-fc-koln-bundesliga-2026-11-20)
+shows provider attribution to **API-Football**. That is a page claim,
+not a separately verified licence or raw JSON schema. Direct file
+retrieval from the development environment remains unavailable.
+
+New **local-only** inspection utility:
+
+```bash
+cd backend
+python -m app.providers.cornerflick_schema_inspect --season /path/to/season.json --match /path/to/data.json
+```
+
+The tool does **not** fetch any URL. The operator must obtain the files
+through the site's documented download links, in compliance with the
+site's access policy. It prints only structural key paths, primitive
+types, collection sizes, byte count and SHA-256; it does **not** print
+match/player names, scores, dates or other JSON values, and cannot
+prove result accuracy or licensing. It rejects duplicate JSON keys,
+invalid JSON, unknown roots and files over 2 MiB. It never writes to
+PostgreSQL, R2, or a report file. Share only the structural report,
+not the raw licensed feed, unless distribution rights are established.
+
+This inventory is intentionally *not* an auto-discovered schema
+normalizer. A future Codex review must inspect actual files,
+document versioning and provenance, then separately approve
+narrow field mappings and tests before activating any preview API.
+The adapter remains default-disabled, and this PR is still Draft.
