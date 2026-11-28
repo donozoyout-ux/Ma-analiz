@@ -79,3 +79,26 @@ def test_endpoint_fails_closed_on_bucket_mismatch(monkeypatch):
     monkeypatch.setattr(archive, "R2ObjectStore", lambda: store)
     response = TestClient(app).get("/api/v1/archive/r2/bundesliga")
     assert response.status_code == 503
+
+
+def test_archive_date_and_score_filters(monkeypatch):
+    store, _ = setup_archive(monkeypatch)
+    store.client = SimpleNamespace(close=lambda: None)
+    monkeypatch.setattr(archive, "R2ObjectStore", lambda: store)
+    client = TestClient(app)
+    scored = client.get("/api/v1/archive/r2/bundesliga",
+        params={"season": "2024-2025", "match_date": "2024-11-01", "score_filter": "scored"})
+    assert scored.status_code == 200
+    assert scored.json()["total"] == 1
+    assert scored.json()["matches"][0]["regulation"] == [2, 1]
+    unknown = client.get("/api/v1/archive/r2/bundesliga",
+        params={"season": "2024-2025", "score_filter": "unknown"})
+    assert unknown.status_code == 200
+    assert unknown.json()["total"] == 1
+    assert unknown.json()["matches"][0]["regulation"] is None
+    empty = client.get("/api/v1/archive/r2/bundesliga",
+        params={"season": "2024-2025", "match_date": "2024-11-03"})
+    assert empty.status_code == 200 and empty.json()["total"] == 0
+    invalid = client.get("/api/v1/archive/r2/bundesliga",
+        params={"season": "2024-2025", "score_filter": "guessed"})
+    assert invalid.status_code == 422
