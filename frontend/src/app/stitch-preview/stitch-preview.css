@@ -31,6 +31,8 @@
 .stitch-preview-data-note { display:flex; align-items:center; gap:10px; padding:13px 17px; background:#101D1A; border:1px solid #234B3E; border-radius:12px; font-size:12px; line-height:1.6; color:#BBCABF; margin:0 0 22px; }
 .stitch-preview-data-note svg { flex-shrink:0; color:var(--premium-red); }
 .stitch-preview-content { min-width:0; }
+.stitch-stage :is(button,a,input,select,textarea):focus-visible { outline:3px solid #4EDEA3; outline-offset:3px; }
+.stitch-preview-content:focus { outline:none; }
 .stitch-preview-detail { min-height:300px; display:flex; align-items:flex-start; justify-content:center; flex-direction:column; gap:12px; }
 .stitch-preview-detail .primary-button { margin-top:14px; }
 .stitch-preview-footer { padding:22px 0 0; margin-top:28px; border-top:1px solid var(--line); color:var(--dim); font-size:11px; }
@@ -44,11 +46,12 @@
  .stitch-preview-mobile-logo { display:flex; align-items:center; gap:8px; color:var(--premium-red); font-size:13px; font-weight:800; margin-bottom:6px; }
  .stitch-preview-topbar { gap:10px; margin-bottom:16px; }
  .stitch-preview-label { text-align:right; max-width:135px; line-height:1.5; }
- .stitch-preview-bottom-nav { position:fixed; bottom:0; left:0; right:0; display:flex; z-index:9; padding:8px 6px max(8px,env(safe-area-inset-bottom)); background:#101419; border-top:1px solid var(--line); overflow-x:auto; }
- .stitch-preview-bottom-nav button { flex:1 0 0; min-width:49px; display:grid; justify-items:center; gap:4px; padding:7px 3px; border:0; border-radius:8px; background:none; color:var(--dim); font-size:8px; }
+ .stitch-preview-bottom-nav { position:fixed; bottom:0; left:0; right:0; display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); z-index:9; padding:8px 6px max(8px,env(safe-area-inset-bottom)); background:#101419; border-top:1px solid var(--line); }
+ .stitch-preview-bottom-nav button { min-width:0; min-height:48px; display:grid; justify-items:center; align-content:center; gap:4px; padding:7px 2px; border:0; border-radius:8px; background:none; color:#BBCABF; font-size:8px; }
  .stitch-preview-bottom-nav button.is-active { color:var(--premium-red); background:#003824; }
  .stitch-preview-bottom-nav span { text-align:center; line-height:1.2; }
  .stitch-stage .source-fixtures-table tbody tr { background:var(--panel); }
 }
 @media (max-width:400px) { .stitch-preview-main { padding:14px 12px 92px; }.stitch-preview-label { font-size:9px; }.stitch-preview-data-note { font-size:11px; } }
 @media (prefers-reduced-motion:reduce) { .stitch-stage *, .stitch-stage *::before, .stitch-stage *::after { transition:none!important; animation:none!important; } }
+@media (hover:none), (pointer:coarse) { .stitch-stage .football-match-card { transform:none!important; } }

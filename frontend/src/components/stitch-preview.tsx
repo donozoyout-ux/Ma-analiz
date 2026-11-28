@@ -27,7 +27,7 @@ export function StitchPreview() {
   const current = views.find(item => item.id === view) ?? views[0];
   const select = (next: View) => {
     setView(next);
-    document.querySelector(".stitch-preview-main")?.scrollTo({ top: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, behavior: "auto" });
   };
 
   return <div className="stitch-stage" data-testid="stitch-preview">
@@ -47,14 +47,14 @@ export function StitchPreview() {
         <span className="stitch-preview-label">TASLAK · GERÇEK API VERİSİ</span>
       </div>
       <p className="stitch-preview-data-note"><CircleHelp size={17} aria-hidden="true"/> Rakamlar, skorlar, tahminler ve arşiv bilgileri yalnızca mevcut API yanıtlarından gösterilir. Stitch örnek oranları ve örnek isabet yüzdeleri kullanılmaz.</p>
-      <div className="stitch-preview-content" key={view}>
+      <main className="stitch-preview-content" key={view} id="stitch-content" tabIndex={-1}>
         {view === "overview" && <FootballHome />}
         {view === "matches" && <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / MAÇ MERKEZİ</div><h1 className="title">Maç Merkezi</h1><p className="page-intro">Lig, tarih ve takım filtreleriyle güncel kaynak bültenine erişin.</p></div></header><MatchCenter /></>}
         {view === "predictions" && <Predictions />}
-        {view === "analysis" && <Performance />}
-        {view === "archive" && <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / VERİ ARŞİVİ</div><h1 className="title">Veri Arşivi</h1><p className="page-intro">PostgreSQL ve doğrulanmış arşiv kayıtları. Maç sayıları API kapsamına bağlıdır.</p></div></header><MatchCenter initialSource="history" /></>}
-        {view === "detail" && <section className="card stitch-preview-detail"><div className="eyebrow">MA-ANALİZ / MAÇ ANALİZ DETAYI</div><h1 className="title">Maç Analiz Detayı</h1><p className="page-intro">Stitch tasarımında örnek maç ve örnek tahmin bulunuyor. Burada bu bilgileri gerçekmiş gibi göstermiyoruz. Gerçek maçın ayrıntısını Maç Merkezi üzerinden açın.</p><Link className="primary-button" href="/matches">Gerçek maç kayıtlarına git</Link></section>}
-      </div>
+        {view === "analysis" && <Performance strictResponse />}
+        {view === "archive" && <><header className="topbar"><div><div className="eyebrow">MA-ANALİZ / VERİ ARŞİVİ</div><h1 className="title">Veri Arşivi</h1><p className="page-intro">PostgreSQL ve doğrulanmış arşiv kayıtları. Maç sayıları API kapsamına bağlıdır.</p></div></header><MatchCenter initialSource="history" lockHistory /></>}
+        {view === "detail" && <section className="card stitch-preview-detail"><div className="eyebrow">MA-ANALİZ / MAÇ ANALİZ DETAYI</div><h1 className="title">Maç Analiz Detayı</h1><p className="page-intro">Bir maç seçerek gerçek kaydın detayına ulaşın. Maç seçilmeden skor veya tahmin gösterilmez.</p><p>Doğrulanmış oran yoksa maç detayında ayrıca belirtilir.</p><button type="button" className="primary-button" onClick={() => select("archive")}>Arşivden maç seç</button></section>}
+      </main>
       <footer className="stitch-preview-footer">Bu ekran tasarım incelemesi içindir; gerçek oran, AI tahmini veya arşiv doğrulaması üretmez. Üretim temasını değiştirmez.</footer>
     </div>
 

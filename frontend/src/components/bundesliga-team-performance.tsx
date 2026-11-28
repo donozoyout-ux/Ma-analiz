@@ -9,7 +9,7 @@ type Stats = {
   form: string[]; warnings: string[];
 };
 
-export function BundesligaTeamPerformance() {
+export function BundesligaTeamPerformance({ strictResponse = false }: { strictResponse?: boolean }) {
   const [team, setTeam] = useState("FC Bayern München");
   const [query, setQuery] = useState("FC Bayern München");
   const [data, setData] = useState<Stats | null>(null);
@@ -25,12 +25,17 @@ export function BundesligaTeamPerformance() {
     })
       .then(async response => {
         if (!response.ok) throw new Error("TEAM_STATS_UNAVAILABLE");
-        return response.json() as Promise<Stats>;
+        const value: unknown = await response.json();
+        if (strictResponse && (!value || typeof value !== "object" || Array.isArray(value) ||
+            typeof (value as Stats).played !== "number" || !Array.isArray((value as Stats).form))) {
+          throw new Error("TEAM_STATS_UNAVAILABLE");
+        }
+        return value as Stats;
       })
       .then(setData)
       .catch(e => { if (e.name !== "AbortError") setError(true); });
     return () => controller.abort();
-  }, [query, retry]);
+  }, [query, retry, strictResponse]);
 
   return <section className="explorer-stack" aria-label="Bundesliga takım performansı">
     <div className="list-toolbar card">
