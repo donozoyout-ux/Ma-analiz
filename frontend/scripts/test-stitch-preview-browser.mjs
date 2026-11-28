@@ -83,6 +83,11 @@ try {
    await wait(`document.activeElement.id==='stitch-content'`); await sleep(250);
    await check(`no_overflow_${width}_${i}`,`document.documentElement.scrollWidth<=innerWidth`);
    await check(`one_main_${width}_${i}`,`document.querySelectorAll('main').length===1`);
+   if(i===2) {
+    await wait(`!!document.querySelector('.stitch-prediction-card')`);
+    await check(`ai_cards_from_source_${width}`,`document.querySelector('.stitch-prediction-card').textContent.includes('SENTETİK Ev Takımı') && document.querySelector('.stitch-prediction-card').textContent.includes('SENTETİK Konuk Takımı')`);
+    await check(`ai_cards_no_fabricated_evidence_${width}`,`document.querySelector('.stitch-prediction-card').textContent.includes('Doğrulanmamış') && document.querySelector('.stitch-prediction-card').textContent.includes('oran gösterilmez') && !document.querySelector('.stitch-prediction-card').textContent.includes('%')`);
+   }
    if(i===3) {
     await wait(`!!document.querySelector('[aria-label="Geçici tahmin kayıtları"] table tbody tr')`);
     await check(`unverified_predictions_${width}`,`document.querySelector('[aria-label="Geçici tahmin kayıtları"]').textContent.includes('Doğrulanmamış') || document.querySelector('[aria-label="Geçici tahmin kayıtları"]').textContent.includes('Doğrulanmadı')`);
@@ -113,6 +118,9 @@ try {
  mode='empty';await call('Page.navigate',{url:new URL('/stitch-preview',base).href});
  await wait(`document.body.innerText.includes('Seçilen filtrelerde maç bulunamadı')`);
  await check('empty_no_fabricated_data',`!document.querySelector('.football-match-card')`);
+ await evaluate(`document.querySelector('.stitch-preview-nav button:nth-child(3)').click()`);
+ await wait(`document.body.innerText.includes('Bu filtrelerde geçici tahmin kaydı bulunamadı')`);
+ await check('empty_prediction_cards_not_invented',`document.querySelectorAll('.stitch-prediction-card').length===0`);
  await call('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'}]});
  await check('reduced_motion',`matchMedia('(prefers-reduced-motion: reduce)').matches`);
  assert.equal(errors.length,0,errors.join(','));
