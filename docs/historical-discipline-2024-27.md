@@ -1,4 +1,4 @@
-# MA-ANALİZ — 2024/25 onward corner/yellow/red card archive
+> **R2-first update (2026-11-28):** The SQL-only import command below has been superseded by [the R2 receipt-verified runbook](historical-discipline-r2-archive.md). Production use remains blocked pending provider licensing, backup and explicit deployment authorization.\n\n# MA-ANALİZ — 2024/25 onward corner/yellow/red card archive
 
 ## Status: Draft / prepared, NOT populated in production
 
@@ -78,20 +78,16 @@ The report shows file SHA-256, coverage for corners/yellows/reds, row counts
 and zero bookmaker odds. Repeat for the nine combinations, adjusting league,
 season and filename. It does **not** expose full underlying match rows.
 
-3. An authorized operator must verify (a) provider rights for the use case,
-(b) the database is the intended MA-ANALİZ database, (c) a backup/restore
-rehearsal, (d) Alembic head, and (e) source file hash. Only then does a
-manual SQL import become eligible:
+3. **R2 first:** An authorized operator must verify licensing, target database,
+R2 bucket, backup/restore, Alembic heads and source file SHA-256. Then follow
+[the guarded R2-first upload command](historical-discipline-r2-archive.md).
+`--write` now requires `--confirm-r2-upload`, and SQL statistic rows can
+only be committed after an exact `VERIFIED` R2 receipt. An old SQL-only
+command is intentionally no longer supported.
 
-```bash
-python -m app.jobs.historical_discipline_import --file /local/E0.csv --league E0 --season 2425 \
-  --write --acknowledge-source-terms --expected-sha256 ACTUAL_SHA256 \
-  --permission-reference APPROVED_LICENSE_OR_CONTRACT_REFERENCE
-```
-
-This is **not** permission to run the command now. There is no automatic
-ingest flag, cron, R2 upload or role grant in this PR. No production
-connection secrets are needed for offline validation.
+There is no automatic ingest flag, cron, production importer or scheduled
+R2 upload in this PR. The read-only UI shows empty coverage until the rights
+and archived data are actually present.
 
 ### Data API and dashboard
 
