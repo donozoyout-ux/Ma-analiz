@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -72,6 +73,8 @@ def archived_bundesliga(
     page: int = Query(1, ge=1, le=30),
     page_size: int = Query(25, ge=1, le=100),
     team: str = Query("", max_length=80),
+    match_date: date | None = Query(None),
+    score_filter: str = Query("all", pattern="^(all|scored|unknown)$"),
 ):
     if season not in SEASONS:
         raise HTTPException(status_code=422, detail="UNSUPPORTED_SEASON")
@@ -91,6 +94,12 @@ def archived_bundesliga(
     if lookup:
         rows = [row for row in rows if lookup in row["home_team"].casefold()
                 or lookup in row["away_team"].casefold()]
+    if match_date is not None:
+        rows = [row for row in rows if row["date"] == match_date.isoformat()]
+    if score_filter == "scored":
+        rows = [row for row in rows if row["regulation"] is not None]
+    elif score_filter == "unknown":
+        rows = [row for row in rows if row["regulation"] is None]
     rows.sort(key=lambda row: (row["date"], row["id"]), reverse=True)
     offset = (page - 1) * page_size
     return {
