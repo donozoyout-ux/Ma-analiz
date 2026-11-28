@@ -138,7 +138,7 @@ def test_postgres_read_only_and_schema(monkeypatch, settings):
     inspector=MagicMock()
     inspector.default_schema_name="public"
     inspector.get_schema_names.return_value=["public"]
-    monkeypatch.setattr(module.MigrationContext, "configure", lambda conn: MagicMock(get_current_heads=lambda: ("0010_active_statistics",)))
+    monkeypatch.setattr(module.MigrationContext, "configure", lambda conn: MagicMock(get_current_heads=lambda: ("0011_season_bulk",)))
     inspector.get_table_names.return_value=list(module.Base.metadata.tables)
     inspector.get_columns.side_effect=lambda name: [{'name': c.name} for c in module.Base.metadata.tables[name].columns]
     monkeypatch.setattr(module, 'inspect', lambda conn: inspector)
@@ -195,7 +195,7 @@ def test_schema_revision_and_other_schemas(monkeypatch):
     for current, issue in [((), 'ALEMBIC_REVISION_MISSING'),
                             (('0001_initial',),'ALEMBIC_REVISION_BEHIND_OR_DIVERGED'),
                             (('private-secret',),'ALEMBIC_REVISION_UNKNOWN'),
-                            (('0010_active_statistics',),'REVISION_SCHEMA_MISMATCH')]:
+                            (('0011_season_bulk',),'REVISION_SCHEMA_MISMATCH')]:
         context.get_current_heads.return_value=current
         result=module.schema_report(MagicMock())
         assert issue in result['schema_issues']

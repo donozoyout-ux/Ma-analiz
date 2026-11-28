@@ -123,7 +123,7 @@ class OpenLigaDBProvider:
                     raise ProviderError(f"OpenLigaDB HTTP {resp.status_code}")
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 if attempt >= self.max_retries:
-                    raise ProviderUnavailable(f"OpenLigaDB network failure: {exc}") from exc
+                    raise ProviderUnavailable("OPENLIGADB_NETWORK_FAILURE") from None
                 time.sleep(backoff)
                 backoff *= 2
 

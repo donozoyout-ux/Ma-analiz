@@ -1,5 +1,6 @@
 from datetime import date
 from functools import lru_cache
+import os
 from pathlib import Path
 import re
 from urllib.parse import urlsplit
@@ -224,7 +225,10 @@ class Settings(BaseSettings):
     def groq_configured(self) -> bool:
         return not self.groq_configuration_issues
 
-    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=None if os.environ.get("MAC_ANALIZ_TEST_MODE") == "1" else ENV_FILE,
+        extra="ignore",
+    )
 
 
 @lru_cache

@@ -11,7 +11,7 @@ settings = get_settings()
 database_url = settings.database_url
 if settings.database_url_valid and database_url and database_url.startswith("postgresql://"):
     database_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
-engine = create_engine(database_url, pool_pre_ping=True) if settings.database_url_valid else None
+engine = create_engine(database_url, pool_pre_ping=True, hide_parameters=True) if settings.database_url_valid else None
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False) if engine else None
 
 
@@ -21,7 +21,7 @@ def get_db() -> Generator[Session, None, None]:
     try:
         with engine.connect():
             pass
-    except SQLAlchemyError as exc:
-        raise HTTPException(status_code=503, detail="DATABASE_OFFLINE") from exc
+    except SQLAlchemyError:
+        raise HTTPException(status_code=503, detail="DATABASE_OFFLINE") from None
     with SessionLocal() as session:
         yield session

@@ -16,11 +16,12 @@ def test_env_file_is_absolute_and_anchored_at_project_root():
     assert ENV_FILE == PROJECT_ROOT / ".env"
 
 
-def test_settings_load_same_project_env_from_root_and_backend_directory():
-    assert ENV_FILE.exists(), "Project .env file is required for the working-directory check"
+def test_settings_load_same_project_env_from_root_and_backend_directory(tmp_path):
+    fixture_env = tmp_path / "fixture.env"
+    fixture_env.write_text("MATCH_PROVIDER=synthetic\n", encoding="utf8")
     backend = PROJECT_ROOT / "backend"
     script = (
-        "import json; from app.core.config import Settings; s=Settings(); "
+        "import json,sys; from app.core.config import Settings; s=Settings(_env_file=sys.argv[1]); "
         "print(json.dumps({'provider':s.provider_id,'leagues':s.enabled_league_ids,"
         "'r2_configured':s.r2_configured,'database_url_valid':s.database_url_valid,"
         "'groq_configured':s.groq_configured},sort_keys=True))"
@@ -39,7 +40,7 @@ def test_settings_load_same_project_env_from_root_and_backend_directory():
 
     outputs = []
     for working_directory in (PROJECT_ROOT, backend):
-        completed = subprocess.run([sys.executable, "-c", script], cwd=working_directory,
+        completed = subprocess.run([sys.executable, "-c", script, str(fixture_env)], cwd=working_directory,
                                    env=env, capture_output=True, text=True, check=True)
         outputs.append(json.loads(completed.stdout.strip()))
     assert outputs[0] == outputs[1]

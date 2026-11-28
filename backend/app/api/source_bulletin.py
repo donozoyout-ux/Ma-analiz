@@ -48,7 +48,7 @@ def build_bulletin(day: date, *, provider_factory=OpenLigaDBProvider) -> dict:
             cached = _CACHE.get(key)
             if cached and now - cached[0] < CACHE_SECONDS:
                 rows = cached[1]
-            elif now - _LAST_ATTEMPT.get(shortcut, 0) < COOLDOWN_SECONDS:
+            elif shortcut in _LAST_ATTEMPT and now - _LAST_ATTEMPT[shortcut] < COOLDOWN_SECONDS:
                 failures.append({"league_id": league_id, "reason": "SOURCE_COOLDOWN"})
                 continue
             else:

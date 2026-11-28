@@ -1,0 +1,159 @@
+name: Isolated season bulk tests
+on:
+  pull_request:
+    paths:
+      - 'backend/app/**/season_*.py'
+      - 'backend/app/core/config.py'
+      - 'backend/tests/conftest.py'
+      - 'backend/tests/test_test_isolation.py'
+      - 'backend/app/jobs/first_ucl_import.py'
+      - 'backend/app/jobs/first_ucl_r2_archive.py'
+      - 'backend/app/jobs/bundesliga_season_r2.py'
+      - 'backend/tests/test_bundesliga_season_r2.py'
+      - 'backend/tests/test_first_ucl_import.py'
+      - 'backend/tests/test_first_ucl_r2_archive.py'
+      - 'backend/tests/test_r2_bucket_read_only.py'
+      - 'backend/tests/test_r2_archive_read_daily.py tests/test_bundesliga_r2_archive.py'
+      - 'backend/app/api/r2_archive.py'
+      - 'backend/app/api/bundesliga_r2_archive.py'
+      - 'backend/tests/test_bundesliga_r2_archive.py'
+      - 'backend/app/jobs/daily_r2_matches.py'
+      - 'backend/app/jobs/r2_smoke_test.py'
+      - 'backend/migrations/versions/0011_season_bulk.py'
+      - 'backend/tests/test_season_bulk.py'
+      - 'backend/app/jobs/season_staging_rehearsal.py'
+      - 'backend/app/jobs/season_bulk_preflight.py'
+      - '.github/workflows/season-bulk-tests.yml'
+permissions:
+  contents: read
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test-only
+          POSTGRES_DB: season_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d season_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pytest -q tests/test_season_bulk.py tests/test_first_ucl_import.py tests/test_test_isolation.py tests/test_bundesliga_season_r2.py tests/test_first_ucl_r2_archive.py tests/test_r2_bucket_read_only.py tests/test_r2_archive_read_daily.py
+        env:
+          SEASON_BULK_TEST_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+      - name: Refuse unconfigured and mismatched identity preflight
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: |
+          python - <<'PY'
+          from app.jobs.season_bulk_preflight import main
+          assert main(["--expected-database", "wrong_database"]) == 2
+          print("MISMATCH_PRECHECK_BLOCKED")
+          PY
+      - name: Upgrade disposable database to existing Alembic 0010 head
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m alembic upgrade 0010_active_statistics
+      - name: Inspect baseline before season migration
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: |
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          import os
+          e=create_engine(os.environ["DATABASE_URL"])
+          with e.connect() as c:
+              assert c.scalar(text("SELECT version_num FROM alembic_version")) == "0010_active_statistics"
+              assert c.scalar(text("SELECT COUNT(*) FROM active_matches")) == 0
+          print("DISPOSABLE_0010_BASELINE_PASS")
+          PY
+      - name: Seed operational match and capture baseline before season migration
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: |
+          python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from sqlalchemy import create_engine, select, func
+          from sqlalchemy.orm import Session
+          from app.models import ActiveMatch
+          import os
+          engine = create_engine(os.environ["DATABASE_URL"])
+          now = datetime(2026, 8, 28, tzinfo=timezone.utc)
+          with Session(engine) as session, session.begin():
+              session.add(ActiveMatch(
+                  provider="isolated-fixture", provider_match_id="seed-preservation",
+                  league_id="de.bl1", season="2026-2027",
+                  home_team="Sample Home", away_team="Sample Away",
+                  start_time=now, status="FINISHED", expires_at=now + timedelta(hours=32),
+              ))
+          with Session(engine) as session:
+              assert session.scalar(select(func.count()).select_from(ActiveMatch)) == 1
+          print("OPERATIONAL_BASELINE_SEEDED")
+          PY
+      - name: Validate read-only identity before migration
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m app.jobs.season_bulk_preflight --expected-database season_test
+      - name: Upgrade disposable PostgreSQL 0010 to 0011
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m alembic upgrade 0011_season_bulk
+      - name: Validate read-only identity after migration
+        env:
+          SEASON_BULK_PREFLIGHT_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m app.jobs.season_bulk_preflight --expected-database season_test --require-migrated
+      - name: Rehearse pinned 2024-25 UCL 189-match import and replay (no actual R2)
+        env:
+          DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+          SEASON_BULK_TEST_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
+        run: python -m app.jobs.season_staging_rehearsal
+      - name: Verify Postgres backup and isolated restore of full season dataset
+        env:
+          PGHOST: localhost
+          PGPORT: '5432'
+          PGUSER: test
+          PGPASSWORD: test-only
+        run: |
+          set -euo pipefail
+          # Use the PostgreSQL 16 client image, matching the CI server.
+          # The runner's PostgreSQL 18 pg_dump produces incompatible settings.
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            -v /tmp:/backup postgres:16 pg_dump -Fc --no-owner --no-acl \
+            -d season_test -f /backup/season-stage.backup
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            postgres:16 createdb season_restore_test
+          docker run --rm --network host -e PGHOST -e PGPORT -e PGUSER -e PGPASSWORD \
+            -v /tmp:/backup postgres:16 pg_restore --no-owner --no-acl --exit-on-error \
+            -d season_restore_test /backup/season-stage.backup
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          url = "postgresql+psycopg://test:test-only@localhost:5432/"
+          counts = []
+          for db in ("season_test", "season_restore_test"):
+              eng = create_engine(url + db)
+              with eng.connect() as c:
+                  counts.append((
+                      c.scalar(text("SELECT version_num FROM alembic_version")),
+                      c.scalar(text("SELECT COUNT(*) FROM active_matches")),
+                      c.scalar(text("SELECT COUNT(*) FROM season_fixtures")),
+                      c.scalar(text("SELECT COUNT(*) FROM season_imports")),
+                  ))
+              eng.dispose()
+          assert counts == [("0011_season_bulk", 1, 189, 1)] * 2, counts
+          print("ISOLATED_BACKUP_RESTORE_VERIFIED: matches=1 fixtures=189 receipts=1")
+          PY
