@@ -10,6 +10,7 @@ import argparse
 from datetime import date, datetime
 import hashlib
 import json
+import os
 from zoneinfo import ZoneInfo
 
 from app.jobs.first_ucl_r2_archive import archive_verified
@@ -73,8 +74,13 @@ def run(*, day: date, live: bool = False, approval: str = "",
                 "leagues": [{"slug": slug, "league": league, "matches": len(rows)}
                             for slug, league, rows in results],
                 "postgresql": "NOT_USED", "r2": "NOT_ACCESSED"}
+    expected_bucket = os.environ.get("DAILY_R2_EXPECTED_BUCKET", "").strip()
+    if not expected_bucket:
+        raise RuntimeError("DAILY_R2_EXPECTED_BUCKET_REQUIRED")
     store = store_factory()
     try:
+        if store.bucket != expected_bucket:
+            raise RuntimeError("DAILY_R2_BUCKET_MISMATCH")
         receipts = []
         for slug, league, rows in results:
             if not rows:
