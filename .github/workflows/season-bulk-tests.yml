@@ -8,6 +8,9 @@ on:
       - 'backend/tests/test_first_ucl_import.py'
       - 'backend/tests/test_first_ucl_r2_archive.py'
       - 'backend/tests/test_r2_bucket_read_only.py'
+      - 'backend/tests/test_r2_archive_read_daily.py'
+      - 'backend/app/api/r2_archive.py'
+      - 'backend/app/jobs/daily_r2_matches.py'
       - 'backend/app/jobs/r2_smoke_test.py'
       - 'backend/migrations/versions/0011_season_bulk.py'
       - 'backend/tests/test_season_bulk.py'
@@ -43,7 +46,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt
-      - run: python -m pytest -q tests/test_season_bulk.py tests/test_first_ucl_import.py tests/test_first_ucl_r2_archive.py tests/test_r2_bucket_read_only.py
+      - run: python -m pytest -q tests/test_season_bulk.py tests/test_first_ucl_import.py tests/test_first_ucl_r2_archive.py tests/test_r2_bucket_read_only.py tests/test_r2_archive_read_daily.py
         env:
           SEASON_BULK_TEST_DATABASE_URL: postgresql+psycopg://test:test-only@localhost:5432/season_test
       - name: Refuse unconfigured and mismatched identity preflight
