@@ -83,6 +83,13 @@ try {
    await wait(`document.activeElement.id==='stitch-content'`); await sleep(250);
    await check(`no_overflow_${width}_${i}`,`document.documentElement.scrollWidth<=innerWidth`);
    await check(`one_main_${width}_${i}`,`document.querySelectorAll('main').length===1`);
+   if(i===3) {
+    await wait(`!!document.querySelector('[aria-label="Geçici tahmin kayıtları"] table tbody tr')`);
+    await check(`unverified_predictions_${width}`,`document.querySelector('[aria-label="Geçici tahmin kayıtları"]').textContent.includes('Doğrulanmamış') || document.querySelector('[aria-label="Geçici tahmin kayıtları"]').textContent.includes('Doğrulanmadı')`);
+    await check(`publication_not_invented_${width}`,`document.querySelector('#temporary-predictions').parentElement.textContent.includes('Yayın isabeti') && document.querySelector('#temporary-predictions').parentElement.textContent.includes('—')`);
+    await wait(`!!document.querySelector('[aria-label="Geçici kümülatif isabet tablosu"] tbody tr')`);
+    await check(`legacy_weighted_sample_${width}`,`document.querySelector('[aria-label="Geçici kümülatif isabet tablosu"] tbody tr').textContent.includes('2') && document.querySelector('[aria-label="Geçici kümülatif isabet tablosu"] tbody tr').textContent.includes('%50.0')`);
+   }
    if(width===390||width===1440) await shot(`stitch-${width}-${i}.png`,true);
    if(i===4) await check(`archive_locked_${width}`,`!document.querySelector('select option[value="all"]') || !document.body.innerText.includes('Kayıt kapsamı')`);
   }
