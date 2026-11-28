@@ -39,3 +39,6 @@ app.include_router(season_coverage_router, prefix="/api/v1")
 
 from app.api.r2_archive import router as r2_archive_router
 app.include_router(r2_archive_router, prefix="/api/v1")
+
+from app.api.bundesliga_r2_archive import router as bundesliga_r2_archive_router
+app.include_router(bundesliga_r2_archive_router, prefix="/api/v1")
