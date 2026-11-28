@@ -1,0 +1,52 @@
+name: Prediction ledger isolated PostgreSQL
+on:
+  pull_request:
+    paths:
+      - 'backend/app/jobs/prediction_ledger*'
+      - 'backend/app/models/prediction_ledger.py'
+      - 'backend/app/api/prediction_ledger.py'
+      - 'backend/migrations/versions/0011_prediction_ledger.py'
+      - 'backend/tests/test_prediction_ledger*'
+      - '.github/workflows/prediction-ledger-postgres.yml'
+  workflow_dispatch:
+jobs:
+  isolated-postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ledger_test
+          POSTGRES_PASSWORD: isolated-test-only
+          POSTGRES_DB: ledger71
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55471:5432
+        options: >-
+          --health-cmd "pg_isready -U ledger_test -d ledger71"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://ledger_test@127.0.0.1:55471/ledger71
+      LEDGER_TEST_DATABASE_URL: postgresql+psycopg://ledger_test@127.0.0.1:55471/ledger71
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m alembic upgrade head
+      - run: python -m alembic downgrade 0010_active_statistics
+      - run: python -m alembic upgrade head
+      - run: python -m pytest tests/test_prediction_ledger_rules.py tests/test_prediction_ledger_postgres.py -q
+      - name: Reject downgrade of nonempty ledger
+        shell: bash
+        run: |
+          if python -m alembic downgrade 0010_active_statistics > "$RUNNER_TEMP/ledger-downgrade.log" 2>&1; then
+            echo 'Nonempty ledger downgrade unexpectedly succeeded'
+            exit 1
+          fi
+          grep -q LEDGER_NOT_EMPTY_BACKUP_AND_MANUAL_REVIEW_REQUIRED "$RUNNER_TEMP/ledger-downgrade.log"
