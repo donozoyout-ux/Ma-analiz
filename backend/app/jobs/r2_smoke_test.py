@@ -57,6 +57,33 @@ def _safe_error_code(exc: Exception) -> str:
     return "R2_OPERATION_FAILED"
 
 
+def check_bucket_read_only(*, store_factory: Callable[[], Any] = R2ObjectStore,
+                           settings: Any | None = None) -> dict[str, Any]:
+    """Check actual bucket reachability with HEAD only; never write or delete."""
+    cfg = settings if settings is not None else get_settings()
+    missing = list(getattr(cfg, "r2_missing_env", ()) or ())
+    invalid = list(getattr(cfg, "r2_invalid_env", ()) or ())
+    if missing or invalid:
+        return {"status": "BLOCKED", "bucket": "NOT_CHECKED",
+                "missing_env": missing, "invalid_env": invalid,
+                "database": "NOT_USED", "write": "NOT_RUN", "delete": "NOT_RUN"}
+    store = None
+    try:
+        store = store_factory()
+        store.client.head_bucket(Bucket=store.bucket)
+        return {"status": "BUCKET_REACHABLE", "bucket": "PASS",
+                "database": "NOT_USED", "write": "NOT_RUN", "delete": "NOT_RUN"}
+    except Exception as exc:
+        return {"status": "BLOCKED", "bucket": "FAILED",
+                "error_code": _safe_error_code(exc),
+                "database": "NOT_USED", "write": "NOT_RUN", "delete": "NOT_RUN"}
+    finally:
+        if store is not None:
+            close = getattr(store.client, "close", None)
+            if callable(close):
+                close()
+
+
 def run_smoke(*, store_factory: Callable[[], Any] = R2ObjectStore,
               settings: Any | None = None, parquet: bool = False,
               check_config: bool = False) -> dict[str, Any]:
@@ -225,8 +252,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--parquet", action="store_true", help="Zstandard Parquet turunu da doğrula")
     parser.add_argument("--check-config", action="store_true", help="Yalnız yapılandırmayı kontrol et; R2 isteği gönderme")
+    parser.add_argument("--check-bucket", action="store_true", help="R2 bucket HEAD kontrolü; yazma veya silme yok")
     parser.add_argument("--json", action="store_true", help="Gizli değer içermeyen JSON raporu yazdır")
     args = parser.parse_args(argv)
+    if args.check_bucket:
+        if args.parquet or args.check_config:
+            parser.error("--check-bucket başka kontrol modlarıyla birlikte kullanılamaz")
+        report = check_bucket_read_only()
+        print(json.dumps(report, ensure_ascii=False))
+        return 0 if report["status"] == "BUCKET_REACHABLE" else 2
     report = run_smoke(parquet=args.parquet, check_config=args.check_config)
     if args.json:
         print(json.dumps(report, ensure_ascii=False))
