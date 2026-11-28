@@ -42,7 +42,7 @@ def test_pilot_fails_closed_on_missing_rights_preserves_nulls_and_reports_covera
     assert report["coverage"]["corners"] == report["coverage"]["yellow_cards"] == 1
     assert report["coverage"]["red_cards"] == 0
     assert report["matched_incomplete"] == 1
-    assert report["archive"]["parquet_key"].startswith("statistics/bundesliga/season=2024-2025/")
+    assert report["archive"] is None  # No Parquet preparation for unapproved sources.
 
 
 def test_exact_identity_required_and_duplicate_rejected():
@@ -73,6 +73,9 @@ def test_permission_requires_storage_publication_and_commercial_review():
     assert valid_permission(permission)
     assert not valid_permission({**permission, "commercial": False})
     assert not valid_permission({**permission, "reference": "http://example.invalid"})
+    report = build_pilot([fixture()], [observation()], season="2024-2025", permission=permission)
+    assert report["status"] == "READY_FOR_REVIEW"
+    assert report["archive"]["parquet_key"].startswith("statistics/bundesliga/season=2024-2025/")
 
 
 def test_red_card_summary_preserves_missing_and_explicit_zero():
