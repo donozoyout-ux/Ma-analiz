@@ -109,7 +109,7 @@ def configure_run(monkeypatch,session,store,*,enabled):
     monkeypatch.setattr(retention,"target_check",lambda *a:{"status":"OFFLINE_TEST"})
     monkeypatch.setattr(retention,"vacuum_assessment",lambda s:{"manual_vacuum":"NOT_RUN"})
     from alembic.runtime.migration import MigrationContext
-    monkeypatch.setattr(MigrationContext,"configure",lambda *a:SimpleNamespace(get_current_heads=lambda:{"0011_prediction_ledger"}))
+    monkeypatch.setattr(MigrationContext,"configure",lambda *a:SimpleNamespace(get_current_heads=lambda:{"0012_prediction_evidence"}))
     cfg=Settings(_env_file=None,database_url="postgresql://offline:SECRET@localhost/offline",
         r2_endpoint="https://offline.invalid",r2_access_key_id="SECRET",r2_secret_access_key="SECRET",r2_bucket="offline-test",
         auto_retention_delete_enabled=enabled,operational_delete_enabled=False)

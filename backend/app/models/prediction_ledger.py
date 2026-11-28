@@ -3,8 +3,8 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, text
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, text
+from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -46,8 +46,26 @@ class PredictionSettlement(Base):
     supersedes_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("prediction_settlements.id", ondelete="RESTRICT"))
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     result_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    evidence_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("prediction_evidence.id", ondelete="RESTRICT"))
     result_source: Mapped[str | None] = mapped_column(String(120))
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     home_score: Mapped[int | None] = mapped_column(Integer)
     away_score: Mapped[int | None] = mapped_column(Integer)
     settled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()"))
+
+
+class PredictionEvidence(Base):
+    __tablename__ = "prediction_evidence"
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    publication_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("prediction_publications.id", ondelete="RESTRICT"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    authority: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    key_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    public_key_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    signature: Mapped[str] = mapped_column(Text, nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()"))
+    supersedes_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), ForeignKey("prediction_evidence.id", ondelete="RESTRICT"))

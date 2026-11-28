@@ -5,14 +5,28 @@ on:
       - 'backend/app/jobs/prediction_ledger*'
       - 'backend/app/models/prediction_ledger.py'
       - 'backend/app/api/prediction_ledger.py'
-      - 'backend/migrations/versions/0011_prediction_ledger.py'
+      - 'backend/migrations/versions/*prediction*.py'
       - 'backend/tests/test_prediction_ledger*'
+      - 'backend/tests/ledger_restore_rehearsal.py'
+      - 'backend/requirements.txt'
       - '.github/workflows/prediction-ledger-postgres.yml'
   workflow_dispatch:
 jobs:
   isolated-postgres:
     runs-on: ubuntu-latest
     services:
+      postgres-restore:
+        image: postgres:16
+        env:
+          POSTGRES_USER: restore_admin
+          POSTGRES_PASSWORD: isolated-restore-only
+          POSTGRES_DB: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55472:5432
+        options: >-
+          --health-cmd "pg_isready -U restore_admin -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
       postgres:
         image: postgres:16
         env:
@@ -41,7 +55,8 @@ jobs:
       - run: python -m alembic upgrade head
       - run: python -m alembic downgrade 0010_active_statistics
       - run: python -m alembic upgrade head
-      - run: python -m pytest tests/test_prediction_ledger_rules.py tests/test_prediction_ledger_postgres.py -q
+      - run: python -m pytest tests/test_prediction_ledger_rules.py tests/test_prediction_ledger_postgres.py tests/test_prediction_ledger_evidence.py -q
+      - run: python tests/ledger_restore_rehearsal.py
       - name: Reject downgrade of nonempty ledger
         shell: bash
         run: |

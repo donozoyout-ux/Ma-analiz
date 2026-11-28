@@ -36,82 +36,9 @@ def db():
     engine.dispose()
 
 
-def test_publication_settlement_correction_and_retention(db):
-    now = datetime.now(timezone.utc)
-    uid = uuid4()
-    match = ActiveMatch(id=uid, provider="test", provider_match_id=str(uid), league_id="de.bl1",
-        season="2026-2027", home_team="Synthetic Home", away_team="Synthetic Away",
-        start_time=now + timedelta(seconds=3), status="SCHEDULED", expires_at=now + timedelta(days=2))
-    pred = Prediction(id=uuid4(), match_id=uid, market="1X2", selection="HOME", probability=Decimal("0.6"),
-        confidence=Decimal("0.6"), value_score=Decimal("0"), evidence_status="OK", model_version="test-v1",
-        feature_version="test", feature_snapshot="synthetic", analysis_timestamp=now, status="PENDING", expires_at=now + timedelta(days=2))
-    db.add(match); db.flush(); db.add(pred); db.commit()
-    first = publish(db, prediction_id=pred.id, idempotency_key=f"publication-{uid}")
-    db.commit()
-    assert first.published_at < first.kickoff_at
-    assert publish(db, prediction_id=pred.id, idempotency_key=f"publication-{uid}").id == first.id
-    db.commit()
-    time.sleep(3.2)
-    result = MatchResult(id=uuid4(), match_id=uid, provider="test", home_score=2, away_score=0,
-                         status="FINAL", result_source="synthetic-verifier", verified_at=datetime.now(timezone.utc))
-    match.status = "FINISHED"; db.add(result); db.commit()
-    result.verified_at = datetime.now(timezone.utc) + timedelta(hours=1); db.commit()
-    with pytest.raises(ValueError, match="RESULT_NOT_ELIGIBLE"):
-        settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"future-{uid}")
-    db.rollback()
-    result.verified_at = datetime.now(timezone.utc); db.commit()
-    publication_id, result_identifier, session_engine = first.id, result.id, db.get_bind()
-    def submit_settlement():
-        with Session(session_engine) as session:
-            session.execute(text("SET LOCAL ROLE ma_ledger_writer"))
-            event = settle_final(session, publication_id=publication_id, result_id=result_identifier, idempotency_key=f"result-a-{uid}")
-            event_id = event.id
-            session.commit()
-            return event_id
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        event_ids = list(pool.map(lambda _: submit_settlement(), range(2)))
-    assert event_ids[0] == event_ids[1]
-    won = db.get(PredictionSettlement, event_ids[0])
-    assert won.outcome == "WON" and won.version == 1
-    assert settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"result-a-{uid}").id == won.id
-    with pytest.raises(ValueError, match="DUPLICATE_RESULT_USE_ORIGINAL_IDEMPOTENCY_KEY"):
-        settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"same-score-{uid}")
-    db.commit()
-    with pytest.raises(DBAPIError):
-        with db.begin_nested():
-            db.execute(text("SET LOCAL ROLE ma_ledger_writer"))
-            db.execute(text("""INSERT INTO prediction_settlements
-                (id,publication_id,idempotency_key,version,supersedes_id,outcome,result_id,result_source,verified_at,home_score,away_score)
-                VALUES (:id,:publication,:key,2,:prior,'LOST',:result,:source,:verified,2,0)"""),
-                {"id": uuid4(), "publication": first.id, "key": f"forged-{uid}", "prior": won.id,
-                 "result": result.id, "source": result.result_source, "verified": result.verified_at})
-    db.rollback()
-    result.home_score = 0; result.away_score = 1; result.verified_at = datetime.now(timezone.utc); db.commit()
-    with pytest.raises(ValueError, match="IDEMPOTENCY_CONFLICT"):
-        settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"result-a-{uid}")
-    db.rollback()
-    lost = settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"result-b-{uid}"); db.commit()
-    assert lost.outcome == "LOST" and lost.version == 2 and lost.supersedes_id == won.id
-    assert db.scalar(select(func.count()).select_from(PredictionSettlement).where(PredictionSettlement.publication_id == first.id)) == 2
-    data = ledger(start=None,end=None,tz="UTC",league="de.bl1",market="1X2",model="test-v1",status="LOST",limit=50,offset=0,db=db)
-    assert any(row["id"] == first.id for row in data["items"])
-    provisional = metrics(start=None,end=None,tz="UTC",league="de.bl1",market="1X2",model="test-v1",status="LOST",db=db)
-    assert provisional["provisional_sample_size"] >= 1 and provisional["sample_size"] == 0 and provisional["hit_rate"] is None
-    result.status = "POSTPONED"; db.commit()
-    with pytest.raises(ValueError, match="RESULT_NOT_ELIGIBLE"):
-        settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"postponed-{uid}")
-    db.rollback()
-    result.status = "CANCELLED"; result.verified_at = datetime.now(timezone.utc); db.commit()
-    result_id = result.id
-    void = settle_final(db, publication_id=first.id, result_id=result.id, idempotency_key=f"void-{uid}"); db.commit()
-    assert void.outcome == "VOID" and void.supersedes_id == lost.id
-    prediction_id = pred.id
-    db.delete(match); db.commit()  # isolated retention simulation, not a ledger delete
-    assert db.get(PredictionPublication, first.id) is not None
-    assert publish(db, prediction_id=prediction_id, idempotency_key=f"publication-{uid}").id == first.id
-    assert settle_final(db, publication_id=first.id, result_id=result_id, idempotency_key=f"void-{uid}").id == void.id
-    aggregate = metrics(start=None,end=None,tz="UTC",league="de.bl1",market="1X2",model="test-v1",status="VOID",db=db)
-    assert aggregate["void"] >= 1 and aggregate["sample_size"] == 0 and aggregate["hit_rate"] is None
+def test_legacy_results_do_not_prove_regulation_time(db):
+    with pytest.raises(ValueError, match="VERIFIED_REGULATION_EVIDENCE_REQUIRED"):
+        settle_final(db, publication_id=uuid4(), result_id=uuid4(), idempotency_key="legacy-result")
 
 
 def test_roles_and_database_append_only(db):

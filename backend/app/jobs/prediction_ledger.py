@@ -3,7 +3,6 @@
 The caller must authorize the publication/verification event. A database record
 alone does not prove the prediction was delivered to an external audience.
 """
-from datetime import timezone
 from decimal import Decimal
 import hashlib
 from uuid import uuid4
@@ -13,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import load_only
 
 from app.jobs.prediction_ledger_rules import outcome_1x2, utc
-from app.models import ActiveMatch, MatchResult, Prediction
+from app.models import ActiveMatch, Prediction
 from app.models.prediction_ledger import PredictionPublication, PredictionSettlement
 
 
@@ -70,48 +69,39 @@ def publish(session, *, prediction_id, idempotency_key: str, publication_version
 
 
 def settle_final(session, *, publication_id, result_id, idempotency_key: str):
-    """Append only from a matching verified FINAL result; never modify old events."""
+    """Legacy temporary MatchResult cannot prove regulation time or independence."""
+    raise ValueError("VERIFIED_REGULATION_EVIDENCE_REQUIRED")
+
+
+def settle_evidence(session, *, publication_id, evidence_id, idempotency_key: str):
+    from app.models.prediction_ledger import PredictionEvidence
     if not isinstance(idempotency_key, str) or not idempotency_key.strip() or len(idempotency_key) > 128:
         raise ValueError("INVALID_IDEMPOTENCY_KEY")
-    session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"), {"key": str(publication_id)})
-    publication = session.get(PredictionPublication, publication_id)
-    result = session.get(MatchResult, result_id, options=[load_only(MatchResult.id, MatchResult.match_id,
-        MatchResult.provider, MatchResult.status, MatchResult.home_score, MatchResult.away_score,
-        MatchResult.verified_at, MatchResult.result_source)])
+    session.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))"), {"key": str(publication_id)})
     existing = session.scalar(select(PredictionSettlement).where(PredictionSettlement.idempotency_key == idempotency_key))
-    if existing is not None and result is None:
-        if existing.publication_id == publication_id and existing.result_id == result_id:
-            return existing
-        raise ValueError("IDEMPOTENCY_CONFLICT")
-    if publication is None or result is None or result.match_id != publication.match_id or result.provider != publication.provider:
-        raise ValueError("RESULT_IDENTITY_MISMATCH")
-    now = session.execute(text("SELECT clock_timestamp()" )).scalar_one().astimezone(timezone.utc)
-    if (result.verified_at is None or not result.result_source or not result.result_source.strip() or
-            utc(result.verified_at) < utc(publication.published_at) or utc(result.verified_at) > now):
-        raise ValueError("RESULT_NOT_ELIGIBLE")
-    if result.status == "CANCELLED":
-        outcome = "VOID"
-    elif (result.status == "FINAL" and utc(result.verified_at) >= utc(publication.kickoff_at) and
-          all(type(score) is int and score >= 0 for score in (result.home_score, result.away_score))):
-        outcome = outcome_1x2(market=publication.market, selection=publication.selection,
-            result_status=result.status, home=result.home_score, away=result.away_score,
-            verified_at=result.verified_at, result_source=result.result_source,
-            kickoff_at=publication.kickoff_at, observed_now=now)
-    else:
-        raise ValueError("RESULT_NOT_ELIGIBLE")
-    snapshot = (publication_id, result.id, result.result_source, utc(result.verified_at), result.home_score, result.away_score, outcome)
-    if existing is not None:
-        actual = (existing.publication_id, existing.result_id, existing.result_source, utc(existing.verified_at), existing.home_score, existing.away_score, existing.outcome)
-        if actual != snapshot:
+    if existing:
+        if existing.publication_id != publication_id or existing.evidence_id != evidence_id:
             raise ValueError("IDEMPOTENCY_CONFLICT")
         return existing
-    latest = session.scalar(select(PredictionSettlement).where(PredictionSettlement.publication_id == publication_id).order_by(PredictionSettlement.version.desc()).limit(1))
-    if latest is not None and (latest.publication_id, latest.result_id, latest.result_source, utc(latest.verified_at), latest.home_score, latest.away_score, latest.outcome) == snapshot:
+    publication = session.get(PredictionPublication, publication_id)
+    evidence = session.get(PredictionEvidence, evidence_id)
+    if not publication or not evidence or evidence.publication_id != publication_id or evidence.kind != "RESULT":
+        raise ValueError("VERIFIED_REGULATION_EVIDENCE_REQUIRED")
+    if session.scalar(select(PredictionEvidence.id).where(PredictionEvidence.supersedes_id == evidence_id)):
+        raise ValueError("SUPERSEDED_RESULT_EVIDENCE")
+    if session.scalar(select(PredictionSettlement.id).where(PredictionSettlement.evidence_id == evidence_id)):
         raise ValueError("DUPLICATE_RESULT_USE_ORIGINAL_IDEMPOTENCY_KEY")
+    data = evidence.payload
+    outcome = "VOID" if data["status"] == "CANCELLED" else outcome_1x2(
+        market=publication.market, selection=publication.selection, result_status=data["status"],
+        home=data.get("home_score"), away=data.get("away_score"), verified_at=evidence.received_at,
+        result_source=evidence.authority, kickoff_at=publication.kickoff_at,
+        observed_now=session.scalar(text("SELECT clock_timestamp()")))
+    latest = session.scalar(select(PredictionSettlement).where(PredictionSettlement.publication_id == publication_id).order_by(PredictionSettlement.version.desc()).limit(1))
     event = PredictionSettlement(id=uuid4(), publication_id=publication_id, idempotency_key=idempotency_key,
         version=1 if latest is None else latest.version + 1, supersedes_id=None if latest is None else latest.id,
-        result_id=result.id, result_source=result.result_source, verified_at=utc(result.verified_at),
-        home_score=result.home_score, away_score=result.away_score, outcome=outcome)
+        evidence_id=evidence.id, result_id=evidence.id, result_source=evidence.authority,
+        verified_at=evidence.received_at, home_score=data.get("home_score"), away_score=data.get("away_score"), outcome=outcome)
     session.add(event)
     session.flush()
     return event
