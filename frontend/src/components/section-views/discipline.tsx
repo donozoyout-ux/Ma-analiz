@@ -6,6 +6,7 @@ type Metric = { sample: number; average_total: number | null; average_for: numbe
 type Summary = {
   source: string; match_count: number; metrics: Record<"corners" | "yellows" | "reds", Metric>;
   last_observed_at: string | null; note: string;
+  archive_integrity: string; verified_r2_partitions: number;
 };
 type Match = {
   id: string; date: string; league_id: string; season: string;
@@ -27,7 +28,9 @@ function pair(a: number | null, b: number | null) { return `${count(a)} / ${coun
 function safeSummary(value: unknown): value is Summary {
   if (!value || typeof value !== "object") return false;
   const s = value as Partial<Summary>;
-  return Number.isSafeInteger(s.match_count) && s.match_count! >= 0 && !!s.metrics &&
+  return Number.isSafeInteger(s.match_count) && s.match_count! >= 0 &&
+    Number.isSafeInteger(s.verified_r2_partitions) && s.verified_r2_partitions! >= 0 &&
+    typeof s.archive_integrity === "string" && !!s.metrics &&
     (["corners", "yellows", "reds"] as const).every(name => {
       const m = s.metrics?.[name]; return !!m && Number.isSafeInteger(m.sample) && m.sample >= 0 &&
         (m.average_total == null || asNumber(m.average_total) !== null) &&
@@ -98,7 +101,7 @@ export function HistoricalDisciplinePanel() {
         <p className="page-intro">Premier League, Bundesliga ve La Liga · 2024/25 sezonundan itibaren.</p>
       </div>
     </header>
-    <p className="status-strip">Yalnızca izinli dosyalardan içe aktarılan kaynak istatistikleri. Resmî maç skoru veya tahmin sonucu olarak doğrulanmış sayılmaz.</p>
+    <p className="status-strip">Yalnızca R2'de doğrulanmış ve izinli dosyalardan içe aktarılan kaynak istatistikleri. Resmî maç skoru veya tahmin sonucu olarak doğrulanmış sayılmaz.</p>
     <form className="card filter-panel" onSubmit={event => {event.preventDefault();setOffset(0);setTeam(teamInput.trim());}}>
       <div className="filter-grid center-filter-grid">
         <label><span>Lig</span><select aria-label="İstatistik ligi" value={league} onChange={e=>{setLeague(e.target.value);setOffset(0);}}>
@@ -116,6 +119,9 @@ export function HistoricalDisciplinePanel() {
     {state === "error" && <div className="card empty" role="alert">İstatistik arşivi henüz yüklenmemiş veya erişilemiyor.
       <button className="quiet-button" onClick={()=>setRefresh(n=>n+1)}>Tekrar dene</button></div>}
     {state === "ok" && summary && matches && <>
+      <p className="scope-note" role="status">R2 arşiv durumu: {summary.archive_integrity === "VERIFIED_R2_LEDGER"
+        ? "Doğrulama kaydı bulunan arşiv" : "Henüz doğrulanmış R2 arşivi yok"} ·
+        Kaydedilen arşiv dosyası: {summary.verified_r2_partitions}</p>
       <section className="grid performance-kpis" aria-label="Korner ve kart özetleri">
         <div className="card"><div className="kpi-label">İstatistik bulunan maç</div>
           <div className="kpi-value">{count(summary.match_count)}</div></div>
