@@ -118,3 +118,67 @@ def test_daily_live_requires_explicit_target_bucket(monkeypatch):
         daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
                   provider_factory=FakeProvider,
                   store_factory=lambda: pytest.fail("R2 accessed"))
+
+
+def test_daily_ignores_source_bookkeeping_timestamp(monkeypatch):
+    monkeypatch.setenv("DAILY_R2_EXPECTED_BUCKET", "sdfgdsgdg")
+    store = InMemoryObjectStore()
+    store.bucket = "sdfgdsgdg"
+    FakeProvider.data = [{**match(), "raw_source_updated_at": "2026-11-28T09:00:00"}]
+    try:
+        first = daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                          provider_factory=FakeProvider, store_factory=lambda: store)
+        FakeProvider.data = [{**match(), "raw_source_updated_at": "2026-11-28T09:15:00"}]
+        second = daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                           provider_factory=FakeProvider, store_factory=lambda: store)
+        assert first["leagues"][0]["key"] == second["leagues"][0]["key"]
+        assert len(store.list_objects()) == 1
+    finally:
+        FakeProvider.data = [match()]
+
+
+def test_daily_empty_and_missing_score(monkeypatch):
+    monkeypatch.setenv("DAILY_R2_EXPECTED_BUCKET", "sdfgdsgdg")
+    store = InMemoryObjectStore()
+    store.bucket = "sdfgdsgdg"
+    try:
+        FakeProvider.data = []
+        report = daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                           provider_factory=FakeProvider, store_factory=lambda: store)
+        assert report["leagues"][0]["status"] == "NO_MATCHES_REPORTED"
+        assert store.list_objects() == []
+        FakeProvider.data = [{**match(), "status": "FINISHED", "score": None}]
+        report = daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                           provider_factory=FakeProvider, store_factory=lambda: store)
+        assert json.loads(store.get_object(report["leagues"][0]["key"]))["matches"][0]["score"] is None
+    finally:
+        FakeProvider.data = [match()]
+
+
+def test_daily_network_error_never_constructs_store():
+    class Offline(FakeProvider):
+        def get_matches(self, day):
+            raise OSError("source unavailable")
+    with pytest.raises(OSError, match="source unavailable"):
+        daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                  provider_factory=Offline, store_factory=lambda: pytest.fail("R2 accessed"))
+
+
+def test_daily_partial_archive_retries_without_overwriting(monkeypatch):
+    monkeypatch.setenv("DAILY_R2_EXPECTED_BUCKET", "sdfgdsgdg")
+    store = InMemoryObjectStore()
+    store.bucket = "sdfgdsgdg"
+    put = store.put_object_if_absent
+    def upload_then_fail(*args, **kwargs):
+        put(*args, **kwargs)
+        raise OSError("connection lost after upload")
+    monkeypatch.setattr(store, "put_object_if_absent", upload_then_fail)
+    with pytest.raises(OSError, match="connection lost"):
+        daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                  provider_factory=FakeProvider, store_factory=lambda: store)
+    assert len(store.list_objects()) == 1
+    monkeypatch.setattr(store, "put_object_if_absent", lambda *a, **kw: pytest.fail("duplicate PUT"))
+    result = daily.run(day=date(2026, 11, 28), live=True, approval=daily.APPROVAL,
+                       provider_factory=FakeProvider, store_factory=lambda: store)
+    assert result["leagues"][0]["status"] == "R2_VERIFIED"
+    assert len(store.list_objects()) == 1

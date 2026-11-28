@@ -44,7 +44,11 @@ def validate_matches(matches: list[dict], day: date, league: str) -> list[dict]:
         seen.add(mid)
         if not row.get("home_team") or not row.get("away_team") or not row.get("start_time"):
             raise ValueError("DAILY_INCOMPLETE_MATCH")
-        serialized = {k: (v.isoformat() if isinstance(v, (date, datetime)) else v) for k, v in row.items()}
+        # Source bookkeeping timestamps can change without changing a fixture or score.
+        serialized = {
+            k: (v.isoformat() if isinstance(v, (date, datetime)) else v)
+            for k, v in row.items() if k != "raw_source_updated_at"
+        }
         safe.append(serialized)
     return sorted(safe, key=lambda row: row["provider_match_id"])
 
